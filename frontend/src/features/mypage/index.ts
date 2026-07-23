@@ -1,0 +1,1 @@
+export { default as MyPageScreen } from './screens/MyPageScreen';

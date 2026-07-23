@@ -1,0 +1,1 @@
+export { default as TripScreen } from './screens/TripScreen';

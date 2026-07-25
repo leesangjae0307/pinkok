@@ -1,0 +1,27 @@
+############################
+# Backend (Spring Boot)
+############################
+backend/.idea/
+backend/.gradle/
+backend/build/
+backend/out/
+
+# Local Spring config
+backend/src/main/resources/application.properties
+
+############################
+# Frontend (React/Vue 등)
+############################
+frontend/node_modules/
+frontend/dist/
+
+############################
+# Logs
+############################
+*.log
+
+############################
+# OS
+############################
+.DS_Store
+Thumbs.db

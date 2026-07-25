@@ -1,13 +1,13 @@
 ############################
 # Backend (Spring Boot)
 ############################
-backend/.idea/
-backend/.gradle/
-backend/build/
-backend/out/
+backend/spring/.idea/
+backend/spring/.gradle/
+backend/spring/build/
+backend/spring/out/
 
 # Local Spring config
-backend/src/main/resources/application.properties
+backend/spring/src/main/resources/application.properties
 
 ############################
 # Frontend (React/Vue 등)

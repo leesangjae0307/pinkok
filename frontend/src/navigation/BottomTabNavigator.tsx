@@ -1,7 +1,7 @@
 import React from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
-import {HomeScreen} from '../features/home';
+import {HomeScreen} from '@/features/home';
 import {MapScreen} from '../features/map';
 import {AIScreen} from '../features/ai';
 import {TripScreen} from '../features/trip';

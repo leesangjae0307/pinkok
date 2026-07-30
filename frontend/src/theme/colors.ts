@@ -1,13 +1,23 @@
 export const COLORS = {
-  PRIMARY: '#00C853',
+  primary: '#22C55E',
 
-  WHITE: '#FFFFFF',
+  secondary: '#0EA5E9',
 
-  BLACK: '#000000',
+  white: '#FFFFFF',
 
-  GRAY100: '#F5F5F5',
-  GRAY300: '#E0E0E0',
-  GRAY500: '#9E9E9E',
+  black: '#111827',
 
-  ERROR: '#F44336',
+  gray100: '#F3F4F6',
+
+  gray200: '#E5E7EB',
+
+  gray300: '#D1D5DB',
+
+  gray500: '#6B7280',
+
+  gray700: '#374151',
+
+  gray900: '#111827',
+
+  danger: '#EF4444',
 };

@@ -1,15 +1,19 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import {View} from 'react-native';
+import Button from '@/components/common/Button';
 
 const HomeScreen = () => {
   return (
     <View
       style={{
-        flex:1,
-        justifyContent:'center',
-        alignItems:'center',
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
       }}>
-      <Text>🏠 Home Screen</Text>
+      <Button
+        title="테스트 버튼"
+        onPress={() => console.log('버튼 클릭')}
+      />
     </View>
   );
 };

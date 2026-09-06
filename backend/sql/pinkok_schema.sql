@@ -9,7 +9,10 @@
 --    (trip_members / trip_invitations)
 --  - 키워드 랜덤 여행 계획 기능 제외
 --  - 기본 도트 아바타 / 알림 테이블 추가
+<<<<<<< HEAD
 --  - AI 입력은 링크 / 스크린샷(여러 장) / 붙여넣은 글 세 가지를 모두 받음
+=======
+>>>>>>> 6a054897af343cf38a62df7f6a7de821f5a43545
 -- =========================================================
 
 -- ---------------------------------------------------------
@@ -177,10 +180,16 @@ CREATE TABLE ai_requests (
     user_id         BIGINT        NOT NULL COMMENT '요청 사용자 ID',
     trip_id         BIGINT        NULL COMMENT '여행 ID (추출 후 나중에 여행 카드 선택 가능)',
     request_type    VARCHAR(20)   NOT NULL COMMENT 'PLACE_EXTRACT / ROUTE_OPTIMIZE / RECOMMEND',
+<<<<<<< HEAD
     input_type      VARCHAR(20)   NOT NULL COMMENT '사용자가 넣은 방식 LINK / IMAGE / TEXT',
     source_platform VARCHAR(20)   NULL COMMENT '출처 YOUTUBE / INSTAGRAM / BLOG / OTHER',
     source_url      VARCHAR(1000) NULL COMMENT 'LINK 일 때 원본 링크',
     source_text     TEXT          NULL COMMENT 'TEXT 일 때 사용자가 붙여넣은 글',
+=======
+    source_type     VARCHAR(20)   NULL COMMENT 'YOUTUBE / INSTAGRAM / KEYWORD',
+    source_url      VARCHAR(1000) NULL COMMENT '유튜브 / 인스타그램 원본 링크',
+    source_file_url VARCHAR(500)  NULL COMMENT '업로드 이미지 저장 경로',
+>>>>>>> 6a054897af343cf38a62df7f6a7de821f5a43545
     prompt_text     TEXT          NULL COMMENT '실제 전송 프롬프트 (정확도 개선 분석용)',
     model_name      VARCHAR(50)   NULL COMMENT '예: gemini-2.0-flash',
     status          VARCHAR(20)   NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / PROCESSING / SUCCESS / FAILED',

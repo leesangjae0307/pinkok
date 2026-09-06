@@ -33,6 +33,7 @@ class AuthControllerTest {
     UserRepository userRepository;
 
     private static final String EMAIL = "tester@pinkok.com";
+    private static final String USERNAME = "tester01";
     private static final String PASSWORD = "pass1234";
     private static final String NICKNAME = "테스터";
 
@@ -41,27 +42,27 @@ class AuthControllerTest {
         userRepository.deleteAll();
     }
 
-    private static String body(String email, String password, String nickname) {
-        StringBuilder sb = new StringBuilder("{");
-        sb.append("\"email\":\"").append(email).append("\"");
-        sb.append(",\"password\":\"").append(password).append("\"");
-        if (nickname != null) {
-            sb.append(",\"nickname\":\"").append(nickname).append("\"");
-        }
-        return sb.append("}").toString();
+    private static String signupBody(String email, String username, String password, String nickname) {
+        return String.format(
+                "{\"email\":\"%s\",\"username\":\"%s\",\"password\":\"%s\",\"nickname\":\"%s\"}",
+                email, username, password, nickname);
     }
 
-    private void signup(String email, String password, String nickname) throws Exception {
+    private static String loginBody(String email, String password) {
+        return String.format("{\"email\":\"%s\",\"password\":\"%s\"}", email, password);
+    }
+
+    private void signup(String email, String username, String password, String nickname) throws Exception {
         mockMvc.perform(post("/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(email, password, nickname)))
+                        .content(signupBody(email, username, password, nickname)))
                 .andExpect(status().isCreated());
     }
 
     private String loginAndGetToken(String email, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(email, password, null)))
+                        .content(loginBody(email, password)))
                 .andExpect(status().isOk())
                 .andReturn();
         return JsonPath.read(result.getResponse().getContentAsString(), "$.accessToken");
@@ -72,10 +73,11 @@ class AuthControllerTest {
     void signup_success() throws Exception {
         mockMvc.perform(post("/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(EMAIL, PASSWORD, NICKNAME)))
+                        .content(signupBody(EMAIL, USERNAME, PASSWORD, NICKNAME)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").isNumber())
                 .andExpect(jsonPath("$.email").value(EMAIL))
+                .andExpect(jsonPath("$.username").value(USERNAME))
                 .andExpect(jsonPath("$.nickname").value(NICKNAME))
                 .andExpect(jsonPath("$.passwordHash").doesNotExist())
                 .andExpect(jsonPath("$.password").doesNotExist());
@@ -89,20 +91,31 @@ class AuthControllerTest {
     @Test
     @DisplayName("회원가입 실패 - 이메일 중복 시 409")
     void signup_duplicateEmail() throws Exception {
-        signup(EMAIL, PASSWORD, NICKNAME);
+        signup(EMAIL, USERNAME, PASSWORD, NICKNAME);
 
         mockMvc.perform(post("/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(EMAIL, "other1234", "다른사람")))
+                        .content(signupBody(EMAIL, "other02", "other1234", "다른사람")))
                 .andExpect(status().isConflict());
     }
 
     @Test
-    @DisplayName("회원가입 실패 - 짧은 비밀번호/잘못된 이메일 형식이면 400")
+    @DisplayName("회원가입 실패 - 아이디(username) 중복 시 409")
+    void signup_duplicateUsername() throws Exception {
+        signup(EMAIL, USERNAME, PASSWORD, NICKNAME);
+
+        mockMvc.perform(post("/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(signupBody("other@pinkok.com", USERNAME, "other1234", "다른사람")))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("회원가입 실패 - 짧은 비밀번호/잘못된 이메일/규칙 위반 username 이면 400")
     void signup_validation() throws Exception {
         mockMvc.perform(post("/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body("not-an-email", "short", "")))
+                        .content(signupBody("not-an-email", "AB", "short", "")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors").exists());
     }
@@ -110,11 +123,11 @@ class AuthControllerTest {
     @Test
     @DisplayName("로그인 성공 - 200, Bearer accessToken 발급")
     void login_success() throws Exception {
-        signup(EMAIL, PASSWORD, NICKNAME);
+        signup(EMAIL, USERNAME, PASSWORD, NICKNAME);
 
         mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(EMAIL, PASSWORD, null)))
+                        .content(loginBody(EMAIL, PASSWORD)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
@@ -125,11 +138,11 @@ class AuthControllerTest {
     @Test
     @DisplayName("로그인 실패 - 비밀번호 불일치면 401")
     void login_wrongPassword() throws Exception {
-        signup(EMAIL, PASSWORD, NICKNAME);
+        signup(EMAIL, USERNAME, PASSWORD, NICKNAME);
 
         mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(EMAIL, "wrongpass1", null)))
+                        .content(loginBody(EMAIL, "wrongpass1")))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -138,7 +151,7 @@ class AuthControllerTest {
     void login_unknownEmail() throws Exception {
         mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body("nobody@pinkok.com", PASSWORD, null)))
+                        .content(loginBody("nobody@pinkok.com", PASSWORD)))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -152,7 +165,7 @@ class AuthControllerTest {
     @Test
     @DisplayName("/users/me - 변조된 토큰이면 401")
     void me_withTamperedToken() throws Exception {
-        signup(EMAIL, PASSWORD, NICKNAME);
+        signup(EMAIL, USERNAME, PASSWORD, NICKNAME);
         String token = loginAndGetToken(EMAIL, PASSWORD);
 
         mockMvc.perform(get("/users/me")
@@ -163,7 +176,7 @@ class AuthControllerTest {
     @Test
     @DisplayName("전체 흐름 - 회원가입 후 로그인해서 받은 토큰으로 내 정보 조회")
     void fullFlow_signup_login_me() throws Exception {
-        signup(EMAIL, PASSWORD, NICKNAME);
+        signup(EMAIL, USERNAME, PASSWORD, NICKNAME);
         String token = loginAndGetToken(EMAIL, PASSWORD);
 
         mockMvc.perform(get("/users/me")

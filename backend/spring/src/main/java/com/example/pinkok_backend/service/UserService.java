@@ -26,12 +26,16 @@ public class UserService {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
         }
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
+        }
 
         LocalDateTime now = LocalDateTime.now();
 
         User user = new User();
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setUsername(request.getUsername());
         user.setNickname(request.getNickname());
         user.setProvider("LOCAL");
         user.setCreatedAt(now);

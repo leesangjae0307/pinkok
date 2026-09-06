@@ -7,6 +7,7 @@
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8080" },
     { "key": "email", "value": "me@test.com" },
+    { "key": "username", "value": "jeonghun01" },
     { "key": "password", "value": "pass1234" },
     { "key": "nickname", "value": "정훈" },
     { "key": "accessToken", "value": "" }
@@ -20,7 +21,7 @@
         "url": { "raw": "{{baseUrl}}/auth/signup", "host": ["{{baseUrl}}"], "path": ["auth", "signup"] },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"nickname\": \"{{nickname}}\"\n}"
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\",\n  \"nickname\": \"{{nickname}}\"\n}"
         }
       },
       "event": [
@@ -126,7 +127,7 @@
         "url": { "raw": "{{baseUrl}}/auth/signup", "host": ["{{baseUrl}}"], "path": ["auth", "signup"] },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"pass1234\",\n  \"nickname\": \"다른사람\"\n}"
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"username\": \"someoneelse\",\n  \"password\": \"pass1234\",\n  \"nickname\": \"다른사람\"\n}"
         }
       },
       "event": [

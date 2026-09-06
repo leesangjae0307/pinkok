@@ -4,13 +4,14 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "vlogs")
+@Table(name = "pinlogs")
 @Getter
 @Setter
-public class Vlog {
+public class Pinlog {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -26,6 +27,18 @@ public class Vlog {
 
     @Column(length = 100)
     private String title;
+
+    @Column(name = "start_date")
+    private LocalDate startDate;
+
+    @Column(name = "end_date")
+    private LocalDate endDate;
+
+    @Column(name = "template_code", length = 30)
+    private String templateCode;
+
+    @Column(name = "style_code", length = 30)
+    private String styleCode;
 
     @Column(nullable = false, length = 20)
     private String status;

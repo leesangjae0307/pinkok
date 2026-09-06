@@ -21,6 +21,11 @@ public class PlaceCandidate {
     @JoinColumn(name = "ai_request_id", nullable = false)
     private AiRequest aiRequest;
 
+    // 이 후보가 어느 스크린샷에서 나왔는지 (썸네일 표시용, 이미지 입력일 때만)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_image_id")
+    private AiRequestImage sourceImage;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "place_id")
     private Place place;

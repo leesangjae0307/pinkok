@@ -28,14 +28,21 @@ public class AiRequest {
     @Column(name = "request_type", nullable = false, length = 20)
     private String requestType;
 
-    @Column(name = "source_type", length = 20)
-    private String sourceType;
+    // 사용자가 넣은 방식 (LINK / IMAGE / TEXT)
+    @Column(name = "input_type", nullable = false, length = 20)
+    private String inputType;
 
+    // 출처 (YOUTUBE / INSTAGRAM / BLOG / OTHER)
+    @Column(name = "source_platform", length = 20)
+    private String sourcePlatform;
+
+    // LINK 일 때만 채워짐
     @Column(name = "source_url", length = 1000)
     private String sourceUrl;
 
-    @Column(name = "source_file_url", length = 500)
-    private String sourceFileUrl;
+    // TEXT 일 때만 채워짐 — 사용자가 붙여넣은 글
+    @Column(name = "source_text", columnDefinition = "TEXT")
+    private String sourceText;
 
     @Column(name = "prompt_text", columnDefinition = "TEXT")
     private String promptText;

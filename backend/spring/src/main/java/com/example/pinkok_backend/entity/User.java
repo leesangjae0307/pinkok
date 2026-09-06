@@ -22,7 +22,15 @@ public class User {
     @Column(name = "password_hash")
     private String passwordHash;
 
+    @Column(nullable = false, unique = true, length = 30)
+    private String username;
+
+    @Column(nullable = false, length = 50)
     private String nickname;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "avatar_id")
+    private Avatar avatar;
 
     @Column(name = "profile_image_url")
     private String profileImageUrl;

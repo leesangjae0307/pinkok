@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img, svg { vertical-align: middle; }
+</style>
+<title>PinKok 스키마 설계도</title>
+<style>
+  :root {
+    --bg: #F9FCEB;
+    --surface: #FFFFFF;
+    --surface-2: #E6F7F1;
+    --border: #BDECE0;
+    --border-strong: #8FD6C4;
+    --ink: #0E2E2C;
+    --ink-2: #4A6B67;
+    --ink-3: #7B9A95;
+    --accent: #1A9CA0;
+    --shadow: #BDECE0;
+
+    --d-user: #12797D;
+    --d-trip: #1B8A5C;
+    --d-place: #2D6FE3;
+    --d-diary: #D6415F;
+    --d-pinlog: #5B52E8;
+    --d-misc: #A96A00;
+
+    --tint-user: #DDF1F1;
+    --tint-trip: #DCF2E7;
+    --tint-place: #DEE9FC;
+    --tint-diary: #FCE0E6;
+    --tint-pinlog: #E4E2FD;
+    --tint-misc: #FBEED4;
+
+    --new: #B4005A;
+    --new-tint: #FBDDEA;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0A1817;
+      --surface: #112524;
+      --surface-2: #16302E;
+      --border: #1F4340;
+      --border-strong: #2C5C57;
+      --ink: #E4F5F0;
+      --ink-2: #9CBFB9;
+      --ink-3: #6F918B;
+      --accent: #6EE7C0;
+      --shadow: #1F4340;
+
+      --d-user: #6EE7C0;
+      --d-trip: #6BDCA3;
+      --d-place: #8DB5F7;
+      --d-diary: #FF90A8;
+      --d-pinlog: #ADA6FF;
+      --d-misc: #FFD166;
+
+      --tint-user: #13403C;
+      --tint-trip: #13402F;
+      --tint-place: #1B3050;
+      --tint-diary: #45222C;
+      --tint-pinlog: #262351;
+      --tint-misc: #3D3116;
+
+      --new: #FF8FC0;
+      --new-tint: #451B33;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0A1817;
+    --surface: #112524;
+    --surface-2: #16302E;
+    --border: #1F4340;
+    --border-strong: #2C5C57;
+    --ink: #E4F5F0;
+    --ink-2: #9CBFB9;
+    --ink-3: #6F918B;
+    --accent: #6EE7C0;
+    --shadow: #1F4340;
+
+    --d-user: #6EE7C0;
+    --d-trip: #6BDCA3;
+    --d-place: #8DB5F7;
+    --d-diary: #FF90A8;
+    --d-pinlog: #ADA6FF;
+    --d-misc: #FFD166;
+
+    --tint-user: #13403C;
+    --tint-trip: #13402F;
+    --tint-place: #1B3050;
+    --tint-diary: #45222C;
+    --tint-pinlog: #262351;
+    --tint-misc: #3D3116;
+
+    --new: #FF8FC0;
+    --new-tint: #451B33;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic",
+                 "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo,
+                 Consolas, "Liberation Mono", monospace;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  /* ---------- header ---------- */
+
+  header { display: flex; flex-direction: column; gap: 18px; }
+
+  .eyebrow {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: clamp(30px, 5.5vw, 46px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0;
+    text-wrap: balance;
+    text-shadow: 3px 3px 0 var(--shadow);
+  }
+
+  .lede {
+    font-size: 16px;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  .statbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border: 2px solid var(--ink);
+    background: var(--surface);
+    box-shadow: 4px 4px 0 var(--shadow);
+    margin-top: 6px;
+  }
+
+  .stat {
+    flex: 1 1 130px;
+    padding: 14px 18px;
+    border-right: 2px solid var(--ink);
+  }
+  .stat:last-child { border-right: 0; }
+
+  .stat-n {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    display: block;
+  }
+
+  .stat-l {
+    font-size: 12px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+    margin-top: 5px;
+    display: block;
+  }
+
+  /* ---------- section ---------- */
+
+  section { display: flex; flex-direction: column; gap: 20px; }
+
+  h2 {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  h2 .count {
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+    text-transform: none;
+  }
+
+  /* ---------- change log ---------- */
+
+  .changes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
+  }
+
+  .change {
+    background: var(--surface);
+    border: 2px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--shadow);
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .change h3 {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--ink-2);
+  }
+
+  .change ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  .change li { font-size: 13.5px; display: flex; gap: 8px; align-items: baseline; }
+
+  .change li code {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    color: var(--ink);
+  }
+
+  .change .note { font-size: 12.5px; color: var(--ink-3); }
+
+  /* ---------- diagram ---------- */
+
+  .diagram {
+    background: #EDF7F3;
+    border: 2px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--shadow);
+    padding: 20px;
+    overflow-x: auto;
+  }
+  .diagram pre { margin: 0; }
+  .diagram svg { max-width: none !important; height: auto; }
+
+  .caption {
+    font-size: 12.5px;
+    color: var(--ink-3);
+    margin: 0;
+  }
+
+  .scroll-hint {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ---------- legend ---------- */
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .chip {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 4px 9px;
+    border: 1.5px solid currentColor;
+  }
+
+  /* ---------- domain / table cards ---------- */
+
+  .domain { display: flex; flex-direction: column; gap: 16px; }
+
+  .domain-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .domain-title {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin: 0;
+  }
+
+  .domain-desc { font-size: 13.5px; color: var(--ink-2); margin: 0; }
+
+  .tcard {
+    background: var(--surface);
+    border: 2px solid var(--ink);
+    border-left-width: 8px;
+    box-shadow: 4px 4px 0 var(--shadow);
+    overflow: hidden;
+  }
+
+  .tcard-head {
+    padding: 12px 16px;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .tname {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  .tdesc { font-size: 13px; color: var(--ink-2); }
+
+  .tbl-scroll { overflow-x: auto; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+
+  th {
+    text-align: left;
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 7px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: 0; }
+
+  td.col {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  td.type {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+
+  td.note { color: var(--ink-2); min-width: 180px; }
+
+  .key {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 1px 5px;
+    border: 1px solid currentColor;
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .k-pk { color: var(--accent); }
+  .k-fk { color: var(--d-place); }
+  .k-new { color: var(--new); background: var(--new-tint); }
+
+  .badge-new {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 2px 7px;
+    color: var(--new);
+    background: var(--new-tint);
+    border: 1.5px solid var(--new);
+  }
+
+  /* ---------- decisions ---------- */
+
+  .decisions {
+    background: var(--surface-2);
+    border: 2px dashed var(--border-strong);
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .decisions ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; }
+  .decisions li { font-size: 14px; }
+  .decisions strong { color: var(--ink); }
+
+  footer {
+    border-top: 2px solid var(--ink);
+    padding-top: 16px;
+    font-size: 12.5px;
+    color: var(--ink-3);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  @media (max-width: 600px) {
+    .wrap { padding: 32px 16px 64px; gap: 44px; }
+    .stat { flex: 1 1 50%; border-bottom: 2px solid var(--ink); }
+    td, th { padding-left: 12px; padding-right: 12px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">PinKok · Database Schema v2</span>
+    <h1>PinKok 스키마 설계도</h1>
+    <p class="lede">
+      UI 시안과 팀 논의를 반영해 다시 설계한 데이터베이스 구조입니다. 소셜 기능(팔로우·좋아요)은 제외했고,
+      브이로그는 <strong>PinLog</strong>로, 공유는 <strong>여행에 팀원을 추가해 같이 쓰는 방식</strong>으로 재정의했습니다.
+    </p>
+
+    <div class="statbar">
+      <div class="stat"><span class="stat-n">22</span><span class="stat-l">전체 테이블</span></div>
+      <div class="stat"><span class="stat-n">5</span><span class="stat-l">신규 추가</span></div>
+      <div class="stat"><span class="stat-n">3</span><span class="stat-l">이름 변경</span></div>
+      <div class="stat"><span class="stat-n">4</span><span class="stat-l">컬럼 수정</span></div>
+      <div class="stat"><span class="stat-n">36</span><span class="stat-l">외래키 관계</span></div>
+    </div>
+  </header>
+
+  <!-- ================= CHANGES ================= -->
+  <section>
+    <h2>초안 대비 변경점 <span class="count">v1 18개 → v3 22개</span></h2>
+
+    <div class="changes">
+      <div class="change">
+        <h3>＋ 신규 5</h3>
+        <ul>
+          <li><code>trip_members</code> 여행 참여자 👥</li>
+          <li><code>trip_invitations</code> 여행 초대장</li>
+          <li><code>ai_request_images</code> 분석용 스크린샷 📸</li>
+          <li><code>avatars</code> 기본 도트 프사 6종</li>
+          <li><code>notifications</code> 알림함 🔔</li>
+        </ul>
+      </div>
+
+      <div class="change">
+        <h3>↻ 이름 변경 3</h3>
+        <ul>
+          <li><code>vlogs</code> → <code>pinlogs</code></li>
+          <li><code>vlog_clips</code> → <code>pinlog_clips</code></li>
+          <li><code>user_preferences</code> → <code>user_settings</code></li>
+        </ul>
+        <span class="note">설정 화면(알림·테마·언어)이 생겨 취향 테이블을 설정 테이블로 확장했습니다.</span>
+      </div>
+
+      <div class="change">
+        <h3>✎ 컬럼 수정 4</h3>
+        <ul>
+          <li><code>ai_requests</code> 입력 방식 3종 대응</li>
+          <li><code>users</code> @아이디 · 아바타</li>
+          <li><code>itinerary_items</code> 이동수단 🚗🚶</li>
+          <li><code>pinlogs</code> 기간 · 템플릿 · 스타일</li>
+        </ul>
+      </div>
+
+      <div class="change">
+        <h3>✕ 검토 후 제외</h3>
+        <ul>
+          <li><code>shares</code> 링크 공유 → 팀원 방식으로 대체</li>
+          <li><code>bgm_tracks</code> 배경음악</li>
+          <li><code>follows</code> · <code>trip_likes</code> 팔로우 · 좋아요</li>
+          <li><code>trip_tags</code> 해시태그</li>
+          <li><code>users.bio</code> 소개글</li>
+        </ul>
+        <span class="note">시안에는 있었지만 만들지 않기로 한 것들입니다. 키워드 랜덤 여행 계획도 제외해 <code>ai_requests</code>의 요청 종류가 세 가지로 줄었습니다.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DIAGRAM ================= -->
+  <section>
+    <h2>테이블 관계도 <span class="count">ERD</span></h2>
+
+    <div class="legend">
+      <span class="chip" style="color: var(--d-user);   background: var(--tint-user);">사용자 5</span>
+      <span class="chip" style="color: var(--d-trip);   background: var(--tint-trip);">여행 6</span>
+      <span class="chip" style="color: var(--d-place);  background: var(--tint-place);">장소·AI 6</span>
+      <span class="chip" style="color: var(--d-diary);  background: var(--tint-diary);">기록 2</span>
+      <span class="chip" style="color: var(--d-pinlog); background: var(--tint-pinlog);">PinLog 2</span>
+      <span class="chip" style="color: var(--d-misc);   background: var(--tint-misc);">알림 1</span>
+    </div>
+    <p class="scroll-hint">← 그림이 넓어서 좌우로 스크롤됩니다 →</p>
+
+    <div class="diagram">
+<pre class="mermaid">
+%%{init: {'theme':'base','er':{'useMaxWidth':false},'themeVariables':{'primaryColor':'#E6F7F1','primaryTextColor':'#0E2E2C','primaryBorderColor':'#12797D','lineColor':'#4A6B67','secondaryColor':'#DEE9FC','tertiaryColor':'#FCE0E6'}}}%%
+erDiagram
+    avatars       ||--o{ users              : "기본 프사"
+    users         ||--|| user_settings      : "설정"
+    users         ||--o{ user_travel_styles : ""
+    travel_styles ||--o{ user_travel_styles : ""
+    users         ||--o{ trips              : "만든 여행"
+
+    trips         ||--o{ trip_members       : "참여자"
+    users         ||--o{ trip_members       : ""
+    trips         ||--o{ trip_invitations   : "초대장"
+    users         ||--o{ trip_invitations   : ""
+    trips         ||--o{ trip_travel_styles : ""
+    travel_styles ||--o{ trip_travel_styles : ""
+    trips         ||--o{ itinerary_days     : "N일차"
+    itinerary_days||--o{ itinerary_items    : "방문 순서"
+    trips         ||--o{ itinerary_items    : ""
+    places        ||--o{ itinerary_items    : "지도 핀"
+
+    users         ||--o{ ai_requests        : "추출 요청"
+    trips         ||--o{ ai_requests        : ""
+    ai_requests   ||--o{ ai_request_images  : "스크린샷"
+    ai_requests   ||--o{ place_candidates   : "추출 결과"
+    ai_request_images ||--o{ place_candidates : "출처 사진"
+    places        ||--o{ place_candidates   : ""
+    place_candidates ||--o{ itinerary_items : "체크 후 추가"
+
+    trips         ||--o{ route_optimizations: "동선"
+    ai_requests   ||--o{ route_optimizations: ""
+    trips         ||--o{ recommendations    : "추천"
+    ai_requests   ||--o{ recommendations    : ""
+    places        ||--o{ recommendations    : ""
+
+    itinerary_items ||--o{ diaries          : "장소별 기록"
+    users         ||--o{ diaries            : ""
+    diaries       ||--o{ diary_media        : "사진·영상"
+
+    trips         ||--o{ pinlogs            : "PinLog"
+    users         ||--o{ pinlogs            : ""
+    pinlogs       ||--o{ pinlog_clips       : "1초 클립"
+    diary_media   ||--o{ pinlog_clips       : "원본"
+
+    users         ||--o{ notifications      : "알림"
+</pre>
+    </div>
+    <p class="caption">
+      <span class="mono">||--o{</span> 는 1 : N 관계입니다. 예를 들어 사용자 한 명이 여행을 여러 개 가질 수 있습니다.
+      <span class="mono">||--||</span> 는 1 : 1 관계로, 사용자 한 명당 설정이 정확히 하나입니다.
+    </p>
+  </section>
+
+  <!-- ================= 1. USER ================= -->
+  <section class="domain">
+    <div class="domain-head">
+      <span class="chip" style="color: var(--d-user); background: var(--tint-user);">사용자</span>
+      <h2 class="domain-title" style="border:0; padding:0;">계정 · 프로필 · 설정</h2>
+    </div>
+    <p class="domain-desc">로그인, 프로필 화면, 설정 화면에서 쓰는 테이블입니다.</p>
+
+    <div class="tcard" style="border-left-color: var(--d-user);">
+      <div class="tcard-head"><span class="tname">avatars</span><span class="tdesc">기본 프로필 도트 아바타 (남3 · 여3)</span><span class="badge-new">NEW</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">아바타 ID</td></tr>
+          <tr><td class="col">code</td><td class="type">VARCHAR(20)</td><td class="note">M1 / M2 / M3 / F1 / F2 / F3</td></tr>
+          <tr><td class="col">name</td><td class="type">VARCHAR(50)</td><td class="note">표시명 (모험가, 사진가 등)</td></tr>
+          <tr><td class="col">image_url</td><td class="type">VARCHAR(500)</td><td class="note">도트 이미지 URL</td></tr>
+          <tr><td class="col">gender</td><td class="type">VARCHAR(10)</td><td class="note">MALE / FEMALE</td></tr>
+          <tr><td class="col">display_order</td><td class="type">INT</td><td class="note">노출 순서</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-user);">
+      <div class="tcard-head"><span class="tname">users</span><span class="tdesc">사용자</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">사용자 ID</td></tr>
+          <tr><td class="col">email</td><td class="type">VARCHAR(255)</td><td class="note">이메일 · 중복 불가</td></tr>
+          <tr><td class="col">password_hash</td><td class="type">VARCHAR(255)</td><td class="note">소셜 로그인 시 비어 있음</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>username</td><td class="type">VARCHAR(30)</td><td class="note">@아이디 · 중복 불가 (예: gamjieun)</td></tr>
+          <tr><td class="col">nickname</td><td class="type">VARCHAR(50)</td><td class="note">화면에 보이는 이름</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span><span class="key k-new">NEW</span>avatar_id</td><td class="type">BIGINT</td><td class="note">→ avatars · 선택한 기본 프사</td></tr>
+          <tr><td class="col">profile_image_url</td><td class="type">VARCHAR(500)</td><td class="note">직접 올린 사진 (아바타 대신 사용)</td></tr>
+          <tr><td class="col">provider</td><td class="type">VARCHAR(20)</td><td class="note">LOCAL / KAKAO / GOOGLE / NAVER / APPLE</td></tr>
+          <tr><td class="col">provider_uid</td><td class="type">VARCHAR(100)</td><td class="note">소셜 로그인 고유 ID</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">가입 시각</td></tr>
+          <tr><td class="col">updated_at</td><td class="type">DATETIME</td><td class="note">수정 시각</td></tr>
+          <tr><td class="col">deleted_at</td><td class="type">DATETIME</td><td class="note">탈퇴 시각 (실제로 지우지 않음)</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-user);">
+      <div class="tcard-head"><span class="tname">user_settings</span><span class="tdesc">사용자 설정 (취향 + 앱 설정)</span><span class="badge-new">RENAMED</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span><span class="key k-fk">FK</span>user_id</td><td class="type">BIGINT</td><td class="note">→ users · 사용자당 1행</td></tr>
+          <tr><td class="col">default_companion_type</td><td class="type">VARCHAR(20)</td><td class="note">SOLO / COUPLE / FAMILY / FRIEND</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>notification_enabled</td><td class="type">TINYINT(1)</td><td class="note">알림 수신 여부</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>theme</td><td class="type">VARCHAR(30)</td><td class="note">테마 설정 (기본 PIXEL_MINT)</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>language</td><td class="type">VARCHAR(10)</td><td class="note">언어 설정 (기본 ko)</td></tr>
+          <tr><td class="col">updated_at</td><td class="type">DATETIME</td><td class="note">수정 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-user);">
+      <div class="tcard-head"><span class="tname">travel_styles</span><span class="tdesc">여행 스타일 코드 (고정 목록)</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">스타일 ID</td></tr>
+          <tr><td class="col">code</td><td class="type">VARCHAR(30)</td><td class="note">FOOD / SIGHT / NATURE / SHOPPING / CAFE</td></tr>
+          <tr><td class="col">name</td><td class="type">VARCHAR(50)</td><td class="note">맛집 위주, 관광지, 자연 등</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-user);">
+      <div class="tcard-head"><span class="tname">user_travel_styles</span><span class="tdesc">사용자 ↔ 스타일 짝짓기 (N:M)</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span><span class="key k-fk">FK</span>user_id</td><td class="type">BIGINT</td><td class="note">→ users</td></tr>
+          <tr><td class="col"><span class="key k-pk">PK</span><span class="key k-fk">FK</span>style_id</td><td class="type">BIGINT</td><td class="note">→ travel_styles</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ================= 2. TRIP ================= -->
+  <section class="domain">
+    <div class="domain-head">
+      <span class="chip" style="color: var(--d-trip); background: var(--tint-trip);">여행</span>
+      <h2 class="domain-title" style="border:0; padding:0;">여행 카드 · 일정 · 동선</h2>
+    </div>
+    <p class="domain-desc">Trips 탭의 여행 카드와, 카드를 눌렀을 때 뜨는 지도 · 여정 타임라인입니다.</p>
+
+    <div class="tcard" style="border-left-color: var(--d-trip);">
+      <div class="tcard-head"><span class="tname">trips</span><span class="tdesc">여행</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">여행 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>user_id</td><td class="type">BIGINT</td><td class="note">→ users</td></tr>
+          <tr><td class="col">title</td><td class="type">VARCHAR(100)</td><td class="note">여행 제목 (예: 제주도 여행)</td></tr>
+          <tr><td class="col">region</td><td class="type">VARCHAR(100)</td><td class="note">지역 (예: 제주도)</td></tr>
+          <tr><td class="col">start_date</td><td class="type">DATE</td><td class="note">시작일</td></tr>
+          <tr><td class="col">end_date</td><td class="type">DATE</td><td class="note">종료일</td></tr>
+          <tr><td class="col">companion_type</td><td class="type">VARCHAR(20)</td><td class="note">누구와 갔는지</td></tr>
+          <tr><td class="col">status</td><td class="type">VARCHAR(20)</td><td class="note">PLANNING / ONGOING / COMPLETED</td></tr>
+          <tr><td class="col">cover_image_url</td><td class="type">VARCHAR(500)</td><td class="note">카드 대표 이미지</td></tr>
+          <tr><td class="col">is_public</td><td class="type">TINYINT(1)</td><td class="note">링크 공개 여부</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+          <tr><td class="col">updated_at</td><td class="type">DATETIME</td><td class="note">수정 시각</td></tr>
+          <tr><td class="col">deleted_at</td><td class="type">DATETIME</td><td class="note">삭제 시각 (실제로 지우지 않음)</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-trip);">
+      <div class="tcard-head"><span class="tname">trip_members</span><span class="tdesc">여행 참여자 — 같이 보고 같이 쓰는 사람들</span><span class="badge-new">NEW</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span><span class="key k-fk">FK</span>trip_id</td><td class="type">BIGINT</td><td class="note">→ trips</td></tr>
+          <tr><td class="col"><span class="key k-pk">PK</span><span class="key k-fk">FK</span>user_id</td><td class="type">BIGINT</td><td class="note">→ users · 참여자</td></tr>
+          <tr><td class="col">role</td><td class="type">VARCHAR(10)</td><td class="note">OWNER(만든 사람) / MEMBER</td></tr>
+          <tr><td class="col">joined_at</td><td class="type">DATETIME</td><td class="note">합류 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-trip);">
+      <div class="tcard-head"><span class="tname">trip_invitations</span><span class="tdesc">여행 초대장</span><span class="badge-new">NEW</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">초대 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>trip_id</td><td class="type">BIGINT</td><td class="note">→ trips · 어느 여행에 부르는지</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>inviter_id</td><td class="type">BIGINT</td><td class="note">→ users · 초대한 사람</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>invitee_id</td><td class="type">BIGINT</td><td class="note">→ users · @아이디로 지목한 경우만</td></tr>
+          <tr><td class="col">invite_code</td><td class="type">VARCHAR(64)</td><td class="note">링크로 부른 경우만 · 중복 불가</td></tr>
+          <tr><td class="col">status</td><td class="type">VARCHAR(20)</td><td class="note">PENDING / ACCEPTED / REJECTED / EXPIRED</td></tr>
+          <tr><td class="col">expires_at</td><td class="type">DATETIME</td><td class="note">초대 만료 시각</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">보낸 시각</td></tr>
+          <tr><td class="col">responded_at</td><td class="type">DATETIME</td><td class="note">수락 · 거절한 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-trip);">
+      <div class="tcard-head"><span class="tname">trip_travel_styles</span><span class="tdesc">여행 ↔ 스타일 짝짓기 (N:M)</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span><span class="key k-fk">FK</span>trip_id</td><td class="type">BIGINT</td><td class="note">→ trips</td></tr>
+          <tr><td class="col"><span class="key k-pk">PK</span><span class="key k-fk">FK</span>style_id</td><td class="type">BIGINT</td><td class="note">→ travel_styles</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-trip);">
+      <div class="tcard-head"><span class="tname">itinerary_days</span><span class="tdesc">여행 일자 (1일차, 2일차 …)</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">일자 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>trip_id</td><td class="type">BIGINT</td><td class="note">→ trips</td></tr>
+          <tr><td class="col">day_number</td><td class="type">INT</td><td class="note">1일차, 2일차 … (여행 안에서 중복 불가)</td></tr>
+          <tr><td class="col">visit_date</td><td class="type">DATE</td><td class="note">실제 날짜</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-trip);">
+      <div class="tcard-head"><span class="tname">itinerary_items</span><span class="tdesc">확정 일정 항목 = 지도 위의 핀 📍</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">일정 항목 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>trip_id</td><td class="type">BIGINT</td><td class="note">→ trips</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>day_id</td><td class="type">BIGINT</td><td class="note">→ itinerary_days · 비어 있으면 날짜 미배정 핀</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>place_id</td><td class="type">BIGINT</td><td class="note">→ places</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>candidate_id</td><td class="type">BIGINT</td><td class="note">→ place_candidates · AI 추출에서 왔을 때</td></tr>
+          <tr><td class="col">visit_order</td><td class="type">INT</td><td class="note">그날의 방문 순서 (1, 2, 3 …)</td></tr>
+          <tr><td class="col">planned_arrival_time</td><td class="type">TIME</td><td class="note">예상 도착 시각 (예: 10:00)</td></tr>
+          <tr><td class="col">stay_minutes</td><td class="type">INT</td><td class="note">머무는 시간(분) · 종료 시각은 여기서 계산</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>transport_mode</td><td class="type">VARCHAR(20)</td><td class="note">직전 장소에서 오는 방법 🚗 CAR / 🚶 WALK / BUS / TRAIN</td></tr>
+          <tr><td class="col">memo</td><td class="type">VARCHAR(500)</td><td class="note">계획 단계 메모</td></tr>
+          <tr><td class="col">added_by</td><td class="type">VARCHAR(10)</td><td class="note">AI / USER · 누가 넣었는지</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ================= 3. PLACE / AI ================= -->
+  <section class="domain">
+    <div class="domain-head">
+      <span class="chip" style="color: var(--d-place); background: var(--tint-place);">장소 · AI</span>
+      <h2 class="domain-title" style="border:0; padding:0;">추출 · 동선 최적화 · 추천</h2>
+    </div>
+    <p class="domain-desc">추출 탭의 핵심 기능입니다. <strong>링크 · 스크린샷 · 붙여넣은 글</strong> 중 하나를 넣으면 AI가 장소를 뽑고, 체크한 것만 여행 카드로 보냅니다.</p>
+
+    <div class="tcard" style="border-left-color: var(--d-place);">
+      <div class="tcard-head"><span class="tname">places</span><span class="tdesc">장소 마스터 (카카오맵 기준)</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">장소 ID</td></tr>
+          <tr><td class="col">kakao_place_id</td><td class="type">VARCHAR(50)</td><td class="note">카카오맵 장소 ID · 중복 불가</td></tr>
+          <tr><td class="col">name</td><td class="type">VARCHAR(200)</td><td class="note">장소명 (예: 카멜리아힐)</td></tr>
+          <tr><td class="col">road_address</td><td class="type">VARCHAR(300)</td><td class="note">도로명 주소</td></tr>
+          <tr><td class="col">lot_address</td><td class="type">VARCHAR(300)</td><td class="note">지번 주소</td></tr>
+          <tr><td class="col">latitude</td><td class="type">DECIMAL(10,7)</td><td class="note">위도</td></tr>
+          <tr><td class="col">longitude</td><td class="type">DECIMAL(10,7)</td><td class="note">경도</td></tr>
+          <tr><td class="col">category_group_code</td><td class="type">VARCHAR(20)</td><td class="note">카카오 카테고리 그룹 코드</td></tr>
+          <tr><td class="col">category_name</td><td class="type">VARCHAR(200)</td><td class="note">카테고리명</td></tr>
+          <tr><td class="col">phone</td><td class="type">VARCHAR(30)</td><td class="note">전화번호</td></tr>
+          <tr><td class="col">place_url</td><td class="type">VARCHAR(500)</td><td class="note">카카오맵 상세 URL</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+          <tr><td class="col">updated_at</td><td class="type">DATETIME</td><td class="note">수정 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-place);">
+      <div class="tcard-head"><span class="tname">ai_requests</span><span class="tdesc">AI 호출 이력 (오류·토큰·비용 추적)</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">AI 요청 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>user_id</td><td class="type">BIGINT</td><td class="note">→ users</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>trip_id</td><td class="type">BIGINT</td><td class="note">→ trips · 비어 있어도 됨 (추출 후 나중에 카드 선택)</td></tr>
+          <tr><td class="col">request_type</td><td class="type">VARCHAR(20)</td><td class="note">PLACE_EXTRACT / ROUTE_OPTIMIZE / RECOMMEND</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>input_type</td><td class="type">VARCHAR(20)</td><td class="note"><strong>사용자가 넣은 방식</strong> LINK / IMAGE / TEXT</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>source_platform</td><td class="type">VARCHAR(20)</td><td class="note">출처 YOUTUBE / INSTAGRAM / BLOG / OTHER</td></tr>
+          <tr><td class="col">source_url</td><td class="type">VARCHAR(1000)</td><td class="note">LINK 일 때만 · 붙여넣은 링크</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>source_text</td><td class="type">TEXT</td><td class="note">TEXT 일 때만 · 사용자가 복사해온 글</td></tr>
+          <tr><td class="col">prompt_text</td><td class="type">TEXT</td><td class="note">실제 보낸 프롬프트 (정확도 개선용)</td></tr>
+          <tr><td class="col">model_name</td><td class="type">VARCHAR(50)</td><td class="note">예: gemini-2.0-flash</td></tr>
+          <tr><td class="col">status</td><td class="type">VARCHAR(20)</td><td class="note">PENDING / PROCESSING / SUCCESS / FAILED</td></tr>
+          <tr><td class="col">error_code</td><td class="type">VARCHAR(50)</td><td class="note">실패 원인 코드</td></tr>
+          <tr><td class="col">retry_count</td><td class="type">INT</td><td class="note">재시도 횟수</td></tr>
+          <tr><td class="col">input_tokens</td><td class="type">INT</td><td class="note">입력 토큰 수</td></tr>
+          <tr><td class="col">output_tokens</td><td class="type">INT</td><td class="note">출력 토큰 수</td></tr>
+          <tr><td class="col">cost_usd</td><td class="type">DECIMAL(10,6)</td><td class="note">요청당 비용(USD)</td></tr>
+          <tr><td class="col">raw_response</td><td class="type">JSON</td><td class="note">AI 원본 응답</td></tr>
+          <tr><td class="col">requested_at</td><td class="type">DATETIME</td><td class="note">요청 시각</td></tr>
+          <tr><td class="col">completed_at</td><td class="type">DATETIME</td><td class="note">완료 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-place);">
+      <div class="tcard-head"><span class="tname">ai_request_images</span><span class="tdesc">AI 분석용 업로드 스크린샷 — 여러 장 가능</span><span class="badge-new">NEW</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">이미지 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>ai_request_id</td><td class="type">BIGINT</td><td class="note">→ ai_requests</td></tr>
+          <tr><td class="col">file_url</td><td class="type">VARCHAR(500)</td><td class="note">업로드한 스크린샷 URL</td></tr>
+          <tr><td class="col">display_order</td><td class="type">INT</td><td class="note">올린 순서</td></tr>
+          <tr><td class="col">width</td><td class="type">INT</td><td class="note">가로 픽셀</td></tr>
+          <tr><td class="col">height</td><td class="type">INT</td><td class="note">세로 픽셀</td></tr>
+          <tr><td class="col">file_size</td><td class="type">BIGINT</td><td class="note">파일 크기(byte)</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">업로드 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-place);">
+      <div class="tcard-head"><span class="tname">place_candidates</span><span class="tdesc">AI가 뽑은 장소 후보 (체크리스트 대상)</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">후보 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>ai_request_id</td><td class="type">BIGINT</td><td class="note">→ ai_requests</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span><span class="key k-new">NEW</span>source_image_id</td><td class="type">BIGINT</td><td class="note">→ ai_request_images · 어느 사진에서 나왔는지 (썸네일용)</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>place_id</td><td class="type">BIGINT</td><td class="note">→ places · 좌표 변환 성공했을 때만</td></tr>
+          <tr><td class="col">raw_name</td><td class="type">VARCHAR(200)</td><td class="note">AI가 추출한 장소명</td></tr>
+          <tr><td class="col">raw_address</td><td class="type">VARCHAR(300)</td><td class="note">AI가 추출한 주소</td></tr>
+          <tr><td class="col">category_text</td><td class="type">VARCHAR(100)</td><td class="note">AI가 분류한 카테고리</td></tr>
+          <tr><td class="col">description</td><td class="type">TEXT</td><td class="note">추출 근거 · 설명</td></tr>
+          <tr><td class="col">confidence</td><td class="type">DECIMAL(4,3)</td><td class="note">신뢰도 0.000 ~ 1.000</td></tr>
+          <tr><td class="col">is_selected</td><td class="type">TINYINT(1)</td><td class="note">사용자가 체크했는지 ✓</td></tr>
+          <tr><td class="col">display_order</td><td class="type">INT</td><td class="note">노출 순서</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-place);">
+      <div class="tcard-head"><span class="tname">route_optimizations</span><span class="tdesc">AI 동선 최적화 이력</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">최적화 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>trip_id</td><td class="type">BIGINT</td><td class="note">→ trips</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>ai_request_id</td><td class="type">BIGINT</td><td class="note">→ ai_requests</td></tr>
+          <tr><td class="col">total_distance_m</td><td class="type">INT</td><td class="note">총 이동 거리(m)</td></tr>
+          <tr><td class="col">total_duration_min</td><td class="type">INT</td><td class="note">총 이동 시간(분)</td></tr>
+          <tr><td class="col">result_json</td><td class="type">JSON</td><td class="note">날짜별 동선 결과</td></tr>
+          <tr><td class="col">is_applied</td><td class="type">TINYINT(1)</td><td class="note">실제 일정에 반영했는지</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-place);">
+      <div class="tcard-head"><span class="tname">recommendations</span><span class="tdesc">맞춤형 장소 추천</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">추천 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>trip_id</td><td class="type">BIGINT</td><td class="note">→ trips</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>ai_request_id</td><td class="type">BIGINT</td><td class="note">→ ai_requests</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>place_id</td><td class="type">BIGINT</td><td class="note">→ places</td></tr>
+          <tr><td class="col">suggested_name</td><td class="type">VARCHAR(200)</td><td class="note">추천 장소명</td></tr>
+          <tr><td class="col">reason</td><td class="type">VARCHAR(500)</td><td class="note">추천 사유</td></tr>
+          <tr><td class="col">status</td><td class="type">VARCHAR(20)</td><td class="note">SUGGESTED / ACCEPTED / REJECTED</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ================= 4. DIARY ================= -->
+  <section class="domain">
+    <div class="domain-head">
+      <span class="chip" style="color: var(--d-diary); background: var(--tint-diary);">기록</span>
+      <h2 class="domain-title" style="border:0; padding:0;">장소별 메모 · 사진 · 영상</h2>
+    </div>
+    <p class="domain-desc">장소 상세 화면의 메모 / 사진 / 영상 탭입니다. 여기 저장된 영상이 PinLog의 재료가 됩니다.</p>
+
+    <div class="tcard" style="border-left-color: var(--d-diary);">
+      <div class="tcard-head"><span class="tname">diaries</span><span class="tdesc">장소별 기록</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">기록 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>itinerary_item_id</td><td class="type">BIGINT</td><td class="note">→ itinerary_items · 어느 핀의 기록인지</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>user_id</td><td class="type">BIGINT</td><td class="note">→ users · 작성자</td></tr>
+          <tr><td class="col">content</td><td class="type">TEXT</td><td class="note">메모 본문</td></tr>
+          <tr><td class="col">visited_at</td><td class="type">DATETIME</td><td class="note">실제 방문 시각</td></tr>
+          <tr><td class="col">rating</td><td class="type">TINYINT</td><td class="note">만족도 1~5 (별점)</td></tr>
+          <tr><td class="col">weather</td><td class="type">VARCHAR(30)</td><td class="note">날씨</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+          <tr><td class="col">updated_at</td><td class="type">DATETIME</td><td class="note">수정 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-diary);">
+      <div class="tcard-head"><span class="tname">diary_media</span><span class="tdesc">기록에 붙은 사진 · 영상 (PinLog 클립 원본)</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">미디어 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>diary_id</td><td class="type">BIGINT</td><td class="note">→ diaries</td></tr>
+          <tr><td class="col">media_type</td><td class="type">VARCHAR(10)</td><td class="note">PHOTO / VIDEO</td></tr>
+          <tr><td class="col">file_url</td><td class="type">VARCHAR(500)</td><td class="note">파일 URL</td></tr>
+          <tr><td class="col">thumbnail_url</td><td class="type">VARCHAR(500)</td><td class="note">썸네일 URL</td></tr>
+          <tr><td class="col">duration_ms</td><td class="type">INT</td><td class="note">영상 길이(ms)</td></tr>
+          <tr><td class="col">width</td><td class="type">INT</td><td class="note">가로 픽셀</td></tr>
+          <tr><td class="col">height</td><td class="type">INT</td><td class="note">세로 픽셀</td></tr>
+          <tr><td class="col">file_size</td><td class="type">BIGINT</td><td class="note">파일 크기(byte)</td></tr>
+          <tr><td class="col">display_order</td><td class="type">INT</td><td class="note">노출 순서</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ================= 5. PINLOG ================= -->
+  <section class="domain">
+    <div class="domain-head">
+      <span class="chip" style="color: var(--d-pinlog); background: var(--tint-pinlog);">PinLog</span>
+      <h2 class="domain-title" style="border:0; padding:0;">1초 클립을 이어붙인 미니 브이로그</h2>
+    </div>
+    <p class="domain-desc">기록에 저장된 영상 중에서 골라, 동선 순서대로 1초씩 잘라 하나의 영상으로 만듭니다.</p>
+
+    <div class="tcard" style="border-left-color: var(--d-pinlog);">
+      <div class="tcard-head"><span class="tname">pinlogs</span><span class="tdesc">PinLog (미니 브이로그)</span><span class="badge-new">RENAMED</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">PinLog ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>trip_id</td><td class="type">BIGINT</td><td class="note">→ trips</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>user_id</td><td class="type">BIGINT</td><td class="note">→ users · 만든 사람</td></tr>
+          <tr><td class="col">title</td><td class="type">VARCHAR(100)</td><td class="note">PinLog 제목</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>start_date</td><td class="type">DATE</td><td class="note">기간 선택 – 시작일</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>end_date</td><td class="type">DATE</td><td class="note">기간 선택 – 종료일</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>template_code</td><td class="type">VARCHAR(30)</td><td class="note">TRAVEL_DIARY / CINEMATIC / EMOTIONAL</td></tr>
+          <tr><td class="col"><span class="key k-new">NEW</span>style_code</td><td class="type">VARCHAR(30)</td><td class="note">BRIGHT / CALM / RETRO</td></tr>
+          <tr><td class="col">status</td><td class="type">VARCHAR(20)</td><td class="note">QUEUED / PROCESSING / DONE / FAILED</td></tr>
+          <tr><td class="col">video_url</td><td class="type">VARCHAR(500)</td><td class="note">완성된 영상 URL</td></tr>
+          <tr><td class="col">thumbnail_url</td><td class="type">VARCHAR(500)</td><td class="note">썸네일 URL</td></tr>
+          <tr><td class="col">duration_ms</td><td class="type">INT</td><td class="note">총 길이(ms)</td></tr>
+          <tr><td class="col">resolution</td><td class="type">VARCHAR(20)</td><td class="note">예: 1080x1920</td></tr>
+          <tr><td class="col">error_message</td><td class="type">VARCHAR(500)</td><td class="note">합성 실패 사유</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+          <tr><td class="col">completed_at</td><td class="type">DATETIME</td><td class="note">합성 완료 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="tcard" style="border-left-color: var(--d-pinlog);">
+      <div class="tcard-head"><span class="tname">pinlog_clips</span><span class="tdesc">PinLog 구성 클립</span><span class="badge-new">RENAMED</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">클립 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>pinlog_id</td><td class="type">BIGINT</td><td class="note">→ pinlogs</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>diary_media_id</td><td class="type">BIGINT</td><td class="note">→ diary_media · 원본 영상</td></tr>
+          <tr><td class="col">clip_order</td><td class="type">INT</td><td class="note">동선 순서 (1, 2, 3 …) · 중복 불가</td></tr>
+          <tr><td class="col">start_ms</td><td class="type">INT</td><td class="note">잘라낼 시작 지점(ms)</td></tr>
+          <tr><td class="col">end_ms</td><td class="type">INT</td><td class="note">잘라낼 종료 지점(ms) · 기본 1초</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ================= 6. MISC ================= -->
+  <section class="domain">
+    <div class="domain-head">
+      <span class="chip" style="color: var(--d-misc); background: var(--tint-misc);">알림</span>
+      <h2 class="domain-title" style="border:0; padding:0;">알림함</h2>
+    </div>
+    <p class="domain-desc">홈 우상단 종 아이콘입니다. 여행 초대를 받았을 때, AI 추출이나 PinLog 합성이 끝났을 때 쌓입니다.</p>
+
+    <div class="tcard" style="border-left-color: var(--d-misc);">
+      <div class="tcard-head"><span class="tname">notifications</span><span class="tdesc">알림</span><span class="badge-new">NEW</span></div>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td class="col"><span class="key k-pk">PK</span>id</td><td class="type">BIGINT</td><td class="note">알림 ID</td></tr>
+          <tr><td class="col"><span class="key k-fk">FK</span>user_id</td><td class="type">BIGINT</td><td class="note">→ users · 받는 사람</td></tr>
+          <tr><td class="col">type</td><td class="type">VARCHAR(30)</td><td class="note">TRIP_INVITED / AI_EXTRACT_DONE / PINLOG_DONE / TRIP_REMINDER</td></tr>
+          <tr><td class="col">title</td><td class="type">VARCHAR(100)</td><td class="note">알림 제목</td></tr>
+          <tr><td class="col">body</td><td class="type">VARCHAR(500)</td><td class="note">알림 본문</td></tr>
+          <tr><td class="col">target_type</td><td class="type">VARCHAR(20)</td><td class="note">눌렀을 때 이동할 화면 종류</td></tr>
+          <tr><td class="col">target_id</td><td class="type">BIGINT</td><td class="note">이동 대상 ID</td></tr>
+          <tr><td class="col">is_read</td><td class="type">TINYINT(1)</td><td class="note">읽음 여부</td></tr>
+          <tr><td class="col">created_at</td><td class="type">DATETIME</td><td class="note">생성 시각</td></tr>
+          <tr><td class="col">read_at</td><td class="type">DATETIME</td><td class="note">읽은 시각</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+  </section>
+
+  <!-- ================= DECISIONS ================= -->
+  <section>
+    <h2>설계 결정 메모</h2>
+    <div class="decisions">
+      <ul>
+        <li><strong>공유 = 링크가 아니라 “같이 쓰기”입니다.</strong> 여행을 만들 때부터 팀원을 넣고, 나중에 초대로 더 부를 수 있습니다. 그래서 링크 토큰 방식의 <code class="mono">shares</code>를 버리고 <code class="mono">trip_members</code>(참여자) + <code class="mono">trip_invitations</code>(초대장) 두 개로 다시 만들었습니다.</li>
+        <li><strong>⚠️ 이제 “내 여행”의 기준이 바뀝니다.</strong> 예전에는 <code class="mono">trips.user_id</code>가 나인지만 보면 됐지만, 이제는 <strong><code class="mono">trip_members</code>에 내가 있는지</strong>로 판단해야 합니다. 여행 · 일정 · 기록을 조회하는 <strong>모든 API의 권한 확인이 여기에 걸립니다.</strong> 만든 사람은 <code class="mono">role = OWNER</code>로 함께 넣어둡니다.</li>
+        <li><strong>초대는 두 가지 방식을 모두 담았습니다.</strong> @아이디로 특정 사람을 지목하면 <code class="mono">invitee_id</code>가, 링크로 부르면 <code class="mono">invite_code</code>가 채워집니다. 둘 중 하나만 쓰기로 정하면 나머지 칸은 비워두면 됩니다.</li>
+        <li><strong>홈은 소셜 피드가 아닙니다.</strong> 팔로우 · 좋아요 · 해시태그는 넣지 않았습니다. 시안의 하트 ♥ 와 팔로잉 숫자는 구현 대상이 아닙니다.</li>
+        <li><strong>AI 입력은 세 가지를 모두 받습니다.</strong> AI가 유튜브·인스타 링크를 직접 못 읽는 경우가 많아, <strong>링크(LINK) · 스크린샷(IMAGE) · 붙여넣은 글(TEXT)</strong> 세 가지 입력을 <code class="mono">input_type</code>으로 구분합니다. 스크린샷은 한 번에 여러 장 올릴 수 있어 <code class="mono">ai_request_images</code> 테이블로 뺐고, 각 후보가 어느 사진에서 나왔는지는 <code class="mono">place_candidates.source_image_id</code>로 이어져 검수 화면에 원본 사진을 띄울 수 있습니다.</li>
+        <li><strong>추출은 유튜브와 인스타그램만 지원합니다.</strong> 틱톡 · 네이버TV는 제외했고, 키워드 랜덤 여행 계획도 빠져 <code class="mono">ai_requests.request_type</code>이 추출 · 동선 · 추천 세 가지입니다.</li>
+        <li><strong>PinLog에 배경음악은 없습니다.</strong> 기획에서 빠져 <code class="mono">bgm_tracks</code> 테이블을 지웠습니다. 템플릿과 스타일은 목록 테이블 없이 <code class="mono">pinlogs</code>의 코드 값으로만 관리합니다.</li>
+        <li><strong>PinLog 클립은 새로 찍지 않고 골라 씁니다.</strong> 장소 기록에 저장한 영상(<code class="mono">diary_media</code>)에서 선택해 1초씩 잘라냅니다.</li>
+        <li><strong>여행 스타일은 화면이 아직 없지만 남겼습니다.</strong> 맞춤형 추천 기능의 재료라서, 회원가입이나 설정 화면에 나중에 붙이면 됩니다.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <span class="mono">pinkok_schema.sql · MySQL 8.0</span>
+    <span class="mono">22 TABLES · 36 FK</span>
+  </footer>
+
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, securityLevel: 'loose' });
+</script>
+</body>
+</html>

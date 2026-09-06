@@ -48,6 +48,10 @@ public class ItineraryItem {
     @Column(name = "stay_minutes")
     private Integer stayMinutes;
 
+    // 직전 장소에서 이 장소로 올 때의 이동수단 (CAR / WALK / BUS / TRAIN)
+    @Column(name = "transport_mode", length = 20)
+    private String transportMode;
+
     @Column(length = 500)
     private String memo;
 

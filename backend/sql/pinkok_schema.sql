@@ -1,26 +1,50 @@
 -- =========================================================
--- AI 기반 여행 애플리케이션 - Database Schema
+-- PinKok - AI 기반 여행 애플리케이션 Database Schema
 -- Target: MySQL 8.0 / ERDCloud Import
+--
+-- v3 (UI 시안 + 팀 논의 반영)
+--  - 소셜 기능(팔로우/좋아요/해시태그) 미포함
+--  - 브이로그 -> PinLog 로 명칭 변경, 배경음악 기능 없음
+--  - 공유 = 링크 공유가 아니라 '여행에 팀원을 추가해서 같이 쓰기'
+--    (trip_members / trip_invitations)
+--  - 키워드 랜덤 여행 계획 기능 제외
+--  - 기본 도트 아바타 / 알림 테이블 추가
 -- =========================================================
 
 -- ---------------------------------------------------------
 -- 1. 사용자 도메인
 -- ---------------------------------------------------------
 
+CREATE TABLE avatars (
+    id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '아바타 ID',
+    code          VARCHAR(20)  NOT NULL COMMENT 'M1 / M2 / M3 / F1 / F2 / F3',
+    name          VARCHAR(50)  NOT NULL COMMENT '표시명 (예: 모험가, 사진가)',
+    image_url     VARCHAR(500) NOT NULL COMMENT '도트 이미지 URL',
+    gender        VARCHAR(10)  NOT NULL COMMENT 'MALE / FEMALE',
+    display_order INT          NULL COMMENT '노출 순서',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_avatars_code (code)
+) COMMENT='기본 프로필 도트 아바타 (남3 / 여3)';
+
+
 CREATE TABLE users (
     id                BIGINT       NOT NULL AUTO_INCREMENT COMMENT '사용자 ID',
     email             VARCHAR(255) NULL COMMENT '이메일',
     password_hash     VARCHAR(255) NULL COMMENT '비밀번호 해시 (소셜 로그인 시 NULL)',
-    nickname          VARCHAR(50)  NOT NULL COMMENT '닉네임',
-    profile_image_url VARCHAR(500) NULL COMMENT '프로필 이미지 URL',
-    provider          VARCHAR(20)  NOT NULL DEFAULT 'LOCAL' COMMENT 'LOCAL / KAKAO / GOOGLE',
+    username          VARCHAR(30)  NOT NULL COMMENT '@아이디 (예: gamjieun)',
+    nickname          VARCHAR(50)  NOT NULL COMMENT '닉네임 (화면 표시명)',
+    avatar_id         BIGINT       NULL COMMENT '선택한 기본 아바타 ID',
+    profile_image_url VARCHAR(500) NULL COMMENT '직접 업로드한 프로필 이미지 URL',
+    provider          VARCHAR(20)  NOT NULL DEFAULT 'LOCAL' COMMENT 'LOCAL / KAKAO / GOOGLE / NAVER / APPLE',
     provider_uid      VARCHAR(100) NULL COMMENT '소셜 로그인 고유 ID',
     created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at        DATETIME     NULL COMMENT 'soft delete',
     PRIMARY KEY (id),
     UNIQUE KEY uk_users_email (email),
-    UNIQUE KEY uk_users_provider (provider, provider_uid)
+    UNIQUE KEY uk_users_username (username),
+    UNIQUE KEY uk_users_provider (provider, provider_uid),
+    CONSTRAINT fk_users_avatar FOREIGN KEY (avatar_id) REFERENCES avatars (id)
 ) COMMENT='사용자';
 
 
@@ -33,13 +57,16 @@ CREATE TABLE travel_styles (
 ) COMMENT='여행 스타일 코드';
 
 
-CREATE TABLE user_preferences (
+CREATE TABLE user_settings (
     user_id                BIGINT      NOT NULL COMMENT '사용자 ID',
     default_companion_type VARCHAR(20) NULL COMMENT 'SOLO / COUPLE / FAMILY / FRIEND',
+    notification_enabled   TINYINT(1)  NOT NULL DEFAULT 1 COMMENT '알림 수신 여부',
+    theme                  VARCHAR(30) NOT NULL DEFAULT 'PIXEL_MINT' COMMENT '테마 설정',
+    language               VARCHAR(10) NOT NULL DEFAULT 'ko' COMMENT '언어 설정',
     updated_at             DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id),
-    CONSTRAINT fk_user_preferences_user FOREIGN KEY (user_id) REFERENCES users (id)
-) COMMENT='사용자 기본 취향';
+    CONSTRAINT fk_user_settings_user FOREIGN KEY (user_id) REFERENCES users (id)
+) COMMENT='사용자 설정 (취향 + 앱 설정)';
 
 
 CREATE TABLE user_travel_styles (
@@ -88,8 +115,8 @@ CREATE TABLE trips (
     end_date        DATE         NULL COMMENT '종료일',
     companion_type  VARCHAR(20)  NULL COMMENT 'SOLO / COUPLE / FAMILY / FRIEND',
     status          VARCHAR(20)  NOT NULL DEFAULT 'PLANNING' COMMENT 'PLANNING / ONGOING / COMPLETED',
-    cover_image_url VARCHAR(500) NULL,
-    is_public       TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '공개 여부',
+    cover_image_url VARCHAR(500) NULL COMMENT '여행 카드 대표 이미지',
+    is_public       TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '링크 공개 여부',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at      DATETIME     NULL COMMENT 'soft delete',
@@ -97,6 +124,38 @@ CREATE TABLE trips (
     KEY idx_trips_user (user_id),
     CONSTRAINT fk_trips_user FOREIGN KEY (user_id) REFERENCES users (id)
 ) COMMENT='여행';
+
+
+CREATE TABLE trip_members (
+    trip_id   BIGINT      NOT NULL COMMENT '여행 ID',
+    user_id   BIGINT      NOT NULL COMMENT '참여자 ID',
+    role      VARCHAR(10) NOT NULL DEFAULT 'MEMBER' COMMENT 'OWNER(만든 사람) / MEMBER',
+    joined_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '합류 시각',
+    PRIMARY KEY (trip_id, user_id),
+    KEY idx_trip_members_user (user_id),
+    CONSTRAINT fk_trip_members_trip FOREIGN KEY (trip_id) REFERENCES trips (id),
+    CONSTRAINT fk_trip_members_user FOREIGN KEY (user_id) REFERENCES users (id)
+) COMMENT='여행 참여자 (같이 보고 같이 쓰는 사람들)';
+
+
+CREATE TABLE trip_invitations (
+    id           BIGINT      NOT NULL AUTO_INCREMENT COMMENT '초대 ID',
+    trip_id      BIGINT      NOT NULL COMMENT '여행 ID',
+    inviter_id   BIGINT      NOT NULL COMMENT '초대한 사람 ID',
+    invitee_id   BIGINT      NULL COMMENT '초대받은 사람 ID (@아이디로 지목한 경우)',
+    invite_code  VARCHAR(64) NULL COMMENT '초대 링크 코드 (링크로 부른 경우)',
+    status       VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / ACCEPTED / REJECTED / EXPIRED',
+    expires_at   DATETIME    NULL COMMENT '초대 만료 시각',
+    created_at   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    responded_at DATETIME    NULL COMMENT '수락/거절한 시각',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_trip_invitations_code (invite_code),
+    KEY idx_trip_invitations_invitee (invitee_id, status),
+    KEY idx_trip_invitations_trip (trip_id),
+    CONSTRAINT fk_trip_invitations_trip    FOREIGN KEY (trip_id)    REFERENCES trips (id),
+    CONSTRAINT fk_trip_invitations_inviter FOREIGN KEY (inviter_id) REFERENCES users (id),
+    CONSTRAINT fk_trip_invitations_invitee FOREIGN KEY (invitee_id) REFERENCES users (id)
+) COMMENT='여행 초대장';
 
 
 CREATE TABLE trip_travel_styles (
@@ -115,10 +174,10 @@ CREATE TABLE trip_travel_styles (
 CREATE TABLE ai_requests (
     id              BIGINT        NOT NULL AUTO_INCREMENT COMMENT 'AI 요청 ID',
     user_id         BIGINT        NOT NULL COMMENT '요청 사용자 ID',
-    trip_id         BIGINT        NULL COMMENT '여행 ID (미지정 가능)',
-    request_type    VARCHAR(20)   NOT NULL COMMENT 'PLACE_EXTRACT / ROUTE_OPTIMIZE / RECOMMEND / RANDOM_PLAN',
-    source_type     VARCHAR(20)   NULL COMMENT 'YOUTUBE_SHORTS / YOUTUBE_LONG / INSTAGRAM_IMAGE / KEYWORD',
-    source_url      VARCHAR(1000) NULL COMMENT '유튜브 링크 등 원본 URL',
+    trip_id         BIGINT        NULL COMMENT '여행 ID (추출 후 나중에 여행 카드 선택 가능)',
+    request_type    VARCHAR(20)   NOT NULL COMMENT 'PLACE_EXTRACT / ROUTE_OPTIMIZE / RECOMMEND',
+    source_type     VARCHAR(20)   NULL COMMENT 'YOUTUBE / INSTAGRAM / KEYWORD',
+    source_url      VARCHAR(1000) NULL COMMENT '유튜브 / 인스타그램 원본 링크',
     source_file_url VARCHAR(500)  NULL COMMENT '업로드 이미지 저장 경로',
     prompt_text     TEXT          NULL COMMENT '실제 전송 프롬프트 (정확도 개선 분석용)',
     model_name      VARCHAR(50)   NULL COMMENT '예: gemini-2.0-flash',
@@ -176,17 +235,18 @@ CREATE TABLE itinerary_days (
 
 
 CREATE TABLE itinerary_items (
-    id                   BIGINT      NOT NULL AUTO_INCREMENT COMMENT '일정 항목 ID',
-    trip_id              BIGINT      NOT NULL COMMENT '여행 ID',
-    day_id               BIGINT      NULL COMMENT '일자 ID (NULL = 날짜 미배정 핀)',
-    place_id             BIGINT      NOT NULL COMMENT '장소 ID',
-    candidate_id         BIGINT      NULL COMMENT '출처가 된 AI 후보 ID',
-    visit_order          INT         NULL COMMENT '해당 일자 내 방문 순서',
-    planned_arrival_time TIME        NULL COMMENT '예상 도착 시각',
-    stay_minutes         INT         NULL COMMENT '예상 체류 시간(분)',
+    id                   BIGINT       NOT NULL AUTO_INCREMENT COMMENT '일정 항목 ID',
+    trip_id              BIGINT       NOT NULL COMMENT '여행 ID',
+    day_id               BIGINT       NULL COMMENT '일자 ID (NULL = 날짜 미배정 핀)',
+    place_id             BIGINT       NOT NULL COMMENT '장소 ID',
+    candidate_id         BIGINT       NULL COMMENT '출처가 된 AI 후보 ID',
+    visit_order          INT          NULL COMMENT '해당 일자 내 방문 순서',
+    planned_arrival_time TIME         NULL COMMENT '예상 도착 시각',
+    stay_minutes         INT          NULL COMMENT '예상 체류 시간(분)',
+    transport_mode       VARCHAR(20)  NULL COMMENT '직전 장소에서의 이동수단 CAR / WALK / BUS / TRAIN',
     memo                 VARCHAR(500) NULL COMMENT '계획 단계 메모',
-    added_by             VARCHAR(10) NOT NULL DEFAULT 'AI' COMMENT 'AI / USER',
-    created_at           DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    added_by             VARCHAR(10)  NOT NULL DEFAULT 'AI' COMMENT 'AI / USER',
+    created_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_itinerary_items_order (day_id, visit_order),
     KEY idx_itinerary_items_trip (trip_id),
@@ -198,14 +258,14 @@ CREATE TABLE itinerary_items (
 
 
 CREATE TABLE route_optimizations (
-    id                 BIGINT   NOT NULL AUTO_INCREMENT COMMENT '동선 최적화 ID',
-    trip_id            BIGINT   NOT NULL COMMENT '여행 ID',
-    ai_request_id      BIGINT   NULL COMMENT 'AI 요청 ID',
-    total_distance_m   INT      NULL COMMENT '총 이동 거리(m)',
-    total_duration_min INT      NULL COMMENT '총 이동 시간(분)',
-    result_json        JSON     NULL COMMENT '날짜별 동선 결과',
+    id                 BIGINT     NOT NULL AUTO_INCREMENT COMMENT '동선 최적화 ID',
+    trip_id            BIGINT     NOT NULL COMMENT '여행 ID',
+    ai_request_id      BIGINT     NULL COMMENT 'AI 요청 ID',
+    total_distance_m   INT        NULL COMMENT '총 이동 거리(m)',
+    total_duration_min INT        NULL COMMENT '총 이동 시간(분)',
+    result_json        JSON       NULL COMMENT '날짜별 동선 결과',
     is_applied         TINYINT(1) NOT NULL DEFAULT 0 COMMENT '일정에 반영 여부',
-    created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at         DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_route_optimizations_trip (trip_id),
     CONSTRAINT fk_route_optimizations_trip    FOREIGN KEY (trip_id)       REFERENCES trips (id),
@@ -231,7 +291,7 @@ CREATE TABLE recommendations (
 
 
 -- ---------------------------------------------------------
--- 6. 기록 (일기장) / 미니 브이로그
+-- 6. 기록 (장소별 메모 / 사진 / 영상)
 -- ---------------------------------------------------------
 
 CREATE TABLE diaries (
@@ -248,7 +308,7 @@ CREATE TABLE diaries (
     KEY idx_diaries_item (itinerary_item_id),
     CONSTRAINT fk_diaries_item FOREIGN KEY (itinerary_item_id) REFERENCES itinerary_items (id),
     CONSTRAINT fk_diaries_user FOREIGN KEY (user_id)           REFERENCES users (id)
-) COMMENT='장소별 일기장 기록';
+) COMMENT='장소별 기록 (메모 / 사진 / 영상)';
 
 
 CREATE TABLE diary_media (
@@ -257,7 +317,7 @@ CREATE TABLE diary_media (
     media_type    VARCHAR(10)  NOT NULL COMMENT 'PHOTO / VIDEO',
     file_url      VARCHAR(500) NOT NULL COMMENT '파일 URL',
     thumbnail_url VARCHAR(500) NULL COMMENT '썸네일 URL',
-    duration_ms   INT          NULL COMMENT '영상 길이(ms), 2000~5000',
+    duration_ms   INT          NULL COMMENT '영상 길이(ms)',
     width         INT          NULL,
     height        INT          NULL,
     file_size     BIGINT       NULL COMMENT '파일 크기(byte)',
@@ -266,14 +326,22 @@ CREATE TABLE diary_media (
     PRIMARY KEY (id),
     KEY idx_diary_media_diary (diary_id),
     CONSTRAINT fk_diary_media_diary FOREIGN KEY (diary_id) REFERENCES diaries (id)
-) COMMENT='기록 첨부 사진/영상';
+) COMMENT='기록 첨부 사진/영상 (PinLog 클립 원본)';
 
 
-CREATE TABLE vlogs (
-    id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '브이로그 ID',
+-- ---------------------------------------------------------
+-- 7. PinLog (1초 영상 모아 자동 생성하는 미니 브이로그)
+-- ---------------------------------------------------------
+
+CREATE TABLE pinlogs (
+    id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT 'PinLog ID',
     trip_id       BIGINT       NOT NULL COMMENT '여행 ID',
-    user_id       BIGINT       NOT NULL COMMENT '사용자 ID',
-    title         VARCHAR(100) NULL COMMENT '브이로그 제목',
+    user_id       BIGINT       NOT NULL COMMENT '만든 사람 ID',
+    title         VARCHAR(100) NULL COMMENT 'PinLog 제목',
+    start_date    DATE         NULL COMMENT '기간 선택 - 시작일',
+    end_date      DATE         NULL COMMENT '기간 선택 - 종료일',
+    template_code VARCHAR(30)  NULL COMMENT 'TRAVEL_DIARY / CINEMATIC / EMOTIONAL',
+    style_code    VARCHAR(30)  NULL COMMENT 'BRIGHT / CALM / RETRO',
     status        VARCHAR(20)  NOT NULL DEFAULT 'QUEUED' COMMENT 'QUEUED / PROCESSING / DONE / FAILED',
     video_url     VARCHAR(500) NULL COMMENT '합성 결과 영상 URL',
     thumbnail_url VARCHAR(500) NULL,
@@ -283,42 +351,42 @@ CREATE TABLE vlogs (
     created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at  DATETIME     NULL,
     PRIMARY KEY (id),
-    KEY idx_vlogs_trip (trip_id),
-    CONSTRAINT fk_vlogs_trip FOREIGN KEY (trip_id) REFERENCES trips (id),
-    CONSTRAINT fk_vlogs_user FOREIGN KEY (user_id) REFERENCES users (id)
-) COMMENT='미니 브이로그';
+    KEY idx_pinlogs_trip (trip_id),
+    CONSTRAINT fk_pinlogs_trip FOREIGN KEY (trip_id) REFERENCES trips (id),
+    CONSTRAINT fk_pinlogs_user FOREIGN KEY (user_id) REFERENCES users (id)
+) COMMENT='PinLog (미니 브이로그)';
 
 
-CREATE TABLE vlog_clips (
+CREATE TABLE pinlog_clips (
     id             BIGINT NOT NULL AUTO_INCREMENT COMMENT '클립 ID',
-    vlog_id        BIGINT NOT NULL COMMENT '브이로그 ID',
-    diary_media_id BIGINT NOT NULL COMMENT '원본 미디어 ID',
+    pinlog_id      BIGINT NOT NULL COMMENT 'PinLog ID',
+    diary_media_id BIGINT NOT NULL COMMENT '원본 미디어 ID (장소 기록의 사진/영상)',
     clip_order     INT    NOT NULL COMMENT '동선 순서 (1,2,3,4...)',
-    start_ms       INT    NOT NULL DEFAULT 0 COMMENT '시작 지점(ms)',
-    end_ms         INT    NULL COMMENT '종료 지점(ms)',
+    start_ms       INT    NOT NULL DEFAULT 0 COMMENT '잘라낼 시작 지점(ms)',
+    end_ms         INT    NULL COMMENT '잘라낼 종료 지점(ms), 기본 1초',
     PRIMARY KEY (id),
-    UNIQUE KEY uk_vlog_clips_order (vlog_id, clip_order),
-    CONSTRAINT fk_vlog_clips_vlog  FOREIGN KEY (vlog_id)        REFERENCES vlogs (id),
-    CONSTRAINT fk_vlog_clips_media FOREIGN KEY (diary_media_id) REFERENCES diary_media (id)
-) COMMENT='브이로그 구성 클립 (원본 미디어 참조)';
+    UNIQUE KEY uk_pinlog_clips_order (pinlog_id, clip_order),
+    CONSTRAINT fk_pinlog_clips_pinlog FOREIGN KEY (pinlog_id)      REFERENCES pinlogs (id),
+    CONSTRAINT fk_pinlog_clips_media  FOREIGN KEY (diary_media_id) REFERENCES diary_media (id)
+) COMMENT='PinLog 구성 클립 (원본 미디어 참조)';
 
 
 -- ---------------------------------------------------------
--- 7. 공유
+-- 8. 알림
 -- ---------------------------------------------------------
 
-CREATE TABLE shares (
-    id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '공유 ID',
-    user_id     BIGINT       NOT NULL COMMENT '공유자 ID',
-    target_type VARCHAR(10)  NOT NULL COMMENT 'TRIP / DIARY / VLOG',
-    target_id   BIGINT       NOT NULL COMMENT '대상 ID (target_type 기준)',
-    share_token VARCHAR(64)  NOT NULL COMMENT '공유 링크 토큰',
-    visibility  VARCHAR(20)  NOT NULL DEFAULT 'LINK' COMMENT 'PUBLIC / LINK / PRIVATE',
-    expires_at  DATETIME     NULL COMMENT '만료 시각',
-    view_count  INT          NOT NULL DEFAULT 0 COMMENT '조회수',
+CREATE TABLE notifications (
+    id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '알림 ID',
+    user_id     BIGINT       NOT NULL COMMENT '받는 사용자 ID',
+    type        VARCHAR(30)  NOT NULL COMMENT 'TRIP_INVITED / AI_EXTRACT_DONE / PINLOG_DONE / TRIP_REMINDER',
+    title       VARCHAR(100) NOT NULL COMMENT '알림 제목',
+    body        VARCHAR(500) NULL COMMENT '알림 본문',
+    target_type VARCHAR(20)  NULL COMMENT '눌렀을 때 이동할 화면 TRIP / PINLOG / AI_REQUEST / INVITATION',
+    target_id   BIGINT       NULL COMMENT '이동 대상 ID',
+    is_read     TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '읽음 여부',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_at     DATETIME     NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_shares_token (share_token),
-    KEY idx_shares_target (target_type, target_id),
-    CONSTRAINT fk_shares_user FOREIGN KEY (user_id) REFERENCES users (id)
-) COMMENT='공유 링크';
+    KEY idx_notifications_user (user_id, is_read, created_at),
+    CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users (id)
+) COMMENT='알림';

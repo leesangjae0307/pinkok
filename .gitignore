@@ -9,6 +9,10 @@ backend/spring/out/
 # Local Spring config
 backend/spring/src/main/resources/application.properties
 
+# Postman local files
+backend/spring/.postman/
+backend/spring/postman/
+
 ############################
 # Frontend (React/Vue 등)
 ############################

@@ -1,33 +1,33 @@
 /**
- * PinKok 픽셀(8-bit) 테마 컬러
- * 메인: 민트, 보조: 네이비 / 옐로우 / 핑크
+ * PinKok 픽셀(8-bit) 테마 컬러 — v2 팔레트
+ * 메인: 짙은 블루 민트, 보조: 딥 블루 / 옐로우 / 코랄
  */
 export const COLORS = {
   // Brand
-  PRIMARY: '#2DD4BF', // 민트 (메인)
-  PRIMARY_DARK: '#0E9488', // 버튼 눌림 효과·픽셀 그림자용 진한 민트
-  PRIMARY_LIGHT: '#B8F2EA', // 연한 민트 (배지·배경 강조)
+  PRIMARY: '#1C5B9B', // 메인 버튼, 활성 탭
+  PRIMARY_DARK: '#123B64', // 버튼 눌림 효과·픽셀 그림자용 (PRIMARY를 어둡게)
+  PRIMARY_LIGHT: '#7FD9C3', // 카드 배경, 하이라이트 칩
 
-  SECONDARY: '#1E3A5F', // 네이비 (포인트 텍스트/아이콘)
-  SECONDARY_DARK: '#122A45',
+  SECONDARY: '#2006A6', // 강조 텍스트, 아이콘 라인
+  SECONDARY_DARK: '#14036B', // SECONDARY를 어둡게 (그림자용)
 
-  ACCENT_YELLOW: '#FFC94A',
-  ACCENT_YELLOW_DARK: '#E0A80F',
-  ACCENT_PINK: '#FF9EC7',
-  ACCENT_PINK_DARK: '#E06FA0',
+  ACCENT_YELLOW: '#FFC97D', // 별점, 배지, 노란 포인트
+  ACCENT_YELLOW_DARK: '#A58251',
+  ACCENT_PINK: '#E56F73', // 하트/핀 강조 (point-coral과 동일 색)
+  ACCENT_PINK_DARK: '#94484A',
 
   // Base
-  INK: '#1A2238', // 완전 검정 대신 쓰는 픽셀 테두리/진한 텍스트 색
+  INK: '#20202D', // 도트 테두리, 메인 텍스트
   WHITE: '#FFFFFF',
   BLACK: '#000000',
 
-  BACKGROUND: '#EAF8F6', // 화면 배경 (연한 민트 톤)
-  SURFACE: '#FFFFFF', // 카드/입력창 배경
+  BACKGROUND: '#74F2E6', // 화면 기본 배경 (스카이/민트)
+  SURFACE: '#FFFFFF', // 카드/입력창 내부 흰색
 
-  GRAY100: '#F2F5F4',
+  GRAY100: '#B6DD6F', // 비활성 입력창, 보조 배경 (mint-soft)
   GRAY300: '#DCE6E4',
-  GRAY500: '#8B9997',
+  GRAY500: '#68788C', // 서브 텍스트, 설명글
 
-  ERROR: '#FF5A6E',
-  ERROR_DARK: '#D63C50',
+  ERROR: '#E56F73', // 삭제 버튼 (point-coral과 동일 색)
+  ERROR_DARK: '#94484A',
 };

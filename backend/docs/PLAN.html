@@ -355,13 +355,8 @@
         <span class="n">01</span>
         <span class="ft">AI 장소 자동 추출</span>
         <span class="who w-b">공동</span>
-<<<<<<< HEAD
         <span class="fd"><strong>링크 · 스크린샷 · 붙여넣은 글</strong> 세 가지 중 아무거나 넣으면 AI가 장소를 뽑아내고, 카카오맵으로 좌표를 찾아 지도에 핀으로 올립니다. AI가 틀릴 수 있어 <strong>체크리스트로 사용자가 검수한 뒤</strong> 내 여행 카드에 담습니다.</span>
         <span class="tables"><code>ai_requests</code><code>ai_request_images</code><code>place_candidates</code><code>places</code><code>itinerary_items</code></span>
-=======
-        <span class="fd">유튜브·인스타 링크를 붙여넣으면 AI가 영상 속 장소를 뽑아내고, 카카오맵으로 좌표를 찾아 지도에 핀으로 올립니다. AI가 틀릴 수 있어 <strong>체크리스트로 사용자가 검수한 뒤</strong> 내 여행 카드에 담습니다.</span>
-        <span class="tables"><code>ai_requests</code><code>place_candidates</code><code>places</code><code>itinerary_items</code></span>
->>>>>>> 6a054897af343cf38a62df7f6a7de821f5a43545
       </div>
 
       <div class="feat" style="border-left-color: var(--jieun);">
@@ -585,25 +580,15 @@
             <div class="task b">
               <span class="who w-b" style="align-self:flex-start;">공동</span>
               <ul>
-<<<<<<< HEAD
                 <li><strong>스크린샷 먼저</strong> — 인스타 캡처 1장 → Gemini → 장소명·주소가 나오는지</li>
                 <li>사진 한 장에 장소 4개가 있을 때 4개를 다 뽑는지 확인</li>
                 <li>그 장소 이름 → 카카오맵 → 좌표가 나오는지 확인</li>
                 <li>붙여넣은 글, 유튜브 링크도 각각 어디까지 되는지 확인</li>
-=======
-                <li>유튜브 링크 하나 → Gemini → 장소 이름이 나오는지만 확인</li>
-                <li>그 장소 이름 → 카카오맵 → 좌표가 나오는지 확인</li>
-                <li>인스타는 어디까지 되는지 한계 확인</li>
->>>>>>> 6a054897af343cf38a62df7f6a7de821f5a43545
                 <li>정확도가 낮으면 프롬프트를 바꿔가며 비교</li>
               </ul>
             </div>
           </div>
-<<<<<<< HEAD
           <div class="done"><b>완료 기준</b>DB도 화면도 없이, 캡처 사진 한 장을 넣으면 장소 이름·주소·좌표가 콘솔에 찍힌다. <strong>여기서 안 되면 기획을 손봐야 하므로 가장 먼저 확인합니다.</strong></div>
-=======
-          <div class="done"><b>완료 기준</b>DB도 화면도 없이, 링크 하나 넣으면 장소 이름과 좌표가 콘솔에 찍힌다. <strong>여기서 안 되면 기획을 손봐야 하므로 가장 먼저 확인합니다.</strong></div>
->>>>>>> 6a054897af343cf38a62df7f6a7de821f5a43545
         </div>
       </div>
 
@@ -651,14 +636,9 @@
             <div class="task j">
               <span class="who w-j" style="align-self:flex-start;">지은 — 지도·DB 쪽</span>
               <ul>
-<<<<<<< HEAD
                 <li><strong>스크린샷 여러 장 업로드</strong> 받기</li>
                 <li>AI가 준 장소명 → 카카오맵 좌표 변환</li>
                 <li>후보 목록 저장 · 신뢰도 · 출처 사진 연결</li>
-=======
-                <li>AI가 준 장소명 → 카카오맵 좌표 변환</li>
-                <li>후보 목록 저장 · 신뢰도 · 정렬</li>
->>>>>>> 6a054897af343cf38a62df7f6a7de821f5a43545
                 <li>체크한 것만 여행 카드에 핀으로 추가</li>
                 <li>같은 장소 중복 방지</li>
               </ul>
@@ -794,7 +774,6 @@
       </div>
 
       <div class="risk">
-<<<<<<< HEAD
         <span class="rt">링크는 AI가 못 읽는 경우가 많습니다 — 스크린샷이 주력입니다</span>
         <span class="rd">유튜브·인스타는 자동으로 긁는 걸 막아둬서 링크만으로는 실패할 때가 많습니다. 그래서 <strong>사용자가 직접 캡처한 사진을 올리는 방식</strong>을 기본으로 잡았습니다. 다행히 여행 게시물 캡처에는 장소명과 주소가 글자로 박혀 있어 AI가 읽기 좋습니다. 02단계에서 <strong>링크보다 스크린샷을 먼저</strong> 테스트하세요.</span>
       </div>
@@ -802,15 +781,6 @@
       <div class="risk">
         <span class="rt">사진 한 장에 장소가 여러 개 들어 있습니다</span>
         <span class="rd">인스타 캡처 한 장에 장소가 4개씩 담기기도 합니다. AI가 몇 개를 뽑아야 하는지 정하지 못하고 뭉뚱그릴 수 있으니, 프롬프트에서 <strong>“보이는 장소를 전부, 각각 이름과 주소를 나눠서”</strong>를 분명히 요구하고 결과 개수를 확인하세요.</span>
-=======
-        <span class="rt">AI가 영상을 직접 못 볼 수 있습니다</span>
-        <span class="rd">유튜브 영상 자체를 통째로 분석하는 건 비용도 크고 제한도 많습니다. 제목·설명·자막·댓글을 텍스트로 긁어서 분석하는 방식이 현실적일 수 있으니, 02단계에서 반드시 확인하세요.</span>
-      </div>
-
-      <div class="risk">
-        <span class="rt">인스타그램은 막혀 있는 게 많습니다</span>
-        <span class="rd">공개 게시물이라도 자동으로 긁는 걸 제한합니다. 링크 대신 <strong>스크린샷 업로드</strong>로 우회하는 방안을 미리 생각해두세요. 이미 <code class="t">source_file_url</code> 칸이 준비돼 있습니다.</span>
->>>>>>> 6a054897af343cf38a62df7f6a7de821f5a43545
       </div>
 
       <div class="risk">

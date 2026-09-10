@@ -359,11 +359,11 @@
         <span class="tables"><code>ai_requests</code><code>ai_request_images</code><code>place_candidates</code><code>places</code><code>itinerary_items</code></span>
       </div>
 
-      <div class="feat" style="border-left-color: var(--jieun);">
+      <div class="feat" style="border-left-color: var(--junghun);">
         <span class="n">02</span>
         <span class="ft">AI 동선 최적화</span>
-        <span class="who w-j">지은</span>
-        <span class="fd">여행 기간과 담아둔 핀들을 넘기면 날짜별로 몇 번째에 어디를 갈지, 이동수단은 무엇인지 순서를 짜줍니다. <strong>이 순서가 PinLog에서 영상을 이어붙이는 기준</strong>이 되기 때문에 PinLog 담당이 함께 맡습니다.</span>
+        <span class="who w-p">정훈</span>
+        <span class="fd">여행 기간과 담아둔 핀들을 넘기면 날짜별로 몇 번째에 어디를 갈지, 이동수단은 무엇인지 순서를 짜줍니다. 결과가 <strong>일정 항목의 방문 순서를 다시 쓰는 작업</strong>이라 일정 · 지도 핀을 맡은 사람이 함께 담당합니다. PinLog는 이 순서를 <strong>읽어서만</strong> 씁니다.</span>
         <span class="tables"><code>route_optimizations</code><code>itinerary_days</code><code>itinerary_items</code></span>
       </div>
 
@@ -379,7 +379,7 @@
         <span class="n">04</span>
         <span class="ft">장소별 기록</span>
         <span class="who w-j">지은</span>
-        <span class="fd">지도의 핀마다 메모·사진·영상·별점·날씨를 남깁니다. 여기 저장한 영상이 PinLog의 재료가 되므로 05번과 한 사람이 맡는 게 자연스럽습니다.</span>
+        <span class="fd">지도의 핀마다 메모 · 사진 · 영상 · 별점을 남깁니다. 여기 저장한 영상이 PinLog의 재료가 되므로 05번과 한 사람이 맡는 게 자연스럽습니다.</span>
         <span class="tables"><code>diaries</code><code>diary_media</code></span>
       </div>
 
@@ -407,11 +407,11 @@
         <span class="tables"><code>users</code></span>
       </div>
 
-      <div class="feat" style="border-left-color: var(--junghun);">
+      <div class="feat" style="border-left-color: var(--jieun);">
         <span class="n">07</span>
         <span class="ft">프로필 · 설정</span>
-        <span class="who w-p">정훈</span>
-        <span class="fd">도트 아바타 6종(남3·여3) 중 선택, 알림 수신 여부, 테마, 언어 설정.</span>
+        <span class="who w-j">지은</span>
+        <span class="fd">도트 아바타 6종(남3·여3) 중 선택, 프로필 이미지 변경, 알림 수신 여부, 테마, 언어 설정. <strong>“알림 받기” 스위치가 알림 기능과 직접 이어지고</strong>, 프로필 이미지도 파일 업로드를 쓰기 때문에 지은이 맡습니다.</span>
         <span class="tables"><code>avatars</code><code>user_settings</code><code>user_travel_styles</code></span>
       </div>
 
@@ -444,7 +444,7 @@
 
   <!-- ============ 역할 분담 ============ -->
   <section>
-    <h2>역할 분담 <span class="count">6 : 6 + 공동 1</span></h2>
+    <h2>역할 분담 <span class="count">지은 4.5 : 정훈 4.5 + 공동 1</span></h2>
     <p class="lede" style="font-size:14.5px;">
       큰 줄기는 <strong>“여행을 계획한다”(정훈)</strong> 와 <strong>“여행을 기록한다”(지은)</strong> 로 나눴습니다.
       두 줄기를 잇는 AI 장소 추출만 함께 합니다.
@@ -459,17 +459,18 @@
         </div>
         <ul>
           <li><strong>파일 업로드 기반</strong> — 사진·영상 저장, 썸네일 생성</li>
+          <li><strong>프로필 · 설정 · 아바타</strong></li>
           <li><strong>장소별 기록</strong> — 메모·사진·영상 CRUD</li>
           <li><strong>PinLog</strong> — 클립 선택, 영상 합성, 진행 상태 관리</li>
-          <li><strong>AI 동선 최적화</strong></li>
           <li><strong>여행 초대장</strong> — 초대 보내기·수락·거절</li>
           <li><strong>알림</strong></li>
           <li><strong>AI 장소 추출</strong> 중 지도·DB 쪽 (공동)</li>
         </ul>
         <div class="why">
           PinLog는 지은이 낸 기획이라 이해도가 가장 높고, 재료가 되는 기록과 파일 업로드까지 한 사람이 쥐고 있어야
-          흐름이 끊기지 않습니다. 동선 최적화를 함께 맡는 이유는 <strong>PinLog가 영상을 잇는 순서가 곧 동선 순서</strong>이기 때문입니다.
-          초대와 알림도 “초대장을 보내면 알림이 간다”로 한 세트라 묶었습니다.
+          흐름이 끊기지 않습니다. 초대와 알림은 “초대장을 보내면 알림이 간다”로 한 세트라 묶었고,
+          설정의 <strong>“알림 받기” 스위치가 알림 기능과 바로 이어지므로</strong> 프로필 · 설정도 함께 맡습니다.
+          <strong>영상 합성이 이 프로젝트에서 가장 어려운 작업</strong>이라는 점도 감안한 배분입니다.
         </div>
       </div>
 
@@ -480,18 +481,19 @@
         </div>
         <ul>
           <li><strong>회원가입 · 로그인 · 토큰</strong> (전체의 토대)</li>
-          <li><strong>프로필 · 설정 · 아바타</strong></li>
           <li><strong>여행 카드 CRUD</strong></li>
           <li><strong>여행 참여자 · 권한 확인</strong></li>
           <li><strong>일정 · 일자 · 지도 핀 관리</strong></li>
           <li><strong>카카오맵 연동</strong> — 장소 검색·좌표 변환</li>
           <li><strong>AI 맞춤형 추천</strong></li>
+          <li><strong>AI 동선 최적화</strong></li>
           <li><strong>AI 장소 추출</strong> 중 AI 호출 쪽 (공동)</li>
         </ul>
         <div class="why">
           로그인이 없으면 “누구의 여행인지” 알 수 없어 모든 API가 막힙니다. 그래서 토대를 정훈이 먼저 깔고,
           그 위에 얹히는 여행·일정·지도를 이어서 맡습니다. 참여자 권한 확인은 여행 조회 API 전부에 걸리는 일이라
-          여행 도메인을 가진 사람이 함께 쥐는 편이 안전합니다.
+          여행 도메인을 가진 사람이 함께 쥐는 편이 안전합니다. 동선 최적화도 결과가
+          <strong>일정 항목의 방문 순서를 덮어쓰는 작업</strong>이라 같은 사람이 맡습니다.
         </div>
       </div>
 
@@ -519,91 +521,78 @@
 
   <!-- ============ 개발 순서 ============ -->
   <section>
-    <h2>개발 순서 <span class="count">8단계</span></h2>
-    <p class="lede" style="font-size:14.5px;">
-      두 사람이므로 <strong>가능한 구간은 병렬로</strong> 진행합니다. 기간은 상대적인 눈금이니 실제 일정에 맞춰 조정하세요.
-    </p>
+    <h2>개발 일정 <span class="count">9/10 → 10/15 · 5주</span></h2>
+
+    <div class="note-box" style="border-color: var(--warn); background: var(--warn-tint);">
+      <p style="margin:0 0 10px; font-size:15px;"><strong>남은 시간은 정확히 5주(35일)입니다.</strong></p>
+      <p style="margin:0 0 10px; font-size:14px; color:var(--ink-2);">
+        다른 수업 없이 졸업작품에만 집중하는 것을 전제로 잡은 일정이며, 기능은 하나도 줄이지 않았습니다.
+        <strong>10/16부터 11/30까지 45일은 테스트 기간</strong>이므로, 10/15에는 기능이 전부 붙어 있어야 합니다.
+      </p>
+      <p style="margin:0; font-size:14px; color:var(--ink-2);">
+        아래를 <strong>토대 → 뼈대 → 핵심 → 어려운 것 → 마무리</strong> 순서로 쌓아 올립니다.
+        먼저 만든 것 위에 다음 것이 얹히는 구조라, 순서를 바꾸면 앞의 작업을 다시 고쳐야 합니다.
+      </p>
+    </div>
+
+    <div class="note-box">
+      <p style="margin:0 0 8px; font-size:14px;"><strong>이미 끝난 것 (일정에서 제외)</strong></p>
+      <ul style="margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px;">
+        <li style="font-size:13.5px;"><strong>AI 장소 추출 프로토타입</strong> — Gemini · 카카오맵 API 연동, 캡처에서 장소 뽑아 지도에 찍는 것까지 확인 완료. <span style="color:var(--ink-3);">API 키 발급과 결제 설정도 이때 끝남. 단 Node.js로 만들어 코드는 재사용 불가, <strong>검증된 프롬프트와 API 사용법이 자산</strong></span></li>
+        <li style="font-size:13.5px;"><strong>DB 설계</strong> — 22개 테이블, 엔티티 · 리포지토리 · 서비스 · 컨트롤러 뼈대</li>
+        <li style="font-size:13.5px;"><strong>로그인 기능 구현</strong> — JWT · Spring Security <span style="color:var(--ink-3);">(별도 브랜치에 있어 병합 · 정리 필요)</span></li>
+      </ul>
+    </div>
 
     <div class="steps">
 
       <div class="step">
-        <div class="step-n">00</div>
+        <div class="step-n">1주</div>
         <div class="step-body">
-          <div class="step-head"><span class="step-title">판 깔기</span><span class="step-dur">약 3~4일 · 함께</span></div>
-          <div class="tasks">
-            <div class="task b">
-              <span class="who w-b" style="align-self:flex-start;">공동</span>
-              <ul>
-                <li>Git 브랜치 규칙, 커밋 규칙 정하기</li>
-                <li>API 응답 형식과 에러 형식 통일</li>
-                <li>Swagger(API 문서) 붙이기</li>
-                <li>목록 데이터 채워넣기 — 아바타 6종, 여행 스타일 5종</li>
-              </ul>
-            </div>
-          </div>
-          <div class="done"><b>완료 기준</b>둘 다 서버를 띄울 수 있고, 서로의 API 문서를 브라우저에서 볼 수 있다.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-n">01</div>
-        <div class="step-body">
-          <div class="step-head"><span class="step-title">토대 — 로그인과 파일 저장</span><span class="step-dur">약 1.5주 · 병렬</span></div>
+          <div class="step-head"><span class="step-title">토대 — 로그인 · 프로필 · 업로드</span><span class="step-dur">9/10 ~ 9/16 · 병렬</span></div>
           <div class="tasks">
             <div class="task p">
               <span class="who w-p" style="align-self:flex-start;">정훈</span>
               <ul>
-                <li>회원가입 · 로그인 API</li>
-                <li>토큰 발급과 검증 (Spring Security)</li>
-                <li>“지금 로그인한 사람” 꺼내 쓰는 방법 만들기</li>
-                <li>프로필 조회 · 아바타 선택</li>
+                <li><strong>로그인 브랜치 병합 · 정리</strong></li>
+                <li>회원가입 마무리 (@아이디 · 닉네임 · 아바타 선택)</li>
+                <li>토큰 검증, <strong>“지금 로그인한 사람” 꺼내 쓰는 공통 코드</strong> <span style="color:var(--ink-3);">(지은이 기다리는 부분이라 먼저)</span></li>
               </ul>
             </div>
             <div class="task j">
               <span class="who w-j" style="align-self:flex-start;">지은</span>
               <ul>
-                <li>사진 · 영상 업로드 API</li>
-                <li>저장 위치 정하기 (로컬 먼저 → 나중에 클라우드)</li>
-                <li>썸네일 만들기, 용량 · 길이 제한</li>
+                <li>사진 · 영상 업로드 API <span style="color:var(--ink-3);">(로그인과 무관하니 먼저 착수)</span></li>
+                <li>저장 위치 정하기 (로컬 먼저)</li>
+                <li>썸네일 생성, 용량 · 길이 제한</li>
+                <li>내 프로필 조회 · 수정, 아바타 선택</li>
               </ul>
             </div>
-          </div>
-          <div class="done"><b>완료 기준</b>로그인해서 받은 토큰으로 내 정보를 조회할 수 있고, 사진 하나를 올려 URL을 돌려받을 수 있다.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-n">02</div>
-        <div class="step-body">
-          <div class="step-head"><span class="step-title">AI 되는지부터 확인 (프로토타입)</span><span class="step-dur">약 1주 · 함께</span></div>
-          <div class="tasks">
             <div class="task b">
-              <span class="who w-b" style="align-self:flex-start;">공동</span>
+              <span class="who w-b" style="align-self:flex-start;">공동 · 9/16까지</span>
               <ul>
-                <li><strong>스크린샷 먼저</strong> — 인스타 캡처 1장 → Gemini → 장소명·주소가 나오는지</li>
-                <li>사진 한 장에 장소 4개가 있을 때 4개를 다 뽑는지 확인</li>
-                <li>그 장소 이름 → 카카오맵 → 좌표가 나오는지 확인</li>
-                <li>붙여넣은 글, 유튜브 링크도 각각 어디까지 되는지 확인</li>
-                <li>정확도가 낮으면 프롬프트를 바꿔가며 비교</li>
+                <li>API 응답 · 에러 형식 통일, Git 규칙</li>
+                <li>Swagger 붙이고 <strong>명세 확정해 프론트에 전달</strong></li>
+                <li>목록 데이터 넣기 — 아바타 6종, 여행 스타일</li>
               </ul>
             </div>
           </div>
-          <div class="done"><b>완료 기준</b>DB도 화면도 없이, 캡처 사진 한 장을 넣으면 장소 이름·주소·좌표가 콘솔에 찍힌다. <strong>여기서 안 되면 기획을 손봐야 하므로 가장 먼저 확인합니다.</strong></div>
+          <div class="done"><b>완료 기준</b>가입 → 로그인 → 받은 토큰으로 내 정보 조회가 되고, 사진 하나를 올려 URL을 돌려받는다. <strong>모든 기능이 “로그인한 사람이 누구인지”에 의존하므로 이것부터 세웁니다.</strong></div>
         </div>
       </div>
 
       <div class="step">
-        <div class="step-n">03</div>
+        <div class="step-n">2주</div>
         <div class="step-body">
-          <div class="step-head"><span class="step-title">기본 기능 — 여행·팀원 / 기록</span><span class="step-dur">약 2주 · 병렬</span></div>
+          <div class="step-head"><span class="step-title">뼈대 — 여행 · 일정 · 기록</span><span class="step-dur">9/17 ~ 9/23 · 병렬</span></div>
           <div class="tasks">
             <div class="task p">
               <span class="who w-p" style="align-self:flex-start;">정훈</span>
               <ul>
                 <li>여행 카드 만들기 · 목록 · 수정 · 삭제</li>
-                <li><strong>참여자 등록 + 권한 확인 규칙</strong> — 만든 사람을 OWNER로 자동 등록</li>
-                <li>일자(1일차·2일차) 관리, 지도 핀 추가·순서·이동수단</li>
-                <li>카카오맵 장소 검색 API</li>
+                <li><strong>참여자 등록 + 권한 확인 공통 코드</strong> — 만든 사람 OWNER 자동 등록</li>
+                <li>일자 · 지도 핀 · 순서 · 이동수단</li>
+                <li>카카오맵 장소 검색</li>
               </ul>
             </div>
             <div class="task j">
@@ -611,152 +600,137 @@
               <ul>
                 <li>장소별 기록 작성 · 조회 · 수정 · 삭제</li>
                 <li>기록에 사진 · 영상 여러 장 붙이기</li>
-                <li>별점 · 날씨 · 방문 시각</li>
+                <li>별점 (1~5)</li>
               </ul>
             </div>
           </div>
-          <div class="done"><b>완료 기준</b>여행을 만들고 → 핀을 꽂고 → 그 핀에 사진 있는 메모를 남기는 흐름이 API로 끝까지 되고, <strong>팀원이 아닌 사람은 남의 여행을 못 본다.</strong></div>
+          <div class="done"><b>완료 기준</b>여행을 만들고 → 핀을 꽂고 → 그 핀에 사진 있는 메모를 남기는 흐름이 끝까지 되고, <strong>팀원이 아닌 사람은 남의 여행을 못 본다.</strong></div>
         </div>
       </div>
 
       <div class="step">
-        <div class="step-n">04</div>
+        <div class="step-n">3주</div>
         <div class="step-body">
-          <div class="step-head"><span class="step-title">AI 장소 추출 본 구현 ★</span><span class="step-dur">약 2.5주 · 함께</span></div>
+          <div class="step-head"><span class="step-title">핵심 — AI 장소 추출 본 구현 ★</span><span class="step-dur">9/24 ~ 9/30 · 함께</span></div>
           <div class="tasks">
             <div class="task p">
               <span class="who w-p" style="align-self:flex-start;">정훈 — AI 쪽</span>
               <ul>
-                <li>Gemini 연동을 서비스로 정리</li>
+                <li><strong>Gemini 연동을 Spring으로 새로 구현</strong> <span style="color:var(--ink-3);">(프로토타입은 Node.js라 코드는 옮길 수 없고, 검증된 프롬프트를 그대로 재사용)</span></li>
                 <li>프롬프트 관리, 실패 시 재시도</li>
                 <li>호출 이력 · 토큰 · 비용 기록</li>
                 <li>오래 걸리므로 비동기 처리 + 진행 상태</li>
               </ul>
             </div>
             <div class="task j">
-              <span class="who w-j" style="align-self:flex-start;">지은 — 지도·DB 쪽</span>
+              <span class="who w-j" style="align-self:flex-start;">지은 — 지도 · DB 쪽</span>
               <ul>
-                <li><strong>스크린샷 여러 장 업로드</strong> 받기</li>
-                <li>AI가 준 장소명 → 카카오맵 좌표 변환</li>
-                <li>후보 목록 저장 · 신뢰도 · 출처 사진 연결</li>
-                <li>체크한 것만 여행 카드에 핀으로 추가</li>
-                <li>같은 장소 중복 방지</li>
+                <li>스크린샷 여러 장 업로드 받기</li>
+                <li>장소명 → 카카오맵 좌표 변환</li>
+                <li>후보 저장 · 신뢰도 · 출처 사진 연결</li>
+                <li>체크한 것만 여행에 핀 추가, 중복 방지</li>
               </ul>
             </div>
           </div>
-          <div class="done"><b>완료 기준</b>링크를 넣으면 후보 목록이 뜨고, 체크해서 “지도에 추가”하면 실제 여행 일정에 핀이 꽂힌다. <strong>여기까지가 졸업작품의 최소 완성선입니다.</strong></div>
+          <div class="done"><b>완료 기준</b>캡처를 올리면 후보 목록이 뜨고, 체크해서 “지도에 추가”하면 실제 여행 일정에 핀이 꽂힌다. <strong>여기까지가 졸업작품의 최소 완성선입니다.</strong></div>
         </div>
       </div>
 
       <div class="step">
-        <div class="step-n">05</div>
+        <div class="step-n">4주</div>
         <div class="step-body">
-          <div class="step-head"><span class="step-title">가장 어려운 것 — PinLog / 추천</span><span class="step-dur">약 3주 · 병렬</span></div>
+          <div class="step-head"><span class="step-title">가장 어려운 것 — PinLog / AI 확장</span><span class="step-dur">10/1 ~ 10/7 · 병렬</span></div>
           <div class="tasks">
             <div class="task j">
               <span class="who w-j" style="align-self:flex-start;">지은</span>
               <ul>
-                <li>영상 합성 도구 붙이기 (FFmpeg 등)</li>
                 <li>클립 1초씩 자르기 · 동선 순서로 잇기</li>
                 <li>템플릿 · 스타일 적용</li>
-                <li>오래 걸리므로 큐로 처리 + 상태 관리</li>
+                <li>큐로 처리 + 진행 상태 관리</li>
+                <li>실패 케이스 처리</li>
               </ul>
             </div>
             <div class="task p">
               <span class="who w-p" style="align-self:flex-start;">정훈</span>
               <ul>
-                <li>맞춤형 추천 (동반자 · 취향 기반)</li>
-                <li>추천 수락 · 거절 처리</li>
-                <li>소셜 로그인 붙이기</li>
+                <li>AI 맞춤 추천 (동반자 · 취향 기반)</li>
+                <li>AI 동선 최적화 + 일정 반영</li>
+                <li><strong>프론트 연동 시작</strong> — 안 맞는 API 즉시 수정</li>
               </ul>
             </div>
           </div>
-          <div class="done"><b>완료 기준</b>영상 몇 개를 골라 PinLog 한 편이 실제로 만들어진다.</div>
+          <div class="done"><b>완료 기준</b>영상 몇 개로 PinLog 한 편이 실제로 만들어지고, 핀 목록으로 날짜별 동선이 짜인다. <strong>10/7에 PinLog가 안 되면 사진 슬라이드쇼로 전환합니다.</strong></div>
         </div>
       </div>
 
       <div class="step">
-        <div class="step-n">06</div>
+        <div class="step-n">5주</div>
         <div class="step-body">
-          <div class="step-head"><span class="step-title">동선 최적화 / 초대 · 알림 / 설정</span><span class="step-dur">약 2주 · 병렬</span></div>
+          <div class="step-head"><span class="step-title">마무리 — 초대 · 알림 · 통합 · 배포</span><span class="step-dur">10/8 ~ 10/15 · 병렬 → 함께</span></div>
           <div class="tasks">
             <div class="task j">
               <span class="who w-j" style="align-self:flex-start;">지은</span>
               <ul>
-                <li>AI 동선 최적화 + 일정에 반영</li>
                 <li>여행 초대 보내기 · 수락 · 거절</li>
                 <li>알림 (초대 · AI 완료 · PinLog 완료)</li>
+                <li>설정 (알림 · 테마 · 언어)</li>
               </ul>
             </div>
             <div class="task p">
               <span class="who w-p" style="align-self:flex-start;">정훈</span>
               <ul>
-                <li>설정 화면 (알림 · 테마 · 언어)</li>
+                <li>소셜 로그인 (카카오 · 구글)</li>
+                <li>참여자 관리 API (목록 · 내보내기)</li>
                 <li>여행 스타일 · 취향 저장</li>
-                <li>참여자 관리 화면용 API (목록 · 내보내기)</li>
               </ul>
             </div>
-          </div>
-          <div class="done"><b>완료 기준</b>핀 목록으로 날짜별 동선이 짜이고, 친구를 초대하면 알림이 가서 수락하면 같이 볼 수 있다.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-n">07</div>
-        <div class="step-body">
-          <div class="step-head"><span class="step-title">통합과 마무리</span><span class="step-dur">약 2주 · 함께</span></div>
-          <div class="tasks">
             <div class="task b">
               <span class="who w-b" style="align-self:flex-start;">공동</span>
               <ul>
-                <li>프론트와 연동하며 API 다듬기</li>
-                <li>파일 저장을 클라우드로 옮기기</li>
-                <li>전체 흐름 테스트 · 배포</li>
-                <li>발표용 시연 시나리오 준비</li>
+                <li>프론트 연동 마무리 · 전체 흐름 테스트</li>
+                <li>버그 수정 · 배포 · 시연 시나리오</li>
+                <li><strong>코드 읽고 이해하기 — 발표 때 설명해야 함</strong></li>
               </ul>
             </div>
           </div>
-          <div class="done"><b>완료 기준</b>실제 폰에서 가입 → 추출 → 여행 → 기록 → PinLog까지 한 번에 시연된다.</div>
+          <div class="done"><b>완료 기준</b>실제 폰에서 가입 → 추출 → 여행 → 기록 → PinLog까지 끊김 없이 시연된다. <strong>여기 있는 초대 · 알림 · 설정 · 소셜 로그인은 일정이 밀릴 경우 가장 먼저 덜어낼 수 있는 것들입니다.</strong></div>
         </div>
       </div>
 
     </div>
   </section>
 
-  <!-- ============ 비교 ============ -->
+  <!-- ============ 마일스톤 ============ -->
   <section>
-    <h2>기존 제안과 달라진 점 <span class="count">왜 바꿨는지</span></h2>
+    <h2>놓치면 안 되는 날짜</h2>
     <div class="cmp">
       <table>
-        <thead><tr><th>바꾼 것</th><th>이유</th></tr></thead>
+        <thead><tr><th>날짜</th><th>여기까지 되어 있어야 함</th><th>안 되면</th></tr></thead>
         <tbody>
           <tr>
-            <td class="q">로그인을 맨 앞에 넣음</td>
-            <td>기존 순서에 회원·인증이 아예 없었습니다. 로그인이 없으면 “이 여행이 누구 것인지” 정할 수 없어서, 나중에 붙이면 이미 만든 API를 전부 고쳐야 합니다.</td>
+            <td class="q">9/16 (수)</td>
+            <td>로그인 · 업로드 동작 + <strong>API 명세를 프론트에 전달</strong></td>
+            <td>프론트 2명이 놀게 됩니다. 백엔드보다 팀 전체 일정이 먼저 밀립니다.</td>
           </tr>
           <tr>
-            <td class="q">파일 업로드를 앞으로 당김</td>
-            <td>사진·영상을 저장할 곳이 없으면 기록 기능도 PinLog도 시작을 못 합니다. 로그인 만드는 동안 지은이 병렬로 준비합니다.</td>
+            <td class="q">9/23 (수)</td>
+            <td>여행 만들고 · 핀 꽂고 · 기록 남기기</td>
+            <td>3주차 AI 작업이 얹힐 바닥이 없습니다. 확장 기능을 미루고 여기 집중.</td>
           </tr>
           <tr>
-            <td class="q">PinLog를 맨 뒤에서 앞으로</td>
-            <td><strong>가장 중요한 변경입니다.</strong> 영상 합성은 이 프로젝트에서 기술적으로 제일 어렵습니다. 맨 마지막에 두면 시간이 모자라 못 끝낼 위험이 큽니다. AI 추출이 끝나자마자 바로 시작합니다.</td>
+            <td class="q">9/30 (수)</td>
+            <td><strong>AI 추출이 끝까지 동작 ★</strong></td>
+            <td>가장 중요한 기능입니다. 4주차 추천 · 동선을 버리고 여기에 전부 투입.</td>
           </tr>
           <tr>
-            <td class="q">참여자 권한을 03단계로</td>
-            <td>공유가 “여행을 함께 쓰는 것”으로 바뀌면서, 여행 조회 API 전부가 <strong>“내가 이 여행의 팀원인가”</strong>를 확인해야 합니다. 나중에 붙이면 만든 API를 다시 다 고쳐야 하므로 여행 CRUD와 같이 만듭니다.</td>
+            <td class="q">10/7 (수)</td>
+            <td>PinLog로 영상 1편 생성 성공</td>
+            <td><strong>즉시 사진 슬라이드쇼로 전환. 더 붙잡지 말 것.</strong></td>
           </tr>
           <tr>
-            <td class="q">동선 최적화를 지은에게</td>
-            <td>PinLog가 영상을 잇는 순서가 곧 동선 순서입니다. 한 사람이 두 개를 다 쥐고 있어야 “순서”의 기준이 어긋나지 않습니다.</td>
-          </tr>
-          <tr>
-            <td class="q">단계마다 “완료 기준”을 붙임</td>
-            <td>“어디까지 하면 이 단계가 끝인지”가 없으면 서로 다음으로 못 넘어갑니다. 둘이 나눠 일할 때 특히 중요합니다.</td>
-          </tr>
-          <tr>
-            <td class="q">프로토타입 단계는 그대로 둠</td>
-            <td>AI가 되는지부터 확인하자는 판단은 좋았습니다. 안 되면 기획을 통째로 바꿔야 하는 부분이라 가장 먼저 확인하는 게 맞습니다.</td>
+            <td class="q">10/15 (목)</td>
+            <td>전체 시연 가능</td>
+            <td>초대 · 알림 · 설정 · 소셜 로그인을 덜어냅니다. 그래도 안 되면 테스트 기간(45일)을 깎아 씁니다.</td>
           </tr>
         </tbody>
       </table>
@@ -765,37 +739,37 @@
 
   <!-- ============ 위험 ============ -->
   <section>
-    <h2>미리 알아둘 위험</h2>
+    <h2>시간을 잡아먹는 것들 <span class="count">미리 대비할 것</span></h2>
     <div class="risks">
 
       <div class="risk">
+        <span class="rt">프로토타입이 됐다고 실사용 정확도가 보장되진 않습니다</span>
+        <span class="rd">장소를 뽑는 것 자체는 확인됐지만, <strong>사진 한 장에 장소가 4개 담긴 경우</strong>처럼 실제 게시물은 더 까다롭습니다. AI가 뭉뚱그리지 않는지, 주소를 제대로 떼어내는지 반복해서 맞춰야 합니다. 3주차에 가장 오래 걸릴 작업이니 <strong>테스트용 캡처를 지금부터 10~20장 모아두세요.</strong> 프로토타입은 지우지 말고 참조용으로 남겨두면 응답이 이상할 때 비교할 수 있습니다.</span>
+      </div>
+
+      <div class="risk">
+        <span class="rt">FFmpeg는 코드보다 설치와 환경에서 막힙니다</span>
+        <span class="rd">영상 합성은 <strong>설치 · 코덱 · 경로 · 권한</strong>에서 하루 이틀이 날아가는 일이 흔합니다. 4주차를 기다리지 말고 <strong>지금 미리 설치해서 영상 두 개를 이어붙이는 것만 성공시켜 두세요.</strong> 이것만 뚫어두면 4주차가 훨씬 편해집니다.</span>
+      </div>
+
+      <div class="risk">
+        <span class="rt">프론트 2명은 백엔드를 기다립니다</span>
+        <span class="rd">API가 늦게 나오면 프론트가 통째로 밀립니다. <strong>9/16까지 Swagger 명세를 확정해 넘기면</strong> 그들은 가짜 데이터로 화면을 먼저 만들 수 있습니다. 코드보다 <strong>명세를 먼저</strong> 주는 게 팀 전체 속도를 좌우합니다.</span>
+      </div>
+
+      <div class="risk">
         <span class="rt">팀원 권한 확인을 빠뜨리기 쉽습니다</span>
-        <span class="rd">여행이 여러 사람 것이 되면서, 일정·기록·PinLog를 조회하는 <strong>모든 API</strong>가 “요청한 사람이 이 여행의 팀원인가”를 확인해야 합니다. 한 군데라도 빠지면 남의 여행이 보입니다. 03단계에서 <strong>공통으로 쓰는 확인 코드를 하나 만들어두고</strong> 모든 API가 그것만 쓰게 하세요.</span>
+        <span class="rd">여행이 여러 사람 것이 되면서 일정 · 기록 · PinLog를 조회하는 <strong>모든 API</strong>가 “요청한 사람이 이 여행의 팀원인가”를 확인해야 합니다. 한 군데라도 빠지면 남의 여행이 보입니다. 2주차에 <strong>공통 확인 코드를 하나 만들어두고</strong> 모든 API가 그것만 쓰게 하세요.</span>
       </div>
 
       <div class="risk">
-        <span class="rt">링크는 AI가 못 읽는 경우가 많습니다 — 스크린샷이 주력입니다</span>
-        <span class="rd">유튜브·인스타는 자동으로 긁는 걸 막아둬서 링크만으로는 실패할 때가 많습니다. 그래서 <strong>사용자가 직접 캡처한 사진을 올리는 방식</strong>을 기본으로 잡았습니다. 다행히 여행 게시물 캡처에는 장소명과 주소가 글자로 박혀 있어 AI가 읽기 좋습니다. 02단계에서 <strong>링크보다 스크린샷을 먼저</strong> 테스트하세요.</span>
+        <span class="rt">AI 호출 비용이 쌓입니다</span>
+        <span class="rd">프롬프트를 반복해서 시험하면 비용이 누적됩니다. <code class="t">ai_requests</code>에 토큰과 비용을 기록하게 해뒀으니 초반부터 확인하고, <strong>같은 사진은 결과를 재사용</strong>하세요.</span>
       </div>
 
       <div class="risk">
-        <span class="rt">사진 한 장에 장소가 여러 개 들어 있습니다</span>
-        <span class="rd">인스타 캡처 한 장에 장소가 4개씩 담기기도 합니다. AI가 몇 개를 뽑아야 하는지 정하지 못하고 뭉뚱그릴 수 있으니, 프롬프트에서 <strong>“보이는 장소를 전부, 각각 이름과 주소를 나눠서”</strong>를 분명히 요구하고 결과 개수를 확인하세요.</span>
-      </div>
-
-      <div class="risk">
-        <span class="rt">영상 합성은 서버를 많이 먹습니다</span>
-        <span class="rd">요청을 받자마자 처리하면 서버가 멈춥니다. 반드시 “접수만 하고 나중에 처리”하는 방식으로 만들고, 진행 상태를 <code class="t">pinlogs.status</code> 로 알려주세요.</span>
-      </div>
-
-      <div class="risk">
-        <span class="rt">AI 호출은 돈이 나갑니다</span>
-        <span class="rd">테스트를 많이 돌리면 비용이 쌓입니다. <code class="t">ai_requests</code> 에 토큰과 비용을 기록하게 해뒀으니 초반부터 확인하는 습관을 들이고, 같은 링크는 결과를 재사용하세요.</span>
-      </div>
-
-      <div class="risk">
-        <span class="rt">기능을 다 못 만들 수도 있습니다</span>
-        <span class="rd">04단계까지가 “졸업작품으로 보여줄 수 있는 최소선”입니다. 일정이 밀리면 <strong>03번 맞춤 추천 → 10번 알림 → 09번 초대(팀원만 남기고)</strong> 순서로 덜어내세요. 이 순서를 미리 합의해두면 나중에 덜 다툽니다.</span>
+        <span class="rt">코드를 이해하는 시간을 빼두세요</span>
+        <span class="rd">발표와 시연에서 <strong>교수님 질문에 답해야 합니다.</strong> “왜 이렇게 만들었나”를 설명하지 못하면 감점 요인입니다. 5주차에 시간을 잡아뒀지만, 각 주차가 끝날 때마다 조금씩 읽어두는 편이 안전합니다.</span>
       </div>
 
     </div>
@@ -803,7 +777,7 @@
 
   <footer>
     <span class="mono">PinKok Backend · 지은 &amp; 정훈</span>
-    <span class="mono">기능 10 · 단계 8 · 테이블 21</span>
+    <span class="mono">2026.09.10 → 10.15 · 5주 · 기능 10 · 테이블 22</span>
   </footer>
 
 </div>

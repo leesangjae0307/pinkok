@@ -11,6 +11,7 @@ public class UserResponse {
     private final String username;
     private final String nickname;
     private final String profileImageUrl;
+    private final AvatarResponse avatar;
 
     private UserResponse(User user) {
         this.id = user.getId();
@@ -18,6 +19,7 @@ public class UserResponse {
         this.username = user.getUsername();
         this.nickname = user.getNickname();
         this.profileImageUrl = user.getProfileImageUrl();
+        this.avatar = user.getAvatar() == null ? null : AvatarResponse.from(user.getAvatar());
     }
 
     public static UserResponse from(User user) {

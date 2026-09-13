@@ -1,6 +1,7 @@
 package com.example.pinkok_backend.service;
 
 import com.example.pinkok_backend.dto.SignupRequest;
+import com.example.pinkok_backend.entity.Avatar;
 import com.example.pinkok_backend.entity.User;
 import com.example.pinkok_backend.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -14,10 +15,12 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AvatarService avatarService;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, AvatarService avatarService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.avatarService = avatarService;
     }
 
     @Transactional
@@ -41,6 +44,21 @@ public class UserService {
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
 
+        if (request.getAvatarId() != null) {
+            Avatar avatar = avatarService.getEntityOrThrow(request.getAvatarId());
+            user.setAvatar(avatar);
+        }
+
+        return userRepository.save(user);
+    }
+
+    /** 프로필에서 아바타를 고르거나 바꿀 때. */
+    @Transactional
+    public User selectAvatar(Long userId, Long avatarId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("사용자를 찾을 수 없습니다."));
+        user.setAvatar(avatarService.getEntityOrThrow(avatarId));
+        user.setUpdatedAt(LocalDateTime.now());
         return userRepository.save(user);
     }
 }

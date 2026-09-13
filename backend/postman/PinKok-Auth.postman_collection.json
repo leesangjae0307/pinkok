@@ -10,9 +10,36 @@
     { "key": "username", "value": "jeonghun01" },
     { "key": "password", "value": "pass1234" },
     { "key": "nickname", "value": "정훈" },
-    { "key": "accessToken", "value": "" }
+    { "key": "accessToken", "value": "" },
+    { "key": "avatarId", "value": "" }
   ],
   "item": [
+    {
+      "name": "0. Get Avatars (아바타 목록, 로그인 불필요)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/avatars", "host": ["{{baseUrl}}"], "path": ["avatars"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "if (Array.isArray(b) && b.length > 0) {",
+              "  pm.collectionVariables.set('avatarId', b[0].id);",
+              "  console.log('avatarId 저장:', b[0].id);",
+              "} else {",
+              "  console.log('아바타 시드 데이터가 아직 없습니다 (avatars 테이블이 비어있음). 회원가입 시 avatarId는 생략하세요.');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
     {
       "name": "1. Signup (회원가입)",
       "request": {
@@ -93,6 +120,38 @@
               "  pm.expect(b.email).to.eql(pm.variables.get('email'));",
               "  pm.expect(b.nickname).to.eql(pm.variables.get('nickname'));",
               "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3b. Select Avatar (아바타 선택 · 변경)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/users/me/avatar", "host": ["{{baseUrl}}"], "path": ["users", "me", "avatar"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"avatarId\": {{avatarId}}\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('avatarId')) {",
+              "  console.log('avatarId 변수가 비어있습니다. 먼저 0번 요청(Get Avatars)을 실행하거나, avatars 테이블에 시드 데이터를 넣으세요.');",
+              "} else {",
+              "  pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "  const b = pm.response.json();",
+              "  pm.test('avatar 정보가 반영됨', () => pm.expect(b.avatar).to.not.be.null);",
+              "}"
             ]
           }
         }

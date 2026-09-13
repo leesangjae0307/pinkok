@@ -29,4 +29,7 @@ public class SignupRequest {
     @NotBlank
     @Size(max = 50)
     private String nickname;
+
+    /** 기본 도트 아바타 선택(선택 사항). 나중에 프로필에서 바꿀 수 있어 회원가입 때는 필수로 두지 않는다. */
+    private Long avatarId;
 }

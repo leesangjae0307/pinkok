@@ -1,8 +1,15 @@
 package com.example.pinkok_backend.controller;
 
+import com.example.pinkok_backend.dto.ItineraryDayCreateRequest;
+import com.example.pinkok_backend.dto.ItineraryDayResponse;
+import com.example.pinkok_backend.security.CurrentUserId;
 import com.example.pinkok_backend.service.ItineraryDayService;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/itinerary-days")
@@ -14,5 +21,21 @@ public class ItineraryDayController {
         this.itineraryDayService = itineraryDayService;
     }
 
-    // TODO: API 엔드포인트 작성
+    @PostMapping
+    public ResponseEntity<ItineraryDayResponse> create(@CurrentUserId Long userId,
+                                                        @Valid @RequestBody ItineraryDayCreateRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(itineraryDayService.create(userId, request));
+    }
+
+    @GetMapping
+    public List<ItineraryDayResponse> list(@CurrentUserId Long userId, @RequestParam Long tripId) {
+        return itineraryDayService.list(tripId, userId);
+    }
+
+    /** 일자를 지워도 그 핀들은 "날짜 미배정" 으로 남고 삭제되지 않는다. */
+    @DeleteMapping("/{dayId}")
+    public ResponseEntity<Void> delete(@CurrentUserId Long userId, @PathVariable Long dayId) {
+        itineraryDayService.delete(dayId, userId);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -1,21 +1,53 @@
 package com.example.pinkok_backend.service;
 
 import com.example.pinkok_backend.dto.PlaceInput;
+import com.example.pinkok_backend.dto.PlaceSearchPageResponse;
+import com.example.pinkok_backend.dto.PlaceSearchResponse;
 import com.example.pinkok_backend.entity.Place;
+import com.example.pinkok_backend.kakao.KakaoKeywordSearchResponse;
+import com.example.pinkok_backend.kakao.KakaoLocalApiClient;
 import com.example.pinkok_backend.repository.PlaceRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 
 @Service
 public class PlaceService {
 
-    private final PlaceRepository placeRepository;
+    private static final int MAX_PAGE_SIZE = 45; // 카카오 Local API 상한
+    private static final int DEFAULT_PAGE_SIZE = 15;
 
-    public PlaceService(PlaceRepository placeRepository) {
+    private final PlaceRepository placeRepository;
+    private final KakaoLocalApiClient kakaoLocalApiClient;
+
+    public PlaceService(PlaceRepository placeRepository, KakaoLocalApiClient kakaoLocalApiClient) {
         this.placeRepository = placeRepository;
+        this.kakaoLocalApiClient = kakaoLocalApiClient;
+    }
+
+    /** 카카오맵 키워드 장소 검색. 결과를 그대로 저장하는 게 아니라, 골라서 핀으로 추가할 때 저장된다. */
+    public PlaceSearchPageResponse search(String keyword, Integer page, Integer size) {
+        if (!StringUtils.hasText(keyword)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "검색어를 입력하세요.");
+        }
+
+        int safePage = (page == null || page < 1) ? 1 : page;
+        int safeSize = (size == null || size < 1) ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+
+        KakaoKeywordSearchResponse response = kakaoLocalApiClient.searchByKeyword(keyword, safePage, safeSize);
+
+        List<PlaceSearchResponse> places = response.getDocuments() == null
+                ? Collections.emptyList()
+                : response.getDocuments().stream().map(PlaceSearchResponse::from).toList();
+        boolean hasMore = response.getMeta() != null && !response.getMeta().isEnd();
+
+        return new PlaceSearchPageResponse(places, hasMore);
     }
 
     /**

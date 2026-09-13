@@ -38,6 +38,36 @@ for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
+@rem ------------------------------------------------------------------------
+@rem  Auto-detect a JDK 17 (required by the Gradle toolchain in build.gradle)
+@rem  when JAVA_HOME is not already set. Only used as a fallback; if none of
+@rem  these paths exist the script falls back to `java` on PATH as usual.
+@rem ------------------------------------------------------------------------
+if not defined JAVA_HOME (
+    for %%d in (
+        "%LOCALAPPDATA%\Programs\Eclipse Adoptium"
+        "%ProgramFiles%\Eclipse Adoptium"
+        "%ProgramFiles%\Java"
+        "%ProgramFiles%\Microsoft"
+        "%ProgramFiles%\Amazon Corretto"
+        "%ProgramFiles%\Zulu"
+        "%ProgramFiles%\BellSoft"
+    ) do (
+        if not defined JAVA_HOME (
+            for /d %%j in ("%%~d\jdk-17*" "%%~d\jdk17*") do (
+                if exist "%%~fj\bin\java.exe" set "JAVA_HOME=%%~fj"
+            )
+        )
+    )
+)
+if not defined JAVA_HOME (
+    if exist "%USERPROFILE%\.jdks" (
+        for /d %%j in ("%USERPROFILE%\.jdks\*17*") do (
+            if exist "%%~fj\bin\java.exe" set "JAVA_HOME=%%~fj"
+        )
+    )
+)
+
 @rem Find java.exe
 if defined JAVA_HOME goto findJavaFromJavaHome
 

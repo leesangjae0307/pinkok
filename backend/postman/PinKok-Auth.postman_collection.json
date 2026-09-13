@@ -1,0 +1,161 @@
+{
+  "info": {
+    "name": "PinKok - Auth",
+    "description": "로그인 기능 수동 테스트용 컬렉션. 위에서 아래 순서대로 실행하면 됩니다.\n\n1) Signup → 2) Login (accessToken 자동 저장) → 3) Get My Info\n\n서버: gradlew.bat bootRun (localhost:8080), MySQL(pinkok_db) 필요.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "email", "value": "me@test.com" },
+    { "key": "username", "value": "jeonghun01" },
+    { "key": "password", "value": "pass1234" },
+    { "key": "nickname", "value": "정훈" },
+    { "key": "accessToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Signup (회원가입)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/signup", "host": ["{{baseUrl}}"], "path": ["auth", "signup"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\",\n  \"nickname\": \"{{nickname}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "pm.test('응답에 id/email/nickname 포함', () => {",
+              "  pm.expect(b).to.have.property('id');",
+              "  pm.expect(b.email).to.eql(pm.variables.get('email'));",
+              "  pm.expect(b.nickname).to.eql(pm.variables.get('nickname'));",
+              "});",
+              "pm.test('비밀번호 필드는 응답에 없어야 함', () => {",
+              "  pm.expect(b).to.not.have.property('passwordHash');",
+              "  pm.expect(b).to.not.have.property('password');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Login (로그인)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('accessToken 발급됨', () => pm.expect(b.accessToken).to.be.a('string').and.not.empty);",
+              "pm.test('tokenType = Bearer', () => pm.expect(b.tokenType).to.eql('Bearer'));",
+              "pm.collectionVariables.set('accessToken', b.accessToken);",
+              "console.log('accessToken 저장 완료');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Get My Info (내 정보 조회)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('내 이메일/닉네임 반환', () => {",
+              "  pm.expect(b.email).to.eql(pm.variables.get('email'));",
+              "  pm.expect(b.nickname).to.eql(pm.variables.get('nickname'));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Login - 틀린 비밀번호 (401 기대)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"wrong-password\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Signup - 이메일 중복 (409 기대)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/signup", "host": ["{{baseUrl}}"], "path": ["auth", "signup"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"username\": \"someoneelse\",\n  \"password\": \"pass1234\",\n  \"nickname\": \"다른사람\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('409 Conflict', () => pm.response.to.have.status(409));"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Get My Info - 토큰 없음 (401 기대)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"]
+          }
+        }
+      ]
+    }
+  ]
+}

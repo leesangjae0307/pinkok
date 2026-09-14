@@ -38,7 +38,7 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/signup", "/auth/login").permitAll()
+                        .requestMatchers("/auth/signup", "/auth/login", "/auth/refresh", "/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/avatars", "/avatars/**").permitAll()
                         // 업로드된 파일은 파일명이 랜덤이라 URL 자체가 사실상 비공개 키 역할을 한다.
                         // 앱에서 이미지 띄울 때마다 토큰을 붙이지 않아도 되도록 조회(GET)만 공개한다.

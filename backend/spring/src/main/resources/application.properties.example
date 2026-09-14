@@ -1,0 +1,38 @@
+# ============================================================
+# application.properties 템플릿
+#
+# 실제 application.properties 는 .gitignore 에 있어서 깃에 올라가지 않는다
+# (개인 DB 비밀번호·API 키가 들어가기 때문). 그래서 이 저장소를 처음 받으면
+# src/main/resources/application.properties 파일이 없다 - 아래 내용을
+# 그대로 복사해서 같은 위치에 application.properties 로 저장하고,
+# <> 로 표시된 값만 자기 환경에 맞게 채우면 된다.
+#
+# 이 파일이 없는 채로 서버를 실행하면 "Could not resolve placeholder
+# 'jwt.secret'" 같은 에러로 서버가 아예 안 뜬다.
+# ============================================================
+
+spring.application.name=travel_app_practice
+
+spring.datasource.url=jdbc:mysql://localhost:3306/pinkok_db?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+spring.datasource.username=root
+spring.datasource.password=<자신의 MySQL 비밀번호>
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+
+# JWT - 아무 32자 이상 문자열이면 됨 (로컬 개발용). 운영 배포 시에는
+# 반드시 환경변수 JWT_SECRET 으로 실제 운영 비밀값을 따로 넣을 것.
+jwt.secret=${JWT_SECRET:dev-only-secret-change-me-to-a-random-string-at-least-32-bytes-long}
+# access token 유효기간 (ms). 1시간
+jwt.access-token-validity=3600000
+
+# Kakao Local API (장소 검색) - REST API 키는 절대 이 파일 그대로 커밋하지 말 것.
+# developers.kakao.com > 핀콕 앱 > 앱 > 플랫폼 키 > REST API 키 에서 확인.
+# 환경변수로 넣는 걸 권장: KAKAO_REST_API_KEY=<발급받은 키>
+kakao.rest-api-key=${KAKAO_REST_API_KEY:}
+kakao.local-api-base-url=https://dapi.kakao.com
+
+# 파일 업로드 (지은 - 업로드 기능) : 필요한 설정 있으면 여기 같이 추가해줘

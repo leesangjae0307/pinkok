@@ -47,6 +47,8 @@ public class SecurityConfig {
                         // Spring Boot가 에러를 /error 로 forward 할 때도 시큐리티 필터를 다시 타는데,
                         // 이 줄이 없으면 실제 에러(404, 400 등)가 전부 401로 둔갑해서 원인을 알 수 없다.
                         .requestMatchers("/error").permitAll()
+                        // Swagger - 프론트에 API 명세를 공유하는 용도라 인증 없이 열어둔다.
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedEntryPoint()))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

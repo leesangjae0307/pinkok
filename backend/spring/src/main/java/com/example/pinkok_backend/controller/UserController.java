@@ -1,6 +1,8 @@
 package com.example.pinkok_backend.controller;
 
 import com.example.pinkok_backend.dto.AvatarSelectionRequest;
+import com.example.pinkok_backend.dto.NicknameUpdateRequest;
+import com.example.pinkok_backend.dto.ProfileImageUpdateRequest;
 import com.example.pinkok_backend.dto.UserResponse;
 import com.example.pinkok_backend.entity.User;
 import com.example.pinkok_backend.repository.UserRepository;
@@ -41,9 +43,31 @@ public class UserController {
         return ResponseEntity.ok(UserResponse.from(user));
     }
 
+    /** 닉네임 변경. */
+    @PatchMapping("/me")
+    public ResponseEntity<UserResponse> updateNickname(
+            @CurrentUserId Long userId,
+            @Valid @RequestBody NicknameUpdateRequest request) {
+        User user = userService.updateNickname(userId, request.getNickname());
+        return ResponseEntity.ok(UserResponse.from(user));
+    }
+
+    /**
+     * 프로필 사진 변경. {@code POST /files} 로 사진을 올리고 받은 url 을 보낸다.
+     * 아바타와 프로필 사진은 둘 중 하나만 쓰므로 아바타는 해제된다.
+     */
+    @PatchMapping("/me/profile-image")
+    public ResponseEntity<UserResponse> updateProfileImage(
+            @CurrentUserId Long userId,
+            @Valid @RequestBody ProfileImageUpdateRequest request) {
+        User user = userService.updateProfileImage(userId, request.getProfileImageUrl());
+        return ResponseEntity.ok(UserResponse.from(user));
+    }
+
     /**
      * 아바타 선택 · 변경. 회원가입 때 고르지 않았거나 나중에 바꾸고 싶을 때 사용.
      * 목록은 {@code GET /avatars} 로 조회.
+     * 아바타와 프로필 사진은 둘 중 하나만 쓰므로 올려둔 프로필 사진은 지워진다.
      */
     @PatchMapping("/me/avatar")
     public ResponseEntity<UserResponse> selectAvatar(

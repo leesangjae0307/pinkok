@@ -3,8 +3,10 @@ package com.example.pinkok_backend.service;
 import com.example.pinkok_backend.dto.FileUploadResponse;
 import com.example.pinkok_backend.exception.FileUploadException;
 import com.example.pinkok_backend.storage.FileStorage;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -35,6 +37,7 @@ public class FileService {
     private static final Set<String> VIDEO_EXTENSIONS = Set.of("mp4", "mov");
 
     private static final int THUMBNAIL_WIDTH = 300;
+    private static final String THUMBNAIL_SUFFIX = "_thumb.jpg";
     private static final DateTimeFormatter FOLDER_FORMAT = DateTimeFormatter.ofPattern("yyyy/MM");
 
     private final FileStorage fileStorage;
@@ -122,7 +125,7 @@ public class FileService {
             String url = fileStorage.save(new ByteArrayInputStream(file.bytes()), originalPath);
             savedPaths.add(originalPath);
 
-            String thumbnailPath = basePath + "_thumb.jpg";
+            String thumbnailPath = basePath + THUMBNAIL_SUFFIX;
             String thumbnailUrl = fileStorage.save(createThumbnail(file.image()), thumbnailPath);
             savedPaths.add(thumbnailPath);
 
@@ -159,6 +162,41 @@ public class FileService {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ImageIO.write(thumbnail, "jpg", out);
         return new ByteArrayInputStream(out.toByteArray());
+    }
+
+    /**
+     * 프로필 사진처럼 "사진 주소"를 받는 곳에서 쓴다.
+     * 우리 업로드 API가 준 사진 원본 주소이고 파일이 실제로 있을 때만 통과한다.
+     */
+    public void validateImageUrl(String url) {
+        String path = fileStorage.pathOf(url);
+        if (path == null
+                || path.endsWith(THUMBNAIL_SUFFIX)
+                || !IMAGE_EXTENSIONS.contains(getExtension(path))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "업로드 API(POST /files)로 올린 사진 주소만 쓸 수 있습니다.");
+        }
+        if (!fileStorage.exists(path)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "존재하지 않는 사진입니다.");
+        }
+    }
+
+    /**
+     * 더 이상 쓰지 않는 사진을 원본·썸네일 모두 지운다.
+     * 파일 정리는 부가 작업이라, 실패해도 예외를 던지지 않는다.
+     */
+    public void deleteImageQuietly(String url) {
+        String path = fileStorage.pathOf(url);
+        if (path == null) {
+            return;
+        }
+        List<String> paths = new ArrayList<>();
+        paths.add(path);
+        int dot = path.lastIndexOf('.');
+        if (dot > 0) {
+            paths.add(path.substring(0, dot) + THUMBNAIL_SUFFIX);
+        }
+        deleteQuietly(paths);
     }
 
     private void deleteQuietly(List<String> paths) {

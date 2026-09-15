@@ -3,6 +3,7 @@ package com.example.pinkok_backend.auth;
 import com.example.pinkok_backend.entity.Avatar;
 import com.example.pinkok_backend.repository.AvatarRepository;
 import com.example.pinkok_backend.repository.UserRepository;
+import com.example.pinkok_backend.support.DatabaseCleaner;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +29,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>로그인마다 refresh_tokens 행이 같이 생기므로, @Transactional 로 롤백시켜야
  * users 삭제 시 FK 위반 없이 깨끗하게 격리된다.
+ *
+ * <p>서버 시작 시 AvatarSeeder 가 기본 아바타(M1 등)를 넣으므로, 테스트용 M1 을 넣기 전에
+ * DatabaseCleaner 로 DB를 비운다. (같은 트랜잭션 안의 deleteAll 은 insert 보다 늦게 실행돼 code 중복이 난다)
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -44,12 +48,14 @@ class AvatarSelectionTest {
     @Autowired
     AvatarRepository avatarRepository;
 
+    @Autowired
+    DatabaseCleaner databaseCleaner;
+
     private Long avatarId;
 
     @BeforeEach
     void setUp() {
-        userRepository.deleteAll();
-        avatarRepository.deleteAll();
+        databaseCleaner.clean();
 
         Avatar avatar = new Avatar();
         avatar.setCode("M1");

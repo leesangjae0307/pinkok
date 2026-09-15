@@ -3,7 +3,9 @@ package com.example.pinkok_backend.profile;
 import com.example.pinkok_backend.entity.Avatar;
 import com.example.pinkok_backend.repository.AvatarRepository;
 import com.example.pinkok_backend.repository.UserRepository;
+import com.example.pinkok_backend.support.DatabaseCleaner;
 import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,13 +61,21 @@ class ProfileEditTest {
     @Autowired
     AvatarRepository avatarRepository;
 
+    @Autowired
+    DatabaseCleaner databaseCleaner;
+
     private Long avatarId;
     private String token;
 
+    /** 이 테스트는 실제로 커밋되므로, 끝난 뒤에도 비워서 다른 테스트에 데이터를 남기지 않는다. */
+    @AfterEach
+    void tearDown() {
+        databaseCleaner.clean();
+    }
+
     @BeforeEach
     void setUp() throws Exception {
-        userRepository.deleteAll();
-        avatarRepository.deleteAll();
+        databaseCleaner.clean();
 
         Avatar avatar = new Avatar();
         avatar.setCode("F1");

@@ -38,7 +38,7 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/signup", "/auth/login").permitAll()
+                        .requestMatchers("/auth/signup", "/auth/login", "/auth/refresh", "/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/avatars", "/avatars/**").permitAll()
                         // 업로드된 파일은 파일명이 랜덤이라 URL 자체가 사실상 비공개 키 역할을 한다.
                         // 앱에서 이미지 띄울 때마다 토큰을 붙이지 않아도 되도록 조회(GET)만 공개한다.
@@ -49,6 +49,8 @@ public class SecurityConfig {
                         // Spring Boot가 에러를 /error 로 forward 할 때도 시큐리티 필터를 다시 타는데,
                         // 이 줄이 없으면 실제 에러(404, 400 등)가 전부 401로 둔갑해서 원인을 알 수 없다.
                         .requestMatchers("/error").permitAll()
+                        // Swagger - 프론트에 API 명세를 공유하는 용도라 인증 없이 열어둔다.
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedEntryPoint()))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

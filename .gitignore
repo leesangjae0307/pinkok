@@ -9,6 +9,9 @@ backend/spring/out/
 # Local Spring config
 backend/spring/src/main/resources/application.properties
 
+# 업로드된 사진·영상 (로컬 저장소)
+backend/spring/uploads/
+
 # Postman local files
 backend/spring/.postman/
 backend/spring/postman/

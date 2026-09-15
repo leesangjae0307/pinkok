@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -24,10 +25,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 아바타 목록 조회 · 회원가입 시 선택 · 이후 변경(/users/me/avatar) 테스트.
  * 시드 데이터(진짜 아바타 6종)는 별도 작업이라, 여기서는 테스트용 아바타를 직접 넣는다.
+ *
+ * <p>로그인마다 refresh_tokens 행이 같이 생기므로, @Transactional 로 롤백시켜야
+ * users 삭제 시 FK 위반 없이 깨끗하게 격리된다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Transactional
 class AvatarSelectionTest {
 
     @Autowired

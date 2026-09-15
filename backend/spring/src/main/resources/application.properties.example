@@ -28,6 +28,8 @@ spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
 jwt.secret=${JWT_SECRET:dev-only-secret-change-me-to-a-random-string-at-least-32-bytes-long}
 # access token 유효기간 (ms). 1시간
 jwt.access-token-validity=3600000
+# refresh token 유효기간 (ms). 14일
+jwt.refresh-token-validity=1209600000
 
 # Kakao Local API (장소 검색) - REST API 키는 절대 이 파일 그대로 커밋하지 말 것.
 # developers.kakao.com > 핀콕 앱 > 앱 > 플랫폼 키 > REST API 키 에서 확인.

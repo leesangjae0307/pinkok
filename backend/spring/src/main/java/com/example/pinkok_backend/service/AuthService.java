@@ -19,16 +19,19 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       JwtTokenProvider tokenProvider) {
+                       JwtTokenProvider tokenProvider,
+                       RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
+        this.refreshTokenService = refreshTokenService;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public TokenResponse login(LoginRequest request) {
 
         User user = userRepository.findByEmail(request.getEmail())
@@ -43,11 +46,32 @@ public class AuthService {
             throw new BadCredentialsException(INVALID_CREDENTIALS);
         }
 
-        String accessToken = tokenProvider.createAccessToken(user.getId(), user.getEmail());
+        return issueTokens(user);
+    }
 
+    /** 액세스 토큰이 만료됐을 때, 리프레시 토큰으로 둘 다 새로 받는다 (재로그인 없이). */
+    @Transactional
+    public TokenResponse refresh(String rawRefreshToken) {
+        RefreshTokenService.RotatedToken rotated = refreshTokenService.rotate(rawRefreshToken);
+        return buildTokenResponse(rotated.user(), rotated.rawToken());
+    }
+
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        refreshTokenService.revoke(rawRefreshToken);
+    }
+
+    private TokenResponse issueTokens(User user) {
+        String refreshToken = refreshTokenService.issue(user);
+        return buildTokenResponse(user, refreshToken);
+    }
+
+    private TokenResponse buildTokenResponse(User user, String refreshToken) {
+        String accessToken = tokenProvider.createAccessToken(user.getId(), user.getEmail());
         return new TokenResponse(
                 accessToken,
                 tokenProvider.getAccessTokenValidityMs() / 1000,
+                refreshToken,
                 UserResponse.from(user));
     }
 }

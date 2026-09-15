@@ -11,7 +11,8 @@
     { "key": "password", "value": "pass1234" },
     { "key": "nickname", "value": "정훈" },
     { "key": "accessToken", "value": "" },
-    { "key": "avatarId", "value": "" }
+    { "key": "avatarId", "value": "" },
+    { "key": "refreshToken", "value": "" }
   ],
   "item": [
     {
@@ -93,9 +94,66 @@
               "pm.test('200 OK', () => pm.response.to.have.status(200));",
               "const b = pm.response.json();",
               "pm.test('accessToken 발급됨', () => pm.expect(b.accessToken).to.be.a('string').and.not.empty);",
+              "pm.test('refreshToken 발급됨', () => pm.expect(b.refreshToken).to.be.a('string').and.not.empty);",
               "pm.test('tokenType = Bearer', () => pm.expect(b.tokenType).to.eql('Bearer'));",
               "pm.collectionVariables.set('accessToken', b.accessToken);",
-              "console.log('accessToken 저장 완료');"
+              "pm.collectionVariables.set('refreshToken', b.refreshToken);",
+              "console.log('accessToken / refreshToken 저장 완료');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2b. Refresh Token (액세스 토큰 재발급)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('새 accessToken/refreshToken 발급됨', () => {",
+              "  pm.expect(b.accessToken).to.be.a('string').and.not.empty;",
+              "  pm.expect(b.refreshToken).to.be.a('string').and.not.empty;",
+              "});",
+              "pm.collectionVariables.set('accessToken', b.accessToken);",
+              "pm.collectionVariables.set('refreshToken', b.refreshToken);",
+              "console.log('재발급 완료 - 이전 refreshToken은 이제 못 씀(1회용, rotation)');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2c. Logout (로그아웃)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('204 No Content', () => pm.response.to.have.status(204));",
+              "console.log('로그아웃 완료 - 이 refreshToken으로는 더 이상 재발급 불가');"
             ]
           }
         }

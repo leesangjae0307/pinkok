@@ -49,6 +49,20 @@ CREATE TABLE users (
 ) COMMENT='사용자';
 
 
+CREATE TABLE refresh_tokens (
+    id         BIGINT   NOT NULL AUTO_INCREMENT COMMENT '리프레시 토큰 ID',
+    user_id    BIGINT   NOT NULL COMMENT '사용자 ID',
+    token_hash CHAR(64) NOT NULL COMMENT '토큰 원문의 SHA-256 해시 (원문은 저장하지 않음)',
+    expires_at DATETIME NOT NULL COMMENT '만료 시각',
+    revoked_at DATETIME NULL COMMENT '폐기 시각 (로그아웃 / 재발급 / 탈취 의심 시)',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_refresh_tokens_hash (token_hash),
+    KEY idx_refresh_tokens_user (user_id),
+    CONSTRAINT fk_refresh_tokens_user FOREIGN KEY (user_id) REFERENCES users (id)
+) COMMENT='리프레시 토큰 (기기별 로그인 세션)';
+
+
 CREATE TABLE travel_styles (
     id   BIGINT      NOT NULL AUTO_INCREMENT COMMENT '여행 스타일 ID',
     code VARCHAR(30) NOT NULL COMMENT 'FOOD / SIGHT / NATURE / SHOPPING / CAFE',

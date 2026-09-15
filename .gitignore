@@ -29,3 +29,8 @@ frontend/dist/
 ############################
 .DS_Store
 Thumbs.db
+
+############################
+# Claude Code 개인 설정 (각자 컴퓨터 전용)
+############################
+.claude/settings.local.json

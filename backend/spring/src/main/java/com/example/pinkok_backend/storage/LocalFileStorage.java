@@ -36,6 +36,23 @@ public class LocalFileStorage implements FileStorage {
         Files.deleteIfExists(resolve(path));
     }
 
+    @Override
+    public boolean exists(String path) {
+        try {
+            return Files.isRegularFile(resolve(path));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    @Override
+    public String pathOf(String url) {
+        if (url == null || !url.startsWith(URL_PREFIX) || url.length() == URL_PREFIX.length()) {
+            return null;
+        }
+        return url.substring(URL_PREFIX.length());
+    }
+
     private Path resolve(String path) throws IOException {
         Path target = rootDir.resolve(path).normalize();
 

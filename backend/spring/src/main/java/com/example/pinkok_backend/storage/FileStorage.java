@@ -22,4 +22,13 @@ public interface FileStorage {
      * @param path save 할 때 넘긴 저장 경로
      */
     void delete(String path) throws IOException;
+
+    /** 저장해둔 파일이 실제로 있는지 확인한다. */
+    boolean exists(String path);
+
+    /**
+     * save 가 돌려준 주소를 다시 저장 경로로 바꾼다.
+     * 우리 저장소 주소가 아니면(외부 사이트 주소 등) null 을 돌려준다.
+     */
+    String pathOf(String url);
 }

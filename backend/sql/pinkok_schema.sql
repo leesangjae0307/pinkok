@@ -336,6 +336,7 @@ CREATE TABLE diaries (
     created_at        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uk_diaries_item_user (itinerary_item_id, user_id),
     KEY idx_diaries_item (itinerary_item_id),
     CONSTRAINT fk_diaries_item FOREIGN KEY (itinerary_item_id) REFERENCES itinerary_items (id),
     CONSTRAINT fk_diaries_user FOREIGN KEY (user_id)           REFERENCES users (id)

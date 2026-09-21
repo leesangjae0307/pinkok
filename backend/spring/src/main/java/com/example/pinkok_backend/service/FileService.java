@@ -5,6 +5,8 @@ import com.example.pinkok_backend.exception.FileUploadException;
 import com.example.pinkok_backend.storage.FileStorage;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -39,6 +41,10 @@ public class FileService {
     private static final int THUMBNAIL_WIDTH = 300;
     private static final String THUMBNAIL_SUFFIX = "_thumb.jpg";
     private static final DateTimeFormatter FOLDER_FORMAT = DateTimeFormatter.ofPattern("yyyy/MM");
+
+    /** diary_media.media_type 에 저장하는 값 */
+    public static final String MEDIA_TYPE_PHOTO = "PHOTO";
+    public static final String MEDIA_TYPE_VIDEO = "VIDEO";
 
     private final FileStorage fileStorage;
 
@@ -182,10 +188,10 @@ public class FileService {
     }
 
     /**
-     * 더 이상 쓰지 않는 사진을 원본·썸네일 모두 지운다.
+     * 더 이상 쓰지 않는 파일을 원본·썸네일 모두 지운다.
      * 파일 정리는 부가 작업이라, 실패해도 예외를 던지지 않는다.
      */
-    public void deleteImageQuietly(String url) {
+    public void deleteMediaQuietly(String url) {
         String path = fileStorage.pathOf(url);
         if (path == null) {
             return;
@@ -222,6 +228,75 @@ public class FileService {
     }
 
     /** 검사를 통과한 파일. 사진이면 이미 읽어둔 내용(bytes, image)을 저장할 때 다시 쓴다. */
+    /**
+     * 기록 첨부처럼 사진·영상을 모두 받는 곳에서 쓴다.
+     * 우리 업로드 API가 준 원본 주소이고 파일이 실제로 있을 때만 통과하고, 종류(PHOTO/VIDEO)를 돌려준다.
+     *
+     * <p>종류를 앱이 보낸 값 대신 확장자로 우리가 직접 정하는 이유는,
+     * 앱이 사진을 VIDEO 라고 보내는 식으로 틀리면 PinLog 합성 때 깨지기 때문이다.
+     */
+    public String resolveMediaType(String url) {
+        String path = fileStorage.pathOf(url);
+        if (path == null || path.endsWith(THUMBNAIL_SUFFIX)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "업로드 API(POST /files)로 올린 파일 주소만 쓸 수 있습니다.");
+        }
+
+        String extension = getExtension(path);
+        String mediaType;
+        if (IMAGE_EXTENSIONS.contains(extension)) {
+            mediaType = MEDIA_TYPE_PHOTO;
+        } else if (VIDEO_EXTENSIONS.contains(extension)) {
+            mediaType = MEDIA_TYPE_VIDEO;
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "지원하지 않는 파일 형식입니다. (사진: jpg, png / 영상: mp4, mov)");
+        }
+
+        if (!fileStorage.exists(path)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "존재하지 않는 파일입니다.");
+        }
+        return mediaType;
+    }
+
+    /**
+     * 사진이면 업로드할 때 같이 만들어 둔 썸네일 주소를 돌려준다.
+     * 영상 썸네일은 FFmpeg 가 필요해서 PinLog 작업 때 추가한다(지금은 null).
+     */
+    public String thumbnailUrlOf(String url) {
+        String path = fileStorage.pathOf(url);
+        if (path == null || !IMAGE_EXTENSIONS.contains(getExtension(path))) {
+            return null;
+        }
+        int dot = path.lastIndexOf('.');
+        String thumbnailPath = path.substring(0, dot) + THUMBNAIL_SUFFIX;
+        if (!fileStorage.exists(thumbnailPath)) {
+            return null;
+        }
+        int urlDot = url.lastIndexOf('.');
+        return url.substring(0, urlDot) + THUMBNAIL_SUFFIX;
+    }
+
+    /**
+     * 예전 파일은 DB 저장이 끝난 뒤에 지운다.
+     * 먼저 지웠다가 DB 저장이 실패하면, DB는 예전 주소를 가리키는데 파일은 없는 상태가 되기 때문이다.
+     */
+    public void deleteAfterCommit(String url) {
+        if (url == null) {
+            return;
+        }
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            deleteMediaQuietly(url);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                deleteMediaQuietly(url);
+            }
+        });
+    }
+
     private record CheckedFile(MultipartFile source, String extension, byte[] bytes, BufferedImage image) {
     }
 }

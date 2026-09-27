@@ -46,6 +46,11 @@ public class LocalFileStorage implements FileStorage {
     }
 
     @Override
+    public byte[] read(String path) throws IOException {
+        return Files.readAllBytes(resolve(path));
+    }
+
+    @Override
     public String pathOf(String url) {
         if (url == null || !url.startsWith(URL_PREFIX) || url.length() == URL_PREFIX.length()) {
             return null;

@@ -42,7 +42,7 @@ kakao.local-api-base-url=https://dapi.kakao.com
 # 환경변수로 넣는 걸 권장: GEMINI_API_KEY=<발급받은 키>
 gemini.api-key=${GEMINI_API_KEY:}
 gemini.base-url=https://generativelanguage.googleapis.com
-gemini.model=gemini-2.0-flash
+gemini.model=gemini-2.5-flash
 gemini.max-retries=2
 
 # 파일 업로드 (지은 - 업로드 기능) : 필요한 설정 있으면 여기 같이 추가해줘

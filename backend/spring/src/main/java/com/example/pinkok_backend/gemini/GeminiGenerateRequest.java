@@ -35,6 +35,7 @@ public class GeminiGenerateRequest {
     public static class Part {
         private String text;
         private InlineData inlineData;
+        private FileData fileData;
 
         public static Part ofText(String text) {
             Part part = new Part();
@@ -50,6 +51,16 @@ public class GeminiGenerateRequest {
             part.setInlineData(data);
             return part;
         }
+
+        /** 유튜브 링크처럼, 파일을 올리지 않고 URI만으로 Gemini에게 직접 보여줄 때. */
+        public static Part ofFileUri(String fileUri, String mimeType) {
+            Part part = new Part();
+            FileData data = new FileData();
+            data.setFileUri(fileUri);
+            data.setMimeType(mimeType);
+            part.setFileData(data);
+            return part;
+        }
     }
 
     @Getter
@@ -61,8 +72,15 @@ public class GeminiGenerateRequest {
 
     @Getter
     @Setter
+    public static class FileData {
+        private String mimeType;
+        private String fileUri;
+    }
+
+    @Getter
+    @Setter
     public static class GenerationConfig {
         private String responseMimeType = "application/json";
-        private Double temperature = 0.2;
+        private Double temperature = 0.1;
     }
 }

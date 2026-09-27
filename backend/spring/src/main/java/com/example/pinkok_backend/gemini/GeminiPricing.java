@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 /**
- * gemini-2.0-flash 대략적인 단가로 비용을 추정한다. 실제 청구서와는 차이가 있을 수 있으니
+ * gemini-2.5-flash 대략적인 단가로 비용을 추정한다. 실제 청구서와는 차이가 있을 수 있으니
  * (Google이 가격을 바꿀 수 있음) 참고용 추정치다 — 예산 관리용으로 "대충 얼마나 썼는지" 보는 용도.
  * 나중에 https://ai.google.dev/pricing 에서 실제 단가로 업데이트할 것.
  */

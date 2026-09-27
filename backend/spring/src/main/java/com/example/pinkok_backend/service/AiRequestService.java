@@ -1,8 +1,8 @@
 package com.example.pinkok_backend.service;
 
+import com.example.pinkok_backend.dto.AiExtractionResult;
 import com.example.pinkok_backend.dto.AiRequestCreateRequest;
 import com.example.pinkok_backend.dto.AiRequestResponse;
-import com.example.pinkok_backend.dto.ExtractedPlace;
 import com.example.pinkok_backend.entity.AiRequest;
 import com.example.pinkok_backend.entity.AiRequestImage;
 import com.example.pinkok_backend.entity.Trip;
@@ -27,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
@@ -52,6 +53,13 @@ public class AiRequestService {
     private static final String INPUT_LINK = "LINK";
     private static final String INPUT_TEXT = "TEXT";
     private static final String INPUT_IMAGE = "IMAGE";
+
+    private static final String PLATFORM_YOUTUBE = "YOUTUBE";
+    private static final String PLATFORM_INSTAGRAM = "INSTAGRAM";
+    private static final String PLATFORM_OTHER = "OTHER";
+
+    /** 유튜브는 Gemini가 영상을 직접 분석할 수 있어서(fileData) mp4로 취급한다. */
+    private static final String YOUTUBE_MIME_TYPE = "video/mp4";
 
     private static final int MAX_IMAGES = 10;
 
@@ -126,13 +134,13 @@ public class AiRequestService {
 
         // 테스트처럼 동기 실행 환경이면 위 execute() 가 이미 끝나 있을 수 있어 최신 상태를 다시 읽는다.
         AiRequest latest = aiRequestRepository.findById(aiRequestId).orElse(aiRequest);
-        return AiRequestResponse.of(latest, parsePlaces(latest));
+        return AiRequestResponse.of(latest, parseResult(latest));
     }
 
     @Transactional(readOnly = true)
     public AiRequestResponse get(Long id, Long userId) {
         AiRequest aiRequest = getOwnedOrThrow(id, userId);
-        return AiRequestResponse.of(aiRequest, parsePlaces(aiRequest));
+        return AiRequestResponse.of(aiRequest, parseResult(aiRequest));
     }
 
     @Transactional(readOnly = true)
@@ -141,7 +149,7 @@ public class AiRequestService {
                 ? aiRequestRepository.findAllByUser_IdOrderByRequestedAtDesc(userId)
                 : aiRequestRepository.findAllByUser_IdAndTrip_IdOrderByRequestedAtDesc(userId, tripId);
         return requests.stream()
-                .map(r -> AiRequestResponse.of(r, parsePlaces(r)))
+                .map(r -> AiRequestResponse.of(r, parseResult(r)))
                 .toList();
     }
 
@@ -158,11 +166,11 @@ public class AiRequestService {
         aiRequest.setStatus(STATUS_PROCESSING);
         aiRequestRepository.save(aiRequest);
 
-        String prompt = buildPrompt(aiRequest);
-        aiRequest.setPromptText(prompt);
+        List<GeminiGenerateRequest.Part> parts = buildParts(aiRequest);
+        aiRequest.setPromptText(describeParts(parts));
 
         GeminiGenerateRequest.Content content = new GeminiGenerateRequest.Content();
-        content.setParts(buildParts(aiRequest, prompt));
+        content.setParts(parts);
         GeminiGenerateRequest geminiRequest = GeminiGenerateRequest.of(content, new GeminiGenerateRequest.GenerationConfig());
 
         int attempt = 0;
@@ -214,43 +222,72 @@ public class AiRequestService {
         aiRequestRepository.save(aiRequest);
     }
 
-    private String buildPrompt(AiRequest aiRequest) {
+    /**
+     * 입력 방식별로 Gemini에 보낼 parts를 만든다. 프롬프트 문구 자체는
+     * {@link PlaceExtractionPromptBuilder}의 검증된 문구를 그대로 쓴다.
+     */
+    private List<GeminiGenerateRequest.Part> buildParts(AiRequest aiRequest) {
         return switch (aiRequest.getInputType()) {
-            case INPUT_LINK -> PlaceExtractionPromptBuilder.forLink(aiRequest.getSourceUrl());
-            case INPUT_TEXT -> PlaceExtractionPromptBuilder.forText(aiRequest.getSourceText());
-            case INPUT_IMAGE -> PlaceExtractionPromptBuilder.forImages(
-                    aiRequestImageRepository.findAllByAiRequest_IdOrderByDisplayOrderAsc(aiRequest.getId()).size());
+            case INPUT_LINK -> buildLinkParts(aiRequest);
+            case INPUT_TEXT -> List.of(GeminiGenerateRequest.Part.ofText(
+                    PlaceExtractionPromptBuilder.forText(aiRequest.getSourceText())));
+            case INPUT_IMAGE -> buildImageParts(aiRequest);
             default -> throw new IllegalStateException("알 수 없는 inputType: " + aiRequest.getInputType());
         };
     }
 
-    private List<GeminiGenerateRequest.Part> buildParts(AiRequest aiRequest, String prompt) {
-        if (!INPUT_IMAGE.equals(aiRequest.getInputType())) {
-            return List.of(GeminiGenerateRequest.Part.ofText(prompt));
+    /**
+     * 유튜브면 링크를 텍스트로 설명만 하는 게 아니라, fileData로 Gemini에게 영상을 직접 보여준다
+     * (Gemini의 유튜브 URL 지원 기능 — 검증된 프로토타입 방식). 그 외 링크(인스타 등)는
+     * Gemini가 열어볼 수 없으므로 URL 문자열만으로 추정하게 한다 - 정확도가 낮을 수 있음.
+     */
+    private List<GeminiGenerateRequest.Part> buildLinkParts(AiRequest aiRequest) {
+        if (PLATFORM_YOUTUBE.equals(aiRequest.getSourcePlatform())) {
+            return List.of(
+                    GeminiGenerateRequest.Part.ofFileUri(aiRequest.getSourceUrl(), YOUTUBE_MIME_TYPE),
+                    GeminiGenerateRequest.Part.ofText(PlaceExtractionPromptBuilder.EXTRACTION_PROMPT));
         }
+        return List.of(GeminiGenerateRequest.Part.ofText(
+                PlaceExtractionPromptBuilder.forNonYoutubeLink(aiRequest.getSourceUrl())));
+    }
 
+    private List<GeminiGenerateRequest.Part> buildImageParts(AiRequest aiRequest) {
         List<AiRequestImage> images =
                 aiRequestImageRepository.findAllByAiRequest_IdOrderByDisplayOrderAsc(aiRequest.getId());
 
-        java.util.ArrayList<GeminiGenerateRequest.Part> parts = new java.util.ArrayList<>();
-        parts.add(GeminiGenerateRequest.Part.ofText(prompt));
+        List<GeminiGenerateRequest.Part> parts = new ArrayList<>();
         for (AiRequestImage image : images) {
             FileService.ImageBytes bytes = fileService.readImageBytes(image.getFileUrl());
             String base64 = Base64.getEncoder().encodeToString(bytes.bytes());
             parts.add(GeminiGenerateRequest.Part.ofImage(bytes.mimeType(), base64));
         }
+        parts.add(GeminiGenerateRequest.Part.ofText(PlaceExtractionPromptBuilder.EXTRACTION_PROMPT));
         return parts;
     }
 
-    private List<ExtractedPlace> parsePlaces(AiRequest aiRequest) {
+    /** 실제로 뭘 보냈는지 사람이 읽을 수 있게 기록한다 (AiRequest.promptText, 정확도 개선 분석용). */
+    private String describeParts(List<GeminiGenerateRequest.Part> parts) {
+        StringBuilder sb = new StringBuilder();
+        for (GeminiGenerateRequest.Part part : parts) {
+            if (part.getText() != null) {
+                sb.append(part.getText()).append('\n');
+            } else if (part.getFileData() != null) {
+                sb.append("[영상 첨부: ").append(part.getFileData().getFileUri()).append("]\n");
+            } else if (part.getInlineData() != null) {
+                sb.append("[이미지 첨부]\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    private AiExtractionResult parseResult(AiRequest aiRequest) {
         if (!STATUS_SUCCESS.equals(aiRequest.getStatus()) || aiRequest.getRawResponse() == null) {
             return null;
         }
         try {
-            return objectMapper.readValue(aiRequest.getRawResponse(), objectMapper.getTypeFactory()
-                    .constructCollectionType(List.class, ExtractedPlace.class));
+            return objectMapper.readValue(aiRequest.getRawResponse(), AiExtractionResult.class);
         } catch (Exception e) {
-            return List.of();
+            return AiExtractionResult.empty();
         }
     }
 
@@ -301,12 +338,12 @@ public class AiRequestService {
     private String detectPlatform(String url) {
         String lower = url.toLowerCase(Locale.ROOT);
         if (lower.contains("youtube.com") || lower.contains("youtu.be")) {
-            return "YOUTUBE";
+            return PLATFORM_YOUTUBE;
         }
         if (lower.contains("instagram.com")) {
-            return "INSTAGRAM";
+            return PLATFORM_INSTAGRAM;
         }
-        return "OTHER";
+        return PLATFORM_OTHER;
     }
 
     private AiRequest getOwnedOrThrow(Long id, Long userId) {

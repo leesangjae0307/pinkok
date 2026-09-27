@@ -2,9 +2,9 @@ package com.example.pinkok_backend.ai;
 
 import com.example.pinkok_backend.gemini.GeminiCallException;
 import com.example.pinkok_backend.gemini.GeminiClient;
+import com.example.pinkok_backend.gemini.GeminiGenerateRequest;
 import com.example.pinkok_backend.gemini.GeminiGenerateResponse;
 import com.example.pinkok_backend.support.DatabaseCleaner;
-import com.example.pinkok_backend.gemini.GeminiGenerateRequest;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,10 +23,13 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
-import javax.imageio.ImageIO;
+import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -45,6 +48,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestAsyncConfig.class)
 class AiRequestTest {
 
+    private static final String EMPTY_RESULT_JSON = "{\"title\":null,\"places\":[]}";
+
     @Autowired
     MockMvc mockMvc;
 
@@ -57,7 +62,7 @@ class AiRequestTest {
     @BeforeEach
     void setUp() {
         databaseCleaner.clean();
-        Mockito.when(geminiClient.modelName()).thenReturn("gemini-2.0-flash-test");
+        Mockito.when(geminiClient.modelName()).thenReturn("gemini-2.5-flash-test");
     }
 
     @AfterEach
@@ -83,7 +88,7 @@ class AiRequestTest {
         GeminiGenerateResponse.Part part = new GeminiGenerateResponse.Part();
         part.setText(json);
         GeminiGenerateResponse.Content content = new GeminiGenerateResponse.Content();
-        content.setParts(java.util.List.of(part));
+        content.setParts(List.of(part));
         GeminiGenerateResponse.Candidate candidate = new GeminiGenerateResponse.Candidate();
         candidate.setContent(content);
         candidate.setFinishReason("STOP");
@@ -94,16 +99,18 @@ class AiRequestTest {
         usage.setTotalTokenCount(promptTokens + outputTokens);
 
         GeminiGenerateResponse response = new GeminiGenerateResponse();
-        response.setCandidates(java.util.List.of(candidate));
+        response.setCandidates(List.of(candidate));
         response.setUsageMetadata(usage);
         return response;
     }
 
     @Test
-    @DisplayName("TEXT 입력 - 성공하면 SUCCESS 상태 + 추출된 장소 목록이 담긴다")
+    @DisplayName("TEXT 입력 - 성공하면 SUCCESS 상태 + 추출된 장소 목록(검증된 응답 스키마)이 담긴다")
     void create_textInput_success() throws Exception {
         String token = signupAndLogin();
-        String extractedJson = "[{\"name\":\"협재 해수욕장\",\"address\":\"제주 한림읍\",\"category\":\"해변\",\"confidence\":0.9}]";
+        String extractedJson = "{\"title\":\"제주 여행\",\"places\":["
+                + "{\"name\":\"협재 해수욕장\",\"address\":\"제주 한림읍\",\"category\":\"해변\",\"description\":\"하얀 모래와 에메랄드빛 바다\",\"lat\":33.39,\"lng\":126.24}"
+                + "]}";
         Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(extractedJson, 120, 40));
 
         mockMvc.perform(post("/ai-requests")
@@ -112,29 +119,55 @@ class AiRequestTest {
                         .content("{\"inputType\":\"TEXT\",\"sourceText\":\"오늘은 협재 해수욕장에 다녀왔어요\"}"))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.title").value("제주 여행"))
                 .andExpect(jsonPath("$.places[0].name").value("협재 해수욕장"))
-                .andExpect(jsonPath("$.places[0].confidence").value(0.9))
+                .andExpect(jsonPath("$.places[0].category").value("해변"))
+                .andExpect(jsonPath("$.places[0].lat").value(33.39))
                 .andExpect(jsonPath("$.retryCount").value(0));
     }
 
     @Test
-    @DisplayName("LINK 입력 - sourceUrl로 플랫폼(YOUTUBE)을 자동 인식한다")
-    void create_linkInput_detectsPlatform() throws Exception {
+    @DisplayName("LINK 입력(유튜브) - fileData로 영상을 직접 Gemini에 보낸다 (검증된 프로토타입 방식)")
+    void create_youtubeLink_sendsFileDataNotJustText() throws Exception {
         String token = signupAndLogin();
-        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse("[]", 50, 5));
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(EMPTY_RESULT_JSON, 50, 5));
 
-        MvcResult result = mockMvc.perform(post("/ai-requests")
+        mockMvc.perform(post("/ai-requests")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"inputType\":\"LINK\",\"sourceUrl\":\"https://youtube.com/watch?v=abc123\"}"))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("SUCCESS"))
-                .andReturn();
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
 
-        Number id = JsonPath.read(result.getResponse().getContentAsString(), "$.id");
-        mockMvc.perform(get("/ai-requests/" + id).header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.places.length()").value(0));
+        ArgumentCaptor<GeminiGenerateRequest> captor = ArgumentCaptor.forClass(GeminiGenerateRequest.class);
+        Mockito.verify(geminiClient).generate(captor.capture());
+        List<GeminiGenerateRequest.Part> parts = captor.getValue().getContents().get(0).getParts();
+
+        assertTrue(parts.get(0).getFileData() != null, "유튜브는 텍스트가 아니라 fileData로 보내야 한다");
+        assertTrue(parts.get(0).getFileData().getFileUri().contains("youtube.com"));
+        assertTrue(parts.get(0).getFileData().getMimeType().equals("video/mp4"));
+    }
+
+    @Test
+    @DisplayName("LINK 입력(유튜브 아님) - fileData 없이 URL을 텍스트로만 설명한다")
+    void create_nonYoutubeLink_sendsTextOnly() throws Exception {
+        String token = signupAndLogin();
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(EMPTY_RESULT_JSON, 50, 5));
+
+        mockMvc.perform(post("/ai-requests")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inputType\":\"LINK\",\"sourceUrl\":\"https://blog.naver.com/somewhere\"}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+        ArgumentCaptor<GeminiGenerateRequest> captor = ArgumentCaptor.forClass(GeminiGenerateRequest.class);
+        Mockito.verify(geminiClient).generate(captor.capture());
+        List<GeminiGenerateRequest.Part> parts = captor.getValue().getContents().get(0).getParts();
+
+        assertNull(parts.get(0).getFileData(), "유튜브가 아니면 fileData를 쓰지 않는다");
+        assertNotNull(parts.get(0).getText());
+        assertTrue(parts.get(0).getText().contains("blog.naver.com"));
     }
 
     @Test
@@ -169,7 +202,7 @@ class AiRequestTest {
         String token = signupAndLogin();
         Mockito.when(geminiClient.generate(Mockito.any()))
                 .thenThrow(new GeminiCallException("일시적 오류"))
-                .thenReturn(successResponse("[]", 10, 2));
+                .thenReturn(successResponse(EMPTY_RESULT_JSON, 10, 2));
 
         mockMvc.perform(post("/ai-requests")
                         .header("Authorization", "Bearer " + token)
@@ -205,7 +238,7 @@ class AiRequestTest {
     @DisplayName("남의 AI 요청은 조회할 수 없다")
     void get_othersRequest_returns403() throws Exception {
         String ownerToken = signupAndLogin();
-        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse("[]", 10, 2));
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(EMPTY_RESULT_JSON, 10, 2));
 
         MvcResult created = mockMvc.perform(post("/ai-requests")
                         .header("Authorization", "Bearer " + ownerToken)
@@ -234,7 +267,7 @@ class AiRequestTest {
     @DisplayName("IMAGE 입력 - 업로드한 스크린샷을 base64로 담아 Gemini에 보낸다")
     void create_imageInput_sendsUploadedImageAsBase64() throws Exception {
         String token = signupAndLogin();
-        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse("[]", 30, 5));
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(EMPTY_RESULT_JSON, 30, 5));
 
         BufferedImage image = new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -257,10 +290,13 @@ class AiRequestTest {
 
         ArgumentCaptor<GeminiGenerateRequest> captor = ArgumentCaptor.forClass(GeminiGenerateRequest.class);
         Mockito.verify(geminiClient).generate(captor.capture());
-        var parts = captor.getValue().getContents().get(0).getParts();
-        assertTrue(parts.size() == 2 && parts.get(1).getInlineData() != null,
-                "텍스트 프롬프트 뒤에 이미지 파트(inlineData)가 붙어야 한다");
-        assertTrue(parts.get(1).getInlineData().getData().length() > 0);
+        List<GeminiGenerateRequest.Part> parts = captor.getValue().getContents().get(0).getParts();
+
+        // 검증된 프로토타입 순서: 이미지(들) 먼저, 프롬프트 텍스트는 맨 뒤
+        assertTrue(parts.size() == 2 && parts.get(0).getInlineData() != null,
+                "이미지 파트(inlineData)가 먼저 오고 프롬프트 텍스트가 뒤에 와야 한다");
+        assertTrue(parts.get(0).getInlineData().getData().length() > 0);
+        assertNotNull(parts.get(1).getText());
     }
 
     @Test

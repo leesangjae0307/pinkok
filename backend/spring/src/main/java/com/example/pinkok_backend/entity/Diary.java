@@ -7,7 +7,14 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "diaries")
+@Table(
+        name = "diaries",
+        // 한 핀에 한 사람은 기록 하나만 (팀원끼리는 각자 하나씩)
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_diaries_item_user",
+                columnNames = {"itinerary_item_id", "user_id"}
+        )
+)
 @Getter
 @Setter
 public class Diary {

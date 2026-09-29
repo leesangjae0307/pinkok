@@ -26,6 +26,9 @@ public interface FileStorage {
     /** 저장해둔 파일이 실제로 있는지 확인한다. */
     boolean exists(String path);
 
+    /** 저장해둔 파일 내용을 읽는다 (AI 분석용으로 이미지를 바이트로 넘길 때 등). */
+    byte[] read(String path) throws IOException;
+
     /**
      * save 가 돌려준 주소를 다시 저장 경로로 바꾼다.
      * 우리 저장소 주소가 아니면(외부 사이트 주소 등) null 을 돌려준다.

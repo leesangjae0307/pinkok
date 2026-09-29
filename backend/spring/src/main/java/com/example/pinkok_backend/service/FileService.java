@@ -188,6 +188,33 @@ public class FileService {
     }
 
     /**
+     * 업로드된 이미지의 실제 파일 내용을 읽는다 (AI 분석기에 이미지를 그대로 넘길 때 등).
+     * 우리 업로드 API로 올린 사진이 아니면(외부 주소 등) 거절한다.
+     */
+    public ImageBytes readImageBytes(String url) {
+        String path = fileStorage.pathOf(url);
+        String extension = path == null ? "" : getExtension(path);
+        if (path == null || !IMAGE_EXTENSIONS.contains(extension) || !fileStorage.exists(path)) {
+            throw new FileUploadException(url + ": 업로드 API(POST /files)로 올린 사진 주소만 쓸 수 있습니다.");
+        }
+        try {
+            return new ImageBytes(fileStorage.read(path), mimeTypeOf(extension));
+        } catch (IOException e) {
+            throw new FileUploadException(url + ": 사진을 읽는 데 실패했습니다.", e);
+        }
+    }
+
+    private String mimeTypeOf(String extension) {
+        return switch (extension) {
+            case "png" -> "image/png";
+            default -> "image/jpeg"; // jpg, jpeg
+        };
+    }
+
+    public record ImageBytes(byte[] bytes, String mimeType) {
+    }
+
+    /**
      * 더 이상 쓰지 않는 파일을 원본·썸네일 모두 지운다.
      * 파일 정리는 부가 작업이라, 실패해도 예외를 던지지 않는다.
      */

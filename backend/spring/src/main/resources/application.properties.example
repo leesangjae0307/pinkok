@@ -37,4 +37,12 @@ jwt.refresh-token-validity=1209600000
 kakao.rest-api-key=${KAKAO_REST_API_KEY:}
 kakao.local-api-base-url=https://dapi.kakao.com
 
+# Gemini (AI 장소 추출) - API 키는 절대 이 파일 그대로 커밋하지 말 것.
+# https://aistudio.google.com/apikey 에서 발급.
+# 환경변수로 넣는 걸 권장: GEMINI_API_KEY=<발급받은 키>
+gemini.api-key=${GEMINI_API_KEY:}
+gemini.base-url=https://generativelanguage.googleapis.com
+gemini.model=gemini-2.5-flash
+gemini.max-retries=2
+
 # 파일 업로드 (지은 - 업로드 기능) : 필요한 설정 있으면 여기 같이 추가해줘

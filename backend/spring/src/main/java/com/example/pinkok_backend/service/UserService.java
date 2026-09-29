@@ -8,8 +8,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -72,7 +70,7 @@ public class UserService {
 
         String oldImageUrl = user.getProfileImageUrl();
         user.setProfileImageUrl(null);
-        deleteImageAfterCommit(oldImageUrl);
+        fileService.deleteAfterCommit(oldImageUrl);
 
         user.setUpdatedAt(LocalDateTime.now());
         return userRepository.save(user);
@@ -104,7 +102,7 @@ public class UserService {
 
         // 같은 사진을 다시 고른 경우엔 지우면 안 된다
         if (!Objects.equals(oldImageUrl, profileImageUrl)) {
-            deleteImageAfterCommit(oldImageUrl);
+            fileService.deleteAfterCommit(oldImageUrl);
         }
         return userRepository.save(user);
     }
@@ -114,23 +112,4 @@ public class UserService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
     }
 
-    /**
-     * 예전 사진 파일은 DB 저장이 끝난 뒤에 지운다.
-     * 먼저 지웠다가 DB 저장이 실패하면, DB는 예전 주소를 가리키는데 파일은 없는 상태가 되기 때문이다.
-     */
-    private void deleteImageAfterCommit(String imageUrl) {
-        if (imageUrl == null) {
-            return;
-        }
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            fileService.deleteImageQuietly(imageUrl);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                fileService.deleteImageQuietly(imageUrl);
-            }
-        });
-    }
 }

@@ -93,8 +93,16 @@ public class AiRequestService {
         this.maxRetries = maxRetries;
     }
 
-    /** 요청을 접수만 하고 바로 응답한다 (PENDING). 실제 Gemini 호출은 별도 스레드에서 비동기로 진행된다. */
-    @Transactional
+    /**
+     * 요청을 접수만 하고 바로 응답한다 (PENDING). 실제 Gemini 호출은 별도 스레드에서 비동기로 진행된다.
+     *
+     * <p><b>일부러 @Transactional을 안 붙였다.</b> 이 메서드를 트랜잭션으로 감싸면, 아래에서
+     * {@code aiTaskExecutor.execute(...)}로 넘기는 별도 스레드가 이 메서드의 커밋 전에 먼저 실행될 수 있다 —
+     * 그러면 그 스레드가 {@code aiRequestRepository.findById(aiRequestId)}를 해도 아직 커밋 안 된
+     * 이 요청 row를 못 보고 조용히 아무 일도 안 하게 된다 (실제로 이 버그로 요청이 PENDING에 영원히
+     * 멈추는 걸 재현했음). Spring Data 리포지토리 메서드는 트랜잭션이 없으면 호출마다 자체적으로
+     * 커밋되므로, 이 메서드를 트랜잭션 없이 두면 save() 가 끝나는 즉시 DB에 반영되어 저 문제가 없다.
+     */
     public AiRequestResponse create(Long userId, AiRequestCreateRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));

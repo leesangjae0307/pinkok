@@ -300,6 +300,23 @@ class AiRequestTest {
     }
 
     @Test
+    @DisplayName("업로드한 적 없는 이미지 주소를 보내면 PENDING/PROCESSING 에 멈추지 않고 FAILED(INPUT_ERROR) 로 끝난다")
+    void create_unreadableImage_failsInsteadOfGettingStuck() throws Exception {
+        String token = signupAndLogin();
+
+        mockMvc.perform(post("/ai-requests")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inputType\":\"IMAGE\",\"imageUrls\":[\"/files/2026/09/does-not-exist.png\"]}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.errorCode").value(org.hamcrest.Matchers.startsWith("INPUT_ERROR")));
+
+        // 실패 기록 때 modelName() 은 부르므로 verifyNoInteractions 가 아니라 "generate 를 안 불렀다"만 확인한다
+        Mockito.verify(geminiClient, Mockito.never()).generate(Mockito.any());
+    }
+
+    @Test
     @DisplayName("로그인 없이 요청하면 401")
     void create_withoutAuth_returns401() throws Exception {
         mockMvc.perform(post("/ai-requests")

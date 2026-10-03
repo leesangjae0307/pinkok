@@ -15,4 +15,7 @@ public interface ItineraryItemRepository extends JpaRepository<ItineraryItem, Lo
 
     int countByDay_Id(Long dayId);
 
+    /** 같은 장소가 이 여행에 이미 꽂혀 있는지 (AI 후보를 중복으로 추가하지 않기 위해). */
+    boolean existsByTrip_IdAndPlace_Id(Long tripId, Long placeId);
+
 }

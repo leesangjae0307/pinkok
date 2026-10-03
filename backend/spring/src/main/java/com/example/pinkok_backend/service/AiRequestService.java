@@ -17,6 +17,8 @@ import com.example.pinkok_backend.repository.AiRequestImageRepository;
 import com.example.pinkok_backend.repository.AiRequestRepository;
 import com.example.pinkok_backend.repository.TripRepository;
 import com.example.pinkok_backend.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
@@ -43,6 +45,8 @@ import java.util.Locale;
 @Service
 public class AiRequestService {
 
+    private static final Logger log = LoggerFactory.getLogger(AiRequestService.class);
+
     private static final String REQUEST_TYPE_PLACE_EXTRACT = "PLACE_EXTRACT";
 
     private static final String STATUS_PENDING = "PENDING";
@@ -63,15 +67,24 @@ public class AiRequestService {
 
     private static final int MAX_IMAGES = 10;
 
+    /** 요청 행이 커밋될 때까지 기다리는 횟수와 간격 (총 2초) */
+    private static final int VISIBILITY_RETRIES = 20;
+    private static final long VISIBILITY_RETRY_DELAY_MS = 100;
+
+    /** 재시도 대기의 상한. 이것보다 더 오래 기다리면 사용자가 앱에서 포기한다. */
+    private static final long RETRY_MAX_DELAY_MS = 8000;
+
     private final AiRequestRepository aiRequestRepository;
     private final AiRequestImageRepository aiRequestImageRepository;
     private final TripRepository tripRepository;
     private final UserRepository userRepository;
     private final GeminiClient geminiClient;
     private final FileService fileService;
+    private final PlaceCandidateService placeCandidateService;
     private final TaskExecutor aiTaskExecutor;
     private final ObjectMapper objectMapper;
     private final int maxRetries;
+    private final long retryBaseDelayMs;
 
     public AiRequestService(AiRequestRepository aiRequestRepository,
                             AiRequestImageRepository aiRequestImageRepository,
@@ -79,18 +92,22 @@ public class AiRequestService {
                             UserRepository userRepository,
                             GeminiClient geminiClient,
                             FileService fileService,
+                            PlaceCandidateService placeCandidateService,
                             TaskExecutor aiTaskExecutor,
                             ObjectMapper objectMapper,
-                            @Value("${gemini.max-retries}") int maxRetries) {
+                            @Value("${gemini.max-retries}") int maxRetries,
+                            @Value("${gemini.retry-base-delay-ms:1000}") long retryBaseDelayMs) {
         this.aiRequestRepository = aiRequestRepository;
         this.aiRequestImageRepository = aiRequestImageRepository;
         this.tripRepository = tripRepository;
         this.userRepository = userRepository;
         this.geminiClient = geminiClient;
         this.fileService = fileService;
+        this.placeCandidateService = placeCandidateService;
         this.aiTaskExecutor = aiTaskExecutor;
         this.objectMapper = objectMapper;
         this.maxRetries = maxRetries;
+        this.retryBaseDelayMs = retryBaseDelayMs;
     }
 
     /** 요청을 접수만 하고 바로 응답한다 (PENDING). 실제 Gemini 호출은 별도 스레드에서 비동기로 진행된다. */
@@ -158,8 +175,10 @@ public class AiRequestService {
     // ------------------------------------------------------------------
 
     void process(Long aiRequestId) {
-        AiRequest aiRequest = aiRequestRepository.findById(aiRequestId).orElse(null);
+        AiRequest aiRequest = findWhenVisible(aiRequestId);
         if (aiRequest == null) {
+            // 여기까지 오면 요청이 PENDING 에 영원히 멈춘다. 왜 멈췄는지는 남겨둬야 한다.
+            log.warn("AI 요청을 찾지 못해 처리를 건너뛴다 (id={})", aiRequestId);
             return;
         }
 
@@ -184,6 +203,7 @@ public class AiRequestService {
                     onFailure(aiRequest, attempt, "GEMINI_CALL_FAILED: " + rootMessage(e));
                     return;
                 }
+                waitBeforeRetry(aiRequest.getId(), attempt);
                 attempt++;
             } catch (ResponseStatusException e) {
                 // 키 미설정 등 재시도해도 소용없는 경우
@@ -211,9 +231,58 @@ public class AiRequestService {
         aiRequest.setStatus(STATUS_SUCCESS);
         aiRequest.setCompletedAt(LocalDateTime.now());
         aiRequestRepository.save(aiRequest);
+
+        // 여기서 뽑은 건 장소 "이름"까지다. 카카오맵 좌표로 바꿔 후보로 저장하는 건 지은 담당(PlaceCandidateService).
+        // 카카오맵이 죽어도 이미 돈을 내고 받아온 이 AI 결과까지 실패가 되면 안 되므로, 예외를 삼키는 메서드를 쓴다.
+        placeCandidateService.createFromQuietly(aiRequest.getId());
+    }
+
+    /**
+     * 재시도하기 전에 잠깐 쉰다. 쉬는 시간은 1초 → 2초 → 4초로 늘어난다(최대 8초).
+     *
+     * <p>Gemini가 503을 주는 가장 흔한 이유는 "지금 사람이 몰렸다"이다. 쉬지 않고 바로 다시 부르면
+     * 똑같이 거절당해서 재시도가 의미가 없어진다. 기다리는 시간을 늘려가며 다시 거는 이 방식을
+     * 지수 백오프(exponential backoff)라고 하고, 외부 API를 부르는 코드의 기본 예절이다.
+     */
+    private void waitBeforeRetry(Long aiRequestId, int attempt) {
+        long delay = Math.min(retryBaseDelayMs << attempt, RETRY_MAX_DELAY_MS);
+        if (delay <= 0) {
+            return;
+        }
+        log.info("Gemini 재시도 전 {}ms 대기 (id={}, {}번째 재시도)", delay, aiRequestId, attempt + 1);
+        try {
+            Thread.sleep(delay);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * 요청 행이 DB에 보일 때까지 잠깐 기다렸다가 읽는다.
+     *
+     * <p>이 메서드는 요청을 저장한 트랜잭션이 <b>커밋되기 전에</b> 다른 스레드에서 시작될 수 있다.
+     * 그러면 방금 저장한 행이 아직 안 보여서 못 찾고, 요청이 PENDING 상태로 영원히 멈춘다.
+     * 커밋은 곧 끝나므로 짧게 몇 번 다시 확인한다.
+     */
+    private AiRequest findWhenVisible(Long aiRequestId) {
+        for (int attempt = 0; attempt < VISIBILITY_RETRIES; attempt++) {
+            AiRequest found = aiRequestRepository.findById(aiRequestId).orElse(null);
+            if (found != null) {
+                return found;
+            }
+            try {
+                Thread.sleep(VISIBILITY_RETRY_DELAY_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        }
+        return null;
     }
 
     private void onFailure(AiRequest aiRequest, int attempt, String errorCode) {
+        // error_code 컬럼이 VARCHAR(50) 이라 DB에는 잘려서 들어간다. 원인을 보려면 로그에 통째로 남겨야 한다.
+        log.warn("AI 요청 실패 (id={}, 시도 {}회): {}", aiRequest.getId(), attempt, errorCode);
         aiRequest.setModelName(geminiClient.modelName());
         aiRequest.setRetryCount(attempt);
         aiRequest.setStatus(STATUS_FAILED);

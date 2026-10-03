@@ -171,7 +171,7 @@ public class RecommendationService {
     @Transactional(readOnly = true)
     public List<RecommendationResponse> list(Long tripId, Long userId) {
         tripAccessGuard.requireMember(tripId, userId);
-        return recommendationRepository.findAllByTrip_IdOrderByCreatedAtDescIdDesc(tripId).stream()
+        return recommendationRepository.findAllByTrip_IdOrderByCreatedAtDescIdAsc(tripId).stream()
                 .map(RecommendationResponse::from)
                 .toList();
     }
@@ -187,9 +187,16 @@ public class RecommendationService {
         tripAccessGuard.requireMember(trip.getId(), userId);
         requireSuggested(recommendation);
 
-        PlaceInput place = placeService.findFirstByKeyword(buildMapQueries(trip, recommendation))
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNPROCESSABLE_ENTITY, "카카오맵에서 '" + recommendation.getSuggestedName() + "' 을(를) 찾지 못했어요."));
+        PlaceService.PlaceLookup lookup =
+                placeService.lookup(recommendation.getSuggestedName(), buildMapQueries(trip, recommendation));
+        if (lookup.match() == null) {
+            // AI 추천은 폐업·상호 변경이 흔해서, 이름이 비슷한 결과가 없으면 엉뚱한 가게를 넣지 않고 알려준다
+            String hint = lookup.closestCandidateName() == null
+                    ? "" : " (가장 가까운 검색 결과: " + lookup.closestCandidateName() + ")";
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "카카오맵에서 '" + recommendation.getSuggestedName() + "' 과(와) 같은 장소를 찾지 못했어요." + hint);
+        }
+        PlaceInput place = lookup.match();
 
         ItineraryItemCreateRequest itemRequest = new ItineraryItemCreateRequest();
         itemRequest.setTripId(trip.getId());

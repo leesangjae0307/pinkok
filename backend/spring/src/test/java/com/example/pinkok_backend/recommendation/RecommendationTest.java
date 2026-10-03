@@ -134,7 +134,7 @@ class RecommendationTest {
         return captor.getValue().getContents().get(0).getParts().get(0).getText();
     }
 
-    private static KakaoKeywordSearchResponse kakaoHit(String id, String name) {
+    private static KakaoKeywordSearchResponse.Document kakaoDoc(String id, String name) {
         KakaoKeywordSearchResponse.Document doc = new KakaoKeywordSearchResponse.Document();
         doc.setId(id);
         doc.setPlaceName(name);
@@ -144,12 +144,20 @@ class RecommendationTest {
         doc.setCategoryName("여행 > 관광명소");
         doc.setX("126.942");
         doc.setY("33.458");
+        return doc;
+    }
+
+    private static KakaoKeywordSearchResponse kakaoHits(KakaoKeywordSearchResponse.Document... docs) {
         KakaoKeywordSearchResponse response = new KakaoKeywordSearchResponse();
-        response.setDocuments(List.of(doc));
+        response.setDocuments(List.of(docs));
         KakaoKeywordSearchResponse.Meta meta = new KakaoKeywordSearchResponse.Meta();
         meta.setEnd(true);
         response.setMeta(meta);
         return response;
+    }
+
+    private static KakaoKeywordSearchResponse kakaoHit(String id, String name) {
+        return kakaoHits(kakaoDoc(id, name));
     }
 
     private static KakaoKeywordSearchResponse kakaoNoHit() {
@@ -192,6 +200,9 @@ class RecommendationTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
+                // 같은 배치는 모델이 준 순서 그대로 (앞에 둔 게 더 추천하는 곳)
+                .andExpect(jsonPath("$[0].name").value("성산일출봉"))
+                .andExpect(jsonPath("$[1].name").value("카페 델문도"))
                 .andExpect(jsonPath("$[?(@.name=='성산일출봉')].status").value("SUGGESTED"))
                 .andExpect(jsonPath("$[?(@.name=='성산일출봉')].category").value("관광지"))
                 .andExpect(jsonPath("$[?(@.name=='카페 델문도')].reason").value("바다가 보이는 분위기 좋은 카페예요."));
@@ -378,7 +389,7 @@ class RecommendationTest {
         long recommendationId = firstSuggestionId(token, tripId);
 
         // 지역을 붙인 첫 질의("제주 성산일출봉")에서 바로 찾는 상황
-        Mockito.when(kakaoLocalApiClient.searchByKeyword(Mockito.eq("제주 성산일출봉"), Mockito.eq(1), Mockito.eq(1)))
+        Mockito.when(kakaoLocalApiClient.searchByKeyword(Mockito.eq("제주 성산일출봉"), Mockito.anyInt(), Mockito.anyInt()))
                 .thenReturn(kakaoHit("KAKAO-777", "성산일출봉"));
 
         mockMvc.perform(post("/recommendations/" + recommendationId + "/accept")
@@ -468,6 +479,53 @@ class RecommendationTest {
         mockMvc.perform(get("/itinerary-items").param("tripId", String.valueOf(tripId))
                         .header("Authorization", "Bearer " + token))
                 .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("수락 - 검색 결과가 전부 다른 이름이면(폐업·상호 변경 등) 엉뚱한 가게를 넣지 않고 422 + 가장 가까운 결과를 알려준다")
+    void accept_rejectsUnrelatedPlace_returns422WithHint() throws Exception {
+        String token = signupAndLogin("acc6@pinkok.com", "accuser6");
+        long tripId = createJejuTrip(token);
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(TWO_PLACES_JSON, 10, 10));
+        requestRecommendation(token, String.format("{\"tripId\":%d}", tripId));
+        long recommendationId = firstSuggestionId(token, tripId);
+        // 같은 자리에 전혀 다른 가게가 나오는 상황 (실제로 '카페 노티드 제주애월' -> '놀맨' 이 나왔다)
+        Mockito.when(kakaoLocalApiClient.searchByKeyword(Mockito.anyString(), Mockito.anyInt(), Mockito.anyInt()))
+                .thenReturn(kakaoHit("KAKAO-1", "놀맨"));
+
+        mockMvc.perform(post("/recommendations/" + recommendationId + "/accept")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("놀맨")));
+
+        mockMvc.perform(get("/itinerary-items").param("tripId", String.valueOf(tripId))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("수락 - 검색 결과가 여러 개면 이름이 가장 가까운 것을 고른다 (1순위가 아니어도, 포함보다 완전 일치 우선)")
+    void accept_picksNameMatchAmongSeveralResults() throws Exception {
+        String token = signupAndLogin("acc7@pinkok.com", "accuser7");
+        long tripId = createJejuTrip(token);
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(TWO_PLACES_JSON, 10, 10));
+        requestRecommendation(token, String.format("{\"tripId\":%d}", tripId));
+        long recommendationId = firstSuggestionId(token, tripId);
+        Mockito.when(kakaoLocalApiClient.searchByKeyword(Mockito.anyString(), Mockito.anyInt(), Mockito.anyInt()))
+                .thenReturn(kakaoHits(
+                        kakaoDoc("KAKAO-1", "성산 기념품 가게"),
+                        kakaoDoc("KAKAO-2", "성산일출봉 매표소"),
+                        kakaoDoc("KAKAO-3", "성산일출봉")));
+
+        mockMvc.perform(post("/recommendations/" + recommendationId + "/accept")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        // "성산일출봉 매표소"도 이름을 포함해 통과하지만, 완전히 같은 "성산일출봉"(3번째)이 더 가까워서 채택된다
+        mockMvc.perform(get("/itinerary-items").param("tripId", String.valueOf(tripId))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].place.name").value("성산일출봉"));
     }
 
     @Test

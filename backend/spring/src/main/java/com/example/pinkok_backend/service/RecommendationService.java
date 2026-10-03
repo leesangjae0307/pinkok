@@ -280,7 +280,7 @@ public class RecommendationService {
 
     private void saveRecommendations(AiRequest aiRequest, Long tripId, int count, List<String> excludeNames) {
         AiRecommendationResult result =
-                objectMapper.readValue(stripCodeFence(aiRequest.getRawResponse()), AiRecommendationResult.class);
+                objectMapper.readValue(stripCodeFence(RawResponseJson.unwrap(objectMapper, aiRequest.getRawResponse())), AiRecommendationResult.class);
         if (result == null || result.recommendations() == null) {
             throw new IllegalStateException("추천 목록이 없는 응답입니다.");
         }

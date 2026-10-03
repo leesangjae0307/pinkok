@@ -4,6 +4,7 @@ import com.example.pinkok_backend.gemini.GeminiCallException;
 import com.example.pinkok_backend.gemini.GeminiClient;
 import com.example.pinkok_backend.gemini.GeminiGenerateRequest;
 import com.example.pinkok_backend.gemini.GeminiGenerateResponse;
+import com.example.pinkok_backend.kakao.KakaoLocalApiClient;
 import com.example.pinkok_backend.support.DatabaseCleaner;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
@@ -58,6 +59,10 @@ class AiRequestTest {
 
     @MockitoBean
     GeminiClient geminiClient;
+
+    /** 추출이 성공하면 좌표 변환(PlaceCandidateService)이 이어서 돌기 때문에, 실제 카카오 서버를 부르지 않도록 막아둔다. */
+    @MockitoBean
+    KakaoLocalApiClient kakaoLocalApiClient;
 
     @BeforeEach
     void setUp() {

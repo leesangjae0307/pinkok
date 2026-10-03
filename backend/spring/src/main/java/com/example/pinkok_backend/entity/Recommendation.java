@@ -31,6 +31,14 @@ public class Recommendation {
     @Column(name = "suggested_name", nullable = false, length = 200)
     private String suggestedName;
 
+    // AI가 준 주소 - 수락할 때 카카오맵에서 좌표를 찾는 힌트로 쓴다
+    @Column(name = "suggested_address", length = 300)
+    private String suggestedAddress;
+
+    // AI가 분류한 카테고리 (맛집/카페/관광지 ...) - 앱에서 아이콘 표시용
+    @Column(name = "category_text", length = 100)
+    private String categoryText;
+
     @Column(length = 500)
     private String reason;
 

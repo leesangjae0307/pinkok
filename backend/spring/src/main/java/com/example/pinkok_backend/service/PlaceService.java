@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class PlaceService {
@@ -48,6 +49,42 @@ public class PlaceService {
         boolean hasMore = response.getMeta() != null && !response.getMeta().isEnd();
 
         return new PlaceSearchPageResponse(places, hasMore);
+    }
+
+    /**
+     * 장소 이름(+지역 등)으로 카카오맵에서 가장 먼저 나오는 장소 1건을 찾는다.
+     * 질의를 앞에서부터 차례로 시도해서 결과가 나오는 첫 질의의 첫 결과를 쓴다 - 정확한 이름이 안 먹히면
+     * 다음 질의(예: 지역을 뺀 이름만)로 넘어가는 용도. AI가 준 장소명을 좌표로 바꿀 때 쓴다.
+     * (저장은 하지 않는다 - 핀으로 추가할 때 findOrCreate 가 저장한다)
+     *
+     * @return 못 찾으면 empty. 카카오 호출 자체가 실패하면(키 문제 등) 예외가 그대로 올라간다.
+     */
+    public Optional<PlaceInput> findFirstByKeyword(String... queries) {
+        for (String query : queries) {
+            if (!StringUtils.hasText(query)) {
+                continue;
+            }
+            KakaoKeywordSearchResponse response = kakaoLocalApiClient.searchByKeyword(query.trim(), 1, 1);
+            if (response != null && response.getDocuments() != null && !response.getDocuments().isEmpty()) {
+                return Optional.of(toPlaceInput(response.getDocuments().get(0)));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private PlaceInput toPlaceInput(KakaoKeywordSearchResponse.Document doc) {
+        PlaceInput input = new PlaceInput();
+        input.setKakaoPlaceId(doc.getId());
+        input.setName(doc.getPlaceName());
+        input.setRoadAddress(doc.getRoadAddressName());
+        input.setLotAddress(doc.getAddressName());
+        input.setLatitude(new java.math.BigDecimal(doc.getY()));
+        input.setLongitude(new java.math.BigDecimal(doc.getX()));
+        input.setCategoryGroupCode(doc.getCategoryGroupCode());
+        input.setCategoryName(doc.getCategoryName());
+        input.setPhone(doc.getPhone());
+        input.setPlaceUrl(doc.getPlaceUrl());
+        return input;
     }
 
     /**

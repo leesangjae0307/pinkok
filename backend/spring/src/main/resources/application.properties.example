@@ -46,3 +46,10 @@ gemini.model=gemini-flash-latest
 gemini.max-retries=3
 # 재시도 전 대기(ms). 1초 -> 2초 -> 4초로 늘어난다(최대 8초). 503(사람 몰림) 대응용.
 gemini.retry-base-delay-ms=1000
+
+# PinLog (영상 합성) - FFmpeg 가 PATH 에 없으면 실행 파일 경로를 적어준다
+# ffmpeg.path=C:/Program Files/ffmpeg/ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe
+# ffmpeg.probe-path=C:/Program Files/ffmpeg/ffmpeg-9.0.1-essentials_build/bin/ffprobe.exe
+# 완성 영상 크기. 기본은 가로(16:9). 세로로 하려면 720 x 1280 으로 바꾼다
+pinlog.width=1280
+pinlog.height=720

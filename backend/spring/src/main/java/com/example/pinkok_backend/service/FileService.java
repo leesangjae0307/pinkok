@@ -2,6 +2,7 @@ package com.example.pinkok_backend.service;
 
 import com.example.pinkok_backend.dto.FileUploadResponse;
 import com.example.pinkok_backend.exception.FileUploadException;
+import com.example.pinkok_backend.pinlog.VideoProbe;
 import com.example.pinkok_backend.storage.FileStorage;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,11 +20,14 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -47,9 +51,11 @@ public class FileService {
     public static final String MEDIA_TYPE_VIDEO = "VIDEO";
 
     private final FileStorage fileStorage;
+    private final VideoProbe videoProbe;
 
-    public FileService(FileStorage fileStorage) {
+    public FileService(FileStorage fileStorage, VideoProbe videoProbe) {
         this.fileStorage = fileStorage;
+        this.videoProbe = videoProbe;
     }
 
     /**
@@ -136,13 +142,45 @@ public class FileService {
             savedPaths.add(thumbnailPath);
 
             return new FileUploadResponse(url, thumbnailUrl, "IMAGE", file.source().getSize(),
-                    file.image().getWidth(), file.image().getHeight());
+                    file.image().getWidth(), file.image().getHeight(), null);
         }
 
         try (InputStream in = file.source().getInputStream()) {
             String url = fileStorage.save(in, originalPath);
             savedPaths.add(originalPath);
-            return new FileUploadResponse(url, null, "VIDEO", file.source().getSize(), null, null);
+            return saveVideoThumbnail(file, basePath, url, savedPaths);
+        }
+    }
+
+    /**
+     * 영상의 첫 장면을 썸네일로 저장하고 길이를 알아낸다.
+     *
+     * <p>PinLog 를 만들 때 "내 영상 / 팀원 영상"을 고르는 화면이 어떤 장면인지 보여줘야 하는데,
+     * 영상은 사진과 달리 FFmpeg 가 있어야 한 장면을 꺼낼 수 있다.
+     * FFmpeg 가 없는 환경에서도 업로드 자체는 되어야 하므로, 실패하면 썸네일 없이 넘어간다.
+     */
+    private FileUploadResponse saveVideoThumbnail(CheckedFile file, String basePath,
+                                                  String url, List<String> savedPaths) throws IOException {
+        Path temp = null;
+        try {
+            temp = Files.createTempFile("upload-", "." + file.extension());
+            Files.write(temp, file.source().getBytes());
+
+            Optional<byte[]> frame = videoProbe.firstFrame(temp);
+            String thumbnailUrl = null;
+            if (frame.isPresent()) {
+                String thumbnailPath = basePath + THUMBNAIL_SUFFIX;
+                thumbnailUrl = fileStorage.save(new ByteArrayInputStream(frame.get()), thumbnailPath);
+                savedPaths.add(thumbnailPath);
+            }
+
+            return new FileUploadResponse(url, thumbnailUrl, "VIDEO", file.source().getSize(),
+                    null, null, videoProbe.durationMs(temp).orElse(null));
+
+        } finally {
+            if (temp != null) {
+                Files.deleteIfExists(temp);
+            }
         }
     }
 
@@ -287,12 +325,15 @@ public class FileService {
     }
 
     /**
-     * 사진이면 업로드할 때 같이 만들어 둔 썸네일 주소를 돌려준다.
-     * 영상 썸네일은 FFmpeg 가 필요해서 PinLog 작업 때 추가한다(지금은 null).
+     * 업로드할 때 같이 만들어 둔 썸네일 주소를 돌려준다. 실제로 파일이 있을 때만 준다.
+     *
+     * <p>사진은 줄인 이미지, 영상은 첫 장면이다. 영상 썸네일은 FFmpeg 가 없으면 못 만들므로
+     * 그 경우엔 null 이 된다 — 앱은 썸네일이 없을 수도 있다고 보고 그리면 된다.
      */
     public String thumbnailUrlOf(String url) {
         String path = fileStorage.pathOf(url);
-        if (path == null || !IMAGE_EXTENSIONS.contains(getExtension(path))) {
+        String extension = path == null ? "" : getExtension(path);
+        if (path == null || !(IMAGE_EXTENSIONS.contains(extension) || VIDEO_EXTENSIONS.contains(extension))) {
             return null;
         }
         int dot = path.lastIndexOf('.');

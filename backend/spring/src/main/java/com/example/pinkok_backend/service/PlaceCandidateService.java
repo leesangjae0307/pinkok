@@ -60,6 +60,11 @@ public class PlaceCandidateService {
     /** 후보 하나를 찾으려고 카카오에 물어볼 때 받아올 결과 수 (첫 번째만 쓴다). */
     private static final int SEARCH_SIZE = 5;
 
+    /** 이름이 얼마나 맞는지 (클수록 가깝다) */
+    private static final int NAME_SCORE_EXACT = 3;
+    private static final int NAME_SCORE_PARTIAL = 2;
+    private static final int NAME_SCORE_LOOSE = 1;
+
     private static final BigDecimal CONFIDENCE_EXACT = new BigDecimal("1.000");
     private static final BigDecimal CONFIDENCE_PARTIAL = new BigDecimal("0.800");
     private static final BigDecimal CONFIDENCE_LOOSE = new BigDecimal("0.600");
@@ -172,47 +177,121 @@ public class PlaceCandidateService {
      *
      * <p>"이름 + 주소"로 먼저 찾고, 안 나오면 이름만으로 한 번 더 찾는다.
      * AI가 준 주소가 부정확할 때가 있어서, 주소 때문에 못 찾는 경우를 구제하기 위한 것이다.
+     *
+     * <p><b>검색 1순위를 그냥 쓰면 안 된다.</b> 실제로 강릉 여행의 "동해바다열차"가 경기도 부천의
+     * 여행사로 매칭된 적이 있다. 이름만 비슷하면 전혀 다른 지역 가게가 조용히 일정에 들어간다.
+     * 그래서 결과 여러 개를 놓고 <b>지역이 맞는지</b> 먼저 보고, 그 안에서 이름이 가장 가까운 것을 고른다.
      */
     private Matched geocode(ExtractedPlace extracted) {
         String name = extracted.name().trim();
+        String region = extractRegion(extracted.address());
         String withAddress = StringUtils.hasText(extracted.address())
                 ? name + " " + extracted.address().trim()
                 : name;
 
-        KakaoKeywordSearchResponse.Document document = firstResult(withAddress);
-        if (document == null && !withAddress.equals(name)) {
-            document = firstResult(name);
+        Matched matched = bestMatch(name, region, search(withAddress));
+        if (matched == null && !withAddress.equals(name)) {
+            matched = bestMatch(name, region, search(name));
         }
-        if (document == null) {
-            return null;
-        }
-
-        return new Matched(placeService.findOrCreate(toPlaceInput(document)), confidenceOf(name, document.getPlaceName()));
-    }
-
-    private KakaoKeywordSearchResponse.Document firstResult(String keyword) {
-        KakaoKeywordSearchResponse response = kakaoLocalApiClient.searchByKeyword(keyword, 1, SEARCH_SIZE);
-        if (response == null || response.getDocuments() == null || response.getDocuments().isEmpty()) {
-            return null;
-        }
-        return response.getDocuments().get(0);
+        return matched;
     }
 
     /**
-     * 카카오에서 찾은 이름이 AI가 뽑은 이름과 얼마나 맞아떨어지는지를 0~1로 매긴다.
-     * AI가 애매하게 뽑은 이름은 엉뚱한 곳이 1등으로 나올 수 있어서, 앱에서 "확인 필요"로 보여줄 근거가 된다.
+     * 검색 결과 중에서 쓸 만한 것을 고른다.
+     *
+     * <ul>
+     *   <li>AI가 지역(시/군/구)을 알려줬으면 <b>그 지역에 있는 결과만</b> 쓴다. 하나도 없으면 "못 찾음"으로 둔다 —
+     *       엉뚱한 지역을 넣느니 사용자가 직접 검색하게 하는 편이 낫다.</li>
+     *   <li>지역을 모를 때는 검증할 방법이 없으므로 <b>이름이 확실히 비슷할 때만</b> 쓴다.</li>
+     * </ul>
      */
-    private BigDecimal confidenceOf(String rawName, String matchedName) {
+    private Matched bestMatch(String name, String region, List<KakaoKeywordSearchResponse.Document> documents) {
+        KakaoKeywordSearchResponse.Document best = null;
+        int bestScore = 0;
+
+        for (KakaoKeywordSearchResponse.Document document : documents) {
+            if (region != null && !inRegion(document, region)) {
+                continue;
+            }
+            int score = nameScore(name, document.getPlaceName());
+            if (score > bestScore) {
+                bestScore = score;
+                best = document;
+            }
+        }
+
+        if (best == null) {
+            return null;
+        }
+        // 지역을 확인하지 못했는데 이름까지 애매하면 채택하지 않는다 (엉뚱한 곳이 들어오는 경로)
+        if (region == null && bestScore <= NAME_SCORE_LOOSE) {
+            return null;
+        }
+        return new Matched(placeService.findOrCreate(toPlaceInput(best)), confidenceOf(bestScore, region != null));
+    }
+
+    private List<KakaoKeywordSearchResponse.Document> search(String keyword) {
+        KakaoKeywordSearchResponse response = kakaoLocalApiClient.searchByKeyword(keyword, 1, SEARCH_SIZE);
+        if (response == null || response.getDocuments() == null) {
+            return List.of();
+        }
+        return response.getDocuments();
+    }
+
+    /**
+     * AI가 준 주소에서 시/군/구를 뽑아낸다. ("강원 강릉시 강릉역" → "강릉시")
+     * 이게 매칭을 검증하는 기준이 된다.
+     */
+    private String extractRegion(String address) {
+        if (!StringUtils.hasText(address)) {
+            return null;
+        }
+        for (String token : address.trim().split("\\s+")) {
+            if (token.length() >= 2 && (token.endsWith("시") || token.endsWith("군") || token.endsWith("구"))) {
+                return token;
+            }
+        }
+        return null;
+    }
+
+    /** 카카오 결과의 주소(지번·도로명)에 그 시/군/구가 들어 있는지. */
+    private boolean inRegion(KakaoKeywordSearchResponse.Document document, String region) {
+        return contains(document.getAddressName(), region) || contains(document.getRoadAddressName(), region);
+    }
+
+    private boolean contains(String address, String region) {
+        return address != null && address.contains(region);
+    }
+
+    /**
+     * 카카오에서 찾은 이름이 AI가 뽑은 이름과 얼마나 맞아떨어지는지. 클수록 가깝다.
+     * 띄어쓰기·대소문자는 무시한다 ("협재 해수욕장" = "협재해수욕장").
+     */
+    private int nameScore(String rawName, String matchedName) {
         String a = normalize(rawName);
         String b = normalize(matchedName);
         if (a.isEmpty() || b.isEmpty()) {
-            return CONFIDENCE_LOOSE;
+            return NAME_SCORE_LOOSE;
         }
         if (a.equals(b)) {
-            return CONFIDENCE_EXACT;
+            return NAME_SCORE_EXACT;
         }
         if (a.contains(b) || b.contains(a)) {
-            return CONFIDENCE_PARTIAL;
+            return NAME_SCORE_PARTIAL;
+        }
+        return NAME_SCORE_LOOSE;
+    }
+
+    /**
+     * 신뢰도. 이름이 얼마나 맞는지에 더해, <b>지역까지 확인됐는지</b>를 반영한다.
+     * 지역을 확인하지 못한 매칭은 한 단계 낮춰서 앱이 "확인 필요"로 보여줄 수 있게 한다.
+     */
+    private BigDecimal confidenceOf(int nameScore, boolean regionVerified) {
+        if (nameScore == NAME_SCORE_EXACT) {
+            return regionVerified ? CONFIDENCE_EXACT : CONFIDENCE_PARTIAL;
+        }
+        if (nameScore == NAME_SCORE_PARTIAL) {
+            return regionVerified ? CONFIDENCE_PARTIAL : CONFIDENCE_LOOSE;
         }
         return CONFIDENCE_LOOSE;
     }

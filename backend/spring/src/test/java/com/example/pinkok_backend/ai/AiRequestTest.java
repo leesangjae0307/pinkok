@@ -11,6 +11,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -27,6 +30,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -48,6 +52,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Import(TestAsyncConfig.class)
 class AiRequestTest {
+
+    /**
+     * 업로드를 테스트용 임시 폴더로 돌린다.
+     * 이걸 안 하면 테스트가 진짜 uploads/ 폴더에 스크린샷을 쌓아두고, DB와 달리 파일은 지워지지 않아
+     * 테스트를 돌릴 때마다 쓰레기 파일이 늘어난다.
+     */
+    @TempDir
+    static Path uploadDir;
+
+    @DynamicPropertySource
+    static void uploadDirProperty(DynamicPropertyRegistry registry) {
+        registry.add("file.upload-dir", () -> uploadDir.toString());
+    }
 
     private static final String EMPTY_RESULT_JSON = "{\"title\":null,\"places\":[]}";
 

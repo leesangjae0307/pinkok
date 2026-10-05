@@ -1,7 +1,11 @@
 package com.example.pinkok_backend.service;
 
+import com.example.pinkok_backend.dto.TravelStyleResponse;
 import com.example.pinkok_backend.repository.TravelStyleRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 public class TravelStyleService {
@@ -12,5 +16,8 @@ public class TravelStyleService {
         this.travelStyleRepository = travelStyleRepository;
     }
 
-    // TODO: 비즈니스 로직 작성
+    @Transactional(readOnly = true)
+    public List<TravelStyleResponse> list() {
+        return travelStyleRepository.findAll().stream().map(TravelStyleResponse::from).toList();
+    }
 }

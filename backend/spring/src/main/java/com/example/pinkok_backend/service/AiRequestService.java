@@ -7,11 +7,7 @@ import com.example.pinkok_backend.entity.AiRequest;
 import com.example.pinkok_backend.entity.AiRequestImage;
 import com.example.pinkok_backend.entity.Trip;
 import com.example.pinkok_backend.entity.User;
-import com.example.pinkok_backend.gemini.GeminiCallException;
-import com.example.pinkok_backend.gemini.GeminiClient;
 import com.example.pinkok_backend.gemini.GeminiGenerateRequest;
-import com.example.pinkok_backend.gemini.GeminiGenerateResponse;
-import com.example.pinkok_backend.gemini.GeminiPricing;
 import com.example.pinkok_backend.gemini.PlaceExtractionPromptBuilder;
 import com.example.pinkok_backend.repository.AiRequestImageRepository;
 import com.example.pinkok_backend.repository.AiRequestRepository;
@@ -19,7 +15,6 @@ import com.example.pinkok_backend.repository.TripRepository;
 import com.example.pinkok_backend.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -49,10 +44,8 @@ public class AiRequestService {
 
     private static final String REQUEST_TYPE_PLACE_EXTRACT = "PLACE_EXTRACT";
 
-    private static final String STATUS_PENDING = "PENDING";
-    private static final String STATUS_PROCESSING = "PROCESSING";
-    private static final String STATUS_SUCCESS = "SUCCESS";
-    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_PENDING = GeminiJobRunner.STATUS_PENDING;
+    private static final String STATUS_SUCCESS = GeminiJobRunner.STATUS_SUCCESS;
 
     private static final String INPUT_LINK = "LINK";
     private static final String INPUT_TEXT = "TEXT";
@@ -71,43 +64,34 @@ public class AiRequestService {
     private static final int VISIBILITY_RETRIES = 20;
     private static final long VISIBILITY_RETRY_DELAY_MS = 100;
 
-    /** 재시도 대기의 상한. 이것보다 더 오래 기다리면 사용자가 앱에서 포기한다. */
-    private static final long RETRY_MAX_DELAY_MS = 8000;
-
     private final AiRequestRepository aiRequestRepository;
     private final AiRequestImageRepository aiRequestImageRepository;
     private final TripRepository tripRepository;
     private final UserRepository userRepository;
-    private final GeminiClient geminiClient;
+    private final GeminiJobRunner geminiJobRunner;
     private final FileService fileService;
     private final PlaceCandidateService placeCandidateService;
     private final TaskExecutor aiTaskExecutor;
     private final ObjectMapper objectMapper;
-    private final int maxRetries;
-    private final long retryBaseDelayMs;
 
     public AiRequestService(AiRequestRepository aiRequestRepository,
                             AiRequestImageRepository aiRequestImageRepository,
                             TripRepository tripRepository,
                             UserRepository userRepository,
-                            GeminiClient geminiClient,
+                            GeminiJobRunner geminiJobRunner,
                             FileService fileService,
                             PlaceCandidateService placeCandidateService,
                             TaskExecutor aiTaskExecutor,
-                            ObjectMapper objectMapper,
-                            @Value("${gemini.max-retries}") int maxRetries,
-                            @Value("${gemini.retry-base-delay-ms:1000}") long retryBaseDelayMs) {
+                            ObjectMapper objectMapper) {
         this.aiRequestRepository = aiRequestRepository;
         this.aiRequestImageRepository = aiRequestImageRepository;
         this.tripRepository = tripRepository;
         this.userRepository = userRepository;
-        this.geminiClient = geminiClient;
+        this.geminiJobRunner = geminiJobRunner;
         this.fileService = fileService;
         this.placeCandidateService = placeCandidateService;
         this.aiTaskExecutor = aiTaskExecutor;
         this.objectMapper = objectMapper;
-        this.maxRetries = maxRetries;
-        this.retryBaseDelayMs = retryBaseDelayMs;
     }
 
     /** 요청을 접수만 하고 바로 응답한다 (PENDING). 실제 Gemini 호출은 별도 스레드에서 비동기로 진행된다. */
@@ -182,78 +166,19 @@ public class AiRequestService {
             return;
         }
 
-        aiRequest.setStatus(STATUS_PROCESSING);
-        aiRequestRepository.save(aiRequest);
-
-        List<GeminiGenerateRequest.Part> parts = buildParts(aiRequest);
-        aiRequest.setPromptText(describeParts(parts));
-
-        GeminiGenerateRequest.Content content = new GeminiGenerateRequest.Content();
-        content.setParts(parts);
-        GeminiGenerateRequest geminiRequest = GeminiGenerateRequest.of(content, new GeminiGenerateRequest.GenerationConfig());
-
-        int attempt = 0;
-        while (true) {
-            try {
-                GeminiGenerateResponse response = geminiClient.generate(geminiRequest);
-                onSuccess(aiRequest, response, attempt);
-                return;
-            } catch (GeminiCallException e) {
-                if (attempt >= maxRetries) {
-                    onFailure(aiRequest, attempt, "GEMINI_CALL_FAILED: " + rootMessage(e));
-                    return;
-                }
-                waitBeforeRetry(aiRequest.getId(), attempt);
-                attempt++;
-            } catch (ResponseStatusException e) {
-                // 키 미설정 등 재시도해도 소용없는 경우
-                onFailure(aiRequest, attempt, e.getStatusCode() + " " + e.getReason());
-                return;
-            } catch (RuntimeException e) {
-                // 응답 파싱 실패 등 예상 못한 오류 - 재시도 대상은 아님
-                onFailure(aiRequest, attempt, "UNEXPECTED_ERROR: " + rootMessage(e));
-                return;
-            }
-        }
-    }
-
-    private void onSuccess(AiRequest aiRequest, GeminiGenerateResponse response, int attempt) {
-        GeminiGenerateResponse.UsageMetadata usage = response.getUsageMetadata();
-
-        aiRequest.setModelName(geminiClient.modelName());
-        aiRequest.setRetryCount(attempt);
-        aiRequest.setRawResponse(response.firstText());
-        if (usage != null) {
-            aiRequest.setInputTokens(usage.getPromptTokenCount());
-            aiRequest.setOutputTokens(usage.getCandidatesTokenCount());
-            aiRequest.setCostUsd(GeminiPricing.estimateUsd(usage.getPromptTokenCount(), usage.getCandidatesTokenCount()));
-        }
-        aiRequest.setStatus(STATUS_SUCCESS);
-        aiRequest.setCompletedAt(LocalDateTime.now());
-        aiRequestRepository.save(aiRequest);
-
-        // 여기서 뽑은 건 장소 "이름"까지다. 카카오맵 좌표로 바꿔 후보로 저장하는 건 지은 담당(PlaceCandidateService).
-        // 카카오맵이 죽어도 이미 돈을 내고 받아온 이 AI 결과까지 실패가 되면 안 되므로, 예외를 삼키는 메서드를 쓴다.
-        placeCandidateService.createFromQuietly(aiRequest.getId());
-    }
-
-    /**
-     * 재시도하기 전에 잠깐 쉰다. 쉬는 시간은 1초 → 2초 → 4초로 늘어난다(최대 8초).
-     *
-     * <p>Gemini가 503을 주는 가장 흔한 이유는 "지금 사람이 몰렸다"이다. 쉬지 않고 바로 다시 부르면
-     * 똑같이 거절당해서 재시도가 의미가 없어진다. 기다리는 시간을 늘려가며 다시 거는 이 방식을
-     * 지수 백오프(exponential backoff)라고 하고, 외부 API를 부르는 코드의 기본 예절이다.
-     */
-    private void waitBeforeRetry(Long aiRequestId, int attempt) {
-        long delay = Math.min(retryBaseDelayMs << attempt, RETRY_MAX_DELAY_MS);
-        if (delay <= 0) {
+        List<GeminiGenerateRequest.Part> parts;
+        try {
+            parts = buildParts(aiRequest);
+        } catch (RuntimeException e) {
+            // 업로드한 이미지를 못 읽는 등 Gemini 호출 전에 실패한 경우에도 PENDING 에 멈추지 않고 FAILED 로 끝낸다
+            geminiJobRunner.markFailed(aiRequest, 0, "INPUT_ERROR: " + e.getMessage());
             return;
         }
-        log.info("Gemini 재시도 전 {}ms 대기 (id={}, {}번째 재시도)", delay, aiRequestId, attempt + 1);
-        try {
-            Thread.sleep(delay);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+
+        if (geminiJobRunner.run(aiRequest, parts)) {
+            // 여기서 뽑은 건 장소 "이름"까지다. 카카오맵 좌표로 바꿔 후보로 저장하는 건 지은 담당(PlaceCandidateService).
+            // 카카오맵이 죽어도 이미 돈을 내고 받아온 이 AI 결과까지 실패가 되면 안 되므로, 예외를 삼키는 메서드를 쓴다.
+            placeCandidateService.createFromQuietly(aiRequest.getId());
         }
     }
 
@@ -278,17 +203,6 @@ public class AiRequestService {
             }
         }
         return null;
-    }
-
-    private void onFailure(AiRequest aiRequest, int attempt, String errorCode) {
-        // error_code 컬럼이 VARCHAR(50) 이라 DB에는 잘려서 들어간다. 원인을 보려면 로그에 통째로 남겨야 한다.
-        log.warn("AI 요청 실패 (id={}, 시도 {}회): {}", aiRequest.getId(), attempt, errorCode);
-        aiRequest.setModelName(geminiClient.modelName());
-        aiRequest.setRetryCount(attempt);
-        aiRequest.setStatus(STATUS_FAILED);
-        aiRequest.setErrorCode(truncate(errorCode, 50));
-        aiRequest.setCompletedAt(LocalDateTime.now());
-        aiRequestRepository.save(aiRequest);
     }
 
     /**
@@ -334,27 +248,15 @@ public class AiRequestService {
         return parts;
     }
 
-    /** 실제로 뭘 보냈는지 사람이 읽을 수 있게 기록한다 (AiRequest.promptText, 정확도 개선 분석용). */
-    private String describeParts(List<GeminiGenerateRequest.Part> parts) {
-        StringBuilder sb = new StringBuilder();
-        for (GeminiGenerateRequest.Part part : parts) {
-            if (part.getText() != null) {
-                sb.append(part.getText()).append('\n');
-            } else if (part.getFileData() != null) {
-                sb.append("[영상 첨부: ").append(part.getFileData().getFileUri()).append("]\n");
-            } else if (part.getInlineData() != null) {
-                sb.append("[이미지 첨부]\n");
-            }
-        }
-        return sb.toString();
-    }
-
     private AiExtractionResult parseResult(AiRequest aiRequest) {
-        if (!STATUS_SUCCESS.equals(aiRequest.getStatus()) || aiRequest.getRawResponse() == null) {
+        // 추천(RECOMMEND) 같은 다른 종류 요청은 rawResponse 모양이 달라서 장소 추출 결과로 읽으면 안 된다
+        if (!REQUEST_TYPE_PLACE_EXTRACT.equals(aiRequest.getRequestType())
+                || !STATUS_SUCCESS.equals(aiRequest.getStatus())
+                || aiRequest.getRawResponse() == null) {
             return null;
         }
         try {
-            return objectMapper.readValue(aiRequest.getRawResponse(), AiExtractionResult.class);
+            return objectMapper.readValue(RawResponseJson.unwrap(objectMapper, aiRequest.getRawResponse()), AiExtractionResult.class);
         } catch (Exception e) {
             return AiExtractionResult.empty();
         }
@@ -422,17 +324,5 @@ public class AiRequestService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "본인의 AI 요청만 조회할 수 있습니다.");
         }
         return aiRequest;
-    }
-
-    private String rootMessage(Throwable e) {
-        Throwable cause = e;
-        while (cause.getCause() != null) {
-            cause = cause.getCause();
-        }
-        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-    }
-
-    private String truncate(String value, int maxLength) {
-        return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 }

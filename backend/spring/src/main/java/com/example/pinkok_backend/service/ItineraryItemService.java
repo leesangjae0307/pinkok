@@ -25,7 +25,8 @@ import java.util.stream.Collectors;
 @Service
 public class ItineraryItemService {
 
-    private static final String ADDED_BY_USER = "USER";
+    public static final String ADDED_BY_USER = "USER";
+    public static final String ADDED_BY_AI = "AI";
 
     private final ItineraryItemRepository itineraryItemRepository;
     private final ItineraryDayRepository itineraryDayRepository;
@@ -47,6 +48,12 @@ public class ItineraryItemService {
 
     @Transactional
     public ItineraryItemResponse create(Long userId, ItineraryItemCreateRequest request) {
+        return create(userId, request, ADDED_BY_USER);
+    }
+
+    /** @param addedBy USER(사용자가 직접) / AI(AI 추천을 수락해서) */
+    @Transactional
+    public ItineraryItemResponse create(Long userId, ItineraryItemCreateRequest request, String addedBy) {
         tripAccessGuard.requireMember(request.getTripId(), userId);
 
         Trip trip = tripRepository.findByIdAndDeletedAtIsNull(request.getTripId())
@@ -64,7 +71,7 @@ public class ItineraryItemService {
         item.setStayMinutes(request.getStayMinutes());
         item.setTransportMode(request.getTransportMode());
         item.setMemo(request.getMemo());
-        item.setAddedBy(ADDED_BY_USER);
+        item.setAddedBy(addedBy);
         item.setCreatedAt(LocalDateTime.now());
 
         return ItineraryItemResponse.from(itineraryItemRepository.save(item));

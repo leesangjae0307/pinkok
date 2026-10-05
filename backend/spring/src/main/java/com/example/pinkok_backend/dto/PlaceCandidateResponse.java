@@ -26,6 +26,12 @@ public class PlaceCandidateResponse {
     private final BigDecimal confidence;
     /** 좌표를 찾았는지. false면 핀으로 추가할 수 없다 */
     private final boolean mapped;
+    /**
+     * 사람이 한 번 확인하는 게 좋은 후보인지 (신뢰도 0.6 이하).
+     * 지역까지 확인되지 않았거나 이름이 애매하게 맞은 경우라, 앱에서 자동 선택하지 말고
+     * "확인 필요"로 표시하는 용도다.
+     */
+    private final boolean needsReview;
     /** 좌표를 찾았을 때만 채워짐 */
     private final PlaceResponse place;
     /** 이 후보가 나온 스크린샷 주소 (스크린샷 1장으로 요청했을 때만) */
@@ -43,6 +49,9 @@ public class PlaceCandidateResponse {
         this.description = candidate.getDescription();
         this.confidence = candidate.getConfidence();
         this.mapped = candidate.getPlace() != null;
+        this.needsReview = candidate.getPlace() != null
+                && candidate.getConfidence() != null
+                && candidate.getConfidence().compareTo(new BigDecimal("0.600")) <= 0;
         this.place = candidate.getPlace() == null ? null : PlaceResponse.from(candidate.getPlace());
         this.sourceImageUrl = candidate.getSourceImage() == null ? null : candidate.getSourceImage().getFileUrl();
         this.selected = Boolean.TRUE.equals(candidate.getIsSelected());

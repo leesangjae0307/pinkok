@@ -131,6 +131,28 @@ class PlaceCandidateTest {
                 .searchByKeyword(Mockito.anyString(), Mockito.anyInt(), Mockito.anyInt());
     }
 
+    /** 카카오맵이 이런 결과들을 순서대로 돌려준다고 치고 응답을 고정한다 (1등이 엉뚱한 경우를 만들 때 쓴다). */
+    private void kakaoReturns(KakaoKeywordSearchResponse.Document... documents) {
+        KakaoKeywordSearchResponse response = new KakaoKeywordSearchResponse();
+        response.setDocuments(List.of(documents));
+        Mockito.doReturn(response).when(kakaoLocalApiClient)
+                .searchByKeyword(Mockito.anyString(), Mockito.anyInt(), Mockito.anyInt());
+    }
+
+    private static KakaoKeywordSearchResponse.Document document(String id, String placeName, String address,
+                                                                String longitudeX, String latitudeY) {
+        KakaoKeywordSearchResponse.Document document = new KakaoKeywordSearchResponse.Document();
+        document.setId(id);
+        document.setPlaceName(placeName);
+        document.setAddressName(address);
+        document.setRoadAddressName(address);
+        document.setCategoryName("여행 > 관광명소");
+        document.setPlaceUrl("http://place.map.kakao.com/" + id);
+        document.setX(longitudeX);
+        document.setY(latitudeY);
+        return document;
+    }
+
     /** 카카오맵에서 아무것도 못 찾은 경우. */
     private void kakaoFindsNothing() {
         KakaoKeywordSearchResponse response = new KakaoKeywordSearchResponse();
@@ -249,6 +271,65 @@ class PlaceCandidateTest {
         kakaoFinds("3", "한림읍 행정복지센터", "126.23", "33.39");
         assertThat((Double) JsonPath.read(candidates(looseToken, requestExtraction(looseToken)), "$[0].confidence"))
                 .isEqualTo(0.6);
+    }
+
+    @Test
+    @DisplayName("지역이 다른 검색 결과는 채택하지 않는다 - 강릉 '동해바다열차'가 부천 여행사로 매칭되던 문제")
+    void differentRegionResult_isRejected() throws Exception {
+        String token = signupAndLogin("cand11@pinkok.com", "cand11");
+        geminiExtracts(place("동해바다열차", "강원 강릉시 강릉역"));
+        // 검색 1등이 경기 부천의 여행사 — 이름만 비슷하고 지역이 전혀 다르다
+        kakaoReturns(document("1", "퍼시즌투어 동해바다열차", "경기 부천시 원미구", "126.77", "37.50"));
+
+        Long aiRequestId = requestExtraction(token);
+
+        mockMvc.perform(get("/place-candidates").param("aiRequestId", aiRequestId.toString())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].rawName").value("동해바다열차"))
+                // 엉뚱한 지역을 넣느니 "못 찾음"으로 두고 사용자가 직접 검색하게 한다
+                .andExpect(jsonPath("$[0].mapped").value(false))
+                .andExpect(jsonPath("$[0].confidence").value(0.300));
+    }
+
+    @Test
+    @DisplayName("검색 1등이 다른 지역이어도, 뒤에 같은 지역 결과가 있으면 그걸 고른다")
+    void picksResultInTheRightRegion() throws Exception {
+        String token = signupAndLogin("cand12@pinkok.com", "cand12");
+        geminiExtracts(place("동해바다열차", "강원 강릉시 강릉역"));
+        kakaoReturns(
+                document("1", "퍼시즌투어 동해바다열차", "경기 부천시 원미구", "126.77", "37.50"),
+                document("2", "동해바다열차", "강원특별자치도 강릉시 강릉역", "128.88", "37.76"));
+
+        Long aiRequestId = requestExtraction(token);
+
+        mockMvc.perform(get("/place-candidates").param("aiRequestId", aiRequestId.toString())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$[0].mapped").value(true))
+                .andExpect(jsonPath("$[0].place.name").value("동해바다열차"))
+                .andExpect(jsonPath("$[0].place.latitude").value(37.76))
+                .andExpect(jsonPath("$[0].confidence").value(1.000))
+                .andExpect(jsonPath("$[0].needsReview").value(false));
+    }
+
+    @Test
+    @DisplayName("AI가 주소를 안 줬으면 이름이 확실할 때만 채택하고, 신뢰도를 한 단계 낮춘다")
+    void withoutAddress_onlyClearNameMatches() throws Exception {
+        String loose = signupAndLogin("cand13a@pinkok.com", "cand13a");
+        geminiExtracts(place("그 바닷가 근처 카페", ""));
+        kakaoReturns(document("1", "전혀 다른 카페", "서울 강남구", "127.0", "37.5"));
+        mockMvc.perform(get("/place-candidates").param("aiRequestId", requestExtraction(loose).toString())
+                        .header("Authorization", "Bearer " + loose))
+                .andExpect(jsonPath("$[0].mapped").value(false));
+
+        String exact = signupAndLogin("cand13b@pinkok.com", "cand13b");
+        geminiExtracts(place("협재해수욕장", ""));
+        kakaoReturns(document("2", "협재해수욕장", "제주특별자치도 제주시 한림읍", "126.23", "33.39"));
+        mockMvc.perform(get("/place-candidates").param("aiRequestId", requestExtraction(exact).toString())
+                        .header("Authorization", "Bearer " + exact))
+                .andExpect(jsonPath("$[0].mapped").value(true))
+                // 지역을 확인하지 못했으므로 1.0 이 아니라 0.8
+                .andExpect(jsonPath("$[0].confidence").value(0.800));
     }
 
     @Test

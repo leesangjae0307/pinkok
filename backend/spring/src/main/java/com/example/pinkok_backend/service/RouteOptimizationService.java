@@ -73,7 +73,7 @@ public class RouteOptimizationService {
         Map<Long, ItineraryItem> itemById = new HashMap<>();
         items.forEach(i -> itemById.put(i.getId(), i));
 
-        int beforeDistance = currentTotalDistanceM(items);
+        int beforeDistance = baselineDistanceM(items, days.size(), redistribute);
         List<RouteOptimizationResult.Day> resultDays = new ArrayList<>();
         List<Long> untouched = new ArrayList<>();
 
@@ -216,8 +216,24 @@ public class RouteOptimizationService {
         return new RouteOptimizationResult.Day(day.getId(), day.getDayNumber(), totalDistance, totalDuration, stops);
     }
 
-    /** 지금 일정(날짜별 현재 순서) 그대로 이동할 때의 총 거리. 날짜 미배정 핀은 제외. */
-    private int currentTotalDistanceM(List<ItineraryItem> items) {
+    /**
+     * "최적화 안 했을 때" 총 이동거리. 최적화 후 거리와 <b>같은 핀들</b>을 대상으로 비교해야 의미가 있다.
+     *
+     * <ul>
+     *   <li>순서만 바꾸는 모드(redistribute=false), 또는 모든 핀이 이미 날짜에 배정돼 있으면:
+     *       지금 일정(날짜별 현재 순서) 그대로의 거리.</li>
+     *   <li>날짜 미배정 핀이 있는 채로 전체를 다시 나누는 경우: 지금 일정에는 그 핀들의 이동이 없어서 그대로 비교하면
+     *       "최적화했더니 더 멀어졌다"로 보인다. 그래서 현재 순서(배정된 핀 → 미배정 핀 순)를 일자 수만큼 균등하게 잘라 걸은 거리를 쓴다.</li>
+     * </ul>
+     */
+    private int baselineDistanceM(List<ItineraryItem> items, int dayCount, boolean redistribute) {
+        boolean anyUnassigned = items.stream().anyMatch(i -> i.getDay() == null);
+        if (redistribute && anyUnassigned) {
+            List<Point> naiveOrder = new ArrayList<>();
+            items.stream().filter(i -> i.getDay() != null).forEach(i -> naiveOrder.add(toPoint(i)));
+            items.stream().filter(i -> i.getDay() == null).forEach(i -> naiveOrder.add(toPoint(i)));
+            return RouteOptimizer.splitIntoDays(naiveOrder, dayCount).stream().mapToInt(RouteOptimizer::pathLengthM).sum();
+        }
         Map<Long, List<Point>> byDay = new java.util.LinkedHashMap<>();
         for (ItineraryItem item : items) { // 날짜·순서대로 정렬돼 들어온다
             if (item.getDay() != null) {

@@ -71,6 +71,7 @@ public class AiRequestService {
     private final GeminiJobRunner geminiJobRunner;
     private final FileService fileService;
     private final PlaceCandidateService placeCandidateService;
+    private final NotificationService notificationService;
     private final TaskExecutor aiTaskExecutor;
     private final ObjectMapper objectMapper;
 
@@ -81,6 +82,7 @@ public class AiRequestService {
                             GeminiJobRunner geminiJobRunner,
                             FileService fileService,
                             PlaceCandidateService placeCandidateService,
+                            NotificationService notificationService,
                             TaskExecutor aiTaskExecutor,
                             ObjectMapper objectMapper) {
         this.aiRequestRepository = aiRequestRepository;
@@ -90,6 +92,7 @@ public class AiRequestService {
         this.geminiJobRunner = geminiJobRunner;
         this.fileService = fileService;
         this.placeCandidateService = placeCandidateService;
+        this.notificationService = notificationService;
         this.aiTaskExecutor = aiTaskExecutor;
         this.objectMapper = objectMapper;
     }
@@ -175,11 +178,21 @@ public class AiRequestService {
             return;
         }
 
-        if (geminiJobRunner.run(aiRequest, parts)) {
+        boolean succeeded = geminiJobRunner.run(aiRequest, parts);
+        if (succeeded) {
             // 여기서 뽑은 건 장소 "이름"까지다. 카카오맵 좌표로 바꿔 후보로 저장하는 건 지은 담당(PlaceCandidateService).
             // 카카오맵이 죽어도 이미 돈을 내고 받아온 이 AI 결과까지 실패가 되면 안 되므로, 예외를 삼키는 메서드를 쓴다.
             placeCandidateService.createFromQuietly(aiRequest.getId());
         }
+
+        // 추출은 수십 초가 걸려서 그 사이 앱을 꺼뒀을 수 있다. 성공이든 실패든 결과를 알려준다.
+        // (후보까지 다 만든 뒤에 보내야, 알림을 눌렀을 때 바로 목록이 보인다)
+        notificationService.notify(aiRequest.getUser(),
+                NotificationService.TYPE_AI_EXTRACT_DONE,
+                succeeded ? "장소 추출이 끝났어요" : "장소 추출에 실패했어요",
+                succeeded ? "찾은 장소를 확인하고 지도에 추가해보세요." : "잠시 후 다시 시도해주세요.",
+                NotificationService.TARGET_AI_REQUEST,
+                aiRequest.getId());
     }
 
     /**

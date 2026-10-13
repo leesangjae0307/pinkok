@@ -27,15 +27,18 @@ public class TripService {
     private final TripMemberRepository tripMemberRepository;
     private final UserRepository userRepository;
     private final TripAccessGuard tripAccessGuard;
+    private final TripInvitationService tripInvitationService;
 
     public TripService(TripRepository tripRepository,
                        TripMemberRepository tripMemberRepository,
                        UserRepository userRepository,
-                       TripAccessGuard tripAccessGuard) {
+                       TripAccessGuard tripAccessGuard,
+                       TripInvitationService tripInvitationService) {
         this.tripRepository = tripRepository;
         this.tripMemberRepository = tripMemberRepository;
         this.userRepository = userRepository;
         this.tripAccessGuard = tripAccessGuard;
+        this.tripInvitationService = tripInvitationService;
     }
 
     /** 여행을 만들면 만든 사람이 자동으로 OWNER 로 등록된다. */
@@ -67,6 +70,9 @@ public class TripService {
         owner.setRole(OWNER);
         owner.setJoinedAt(now);
         tripMemberRepository.save(owner);
+
+        // 같이 갈 사람을 적어 보냈으면 초대장을 보낸다. 수락해야 팀원이 되므로 지금은 아직 나 혼자다.
+        tripInvitationService.inviteAll(trip, user, request.getInviteeUsernames());
 
         return TripResponse.of(trip, OWNER);
     }

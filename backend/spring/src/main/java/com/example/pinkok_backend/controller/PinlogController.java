@@ -6,7 +6,12 @@ import com.example.pinkok_backend.dto.PinlogResponse;
 import com.example.pinkok_backend.security.CurrentUserId;
 import com.example.pinkok_backend.service.PinlogService;
 import jakarta.validation.Valid;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -63,6 +69,28 @@ public class PinlogController {
     @GetMapping
     public List<PinlogResponse> list(@CurrentUserId Long userId, @RequestParam Long tripId) {
         return pinlogService.list(tripId, userId);
+    }
+
+    /**
+     * 완성된 영상 내려받기. 앱은 이걸 받아서 폰 갤러리에 저장한다.
+     *
+     * <p>재생은 {@code videoUrl} 로 바로 할 수 있지만, 저장은 이 API 를 쓰는 게 좋다.
+     * 팀원인지 확인하고, 갤러리에서 알아볼 수 있는 파일 이름
+     * ({@code PinKok_제주도여행_20261013.mp4})을 붙여서 내려준다.
+     */
+    @GetMapping("/{pinlogId}/download")
+    public ResponseEntity<Resource> download(@CurrentUserId Long userId, @PathVariable Long pinlogId) {
+        PinlogService.Download download = pinlogService.download(pinlogId, userId);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("video/mp4"))
+                .contentLength(download.size())
+                // 한글 파일 이름이 깨지지 않도록 UTF-8 로 적는다 (RFC 5987)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment()
+                                .filename(download.fileName(), StandardCharsets.UTF_8)
+                                .build().toString())
+                .body(new InputStreamResource(download.content()));
     }
 
     /** 만든 사람만 삭제할 수 있다. 합성된 영상 파일도 같이 지워진다. */

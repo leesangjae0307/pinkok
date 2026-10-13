@@ -26,8 +26,19 @@ public interface FileStorage {
     /** 저장해둔 파일이 실제로 있는지 확인한다. */
     boolean exists(String path);
 
+    /** 파일 크기(byte). 내려줄 때 전체 크기를 알려주면 앱이 진행률을 보여줄 수 있다. */
+    long size(String path) throws IOException;
+
     /** 저장해둔 파일 내용을 읽는다 (AI 분석용으로 이미지를 바이트로 넘길 때 등). */
     byte[] read(String path) throws IOException;
+
+    /**
+     * 저장해둔 파일을 스트림으로 연다. 다 쓴 뒤 닫는 것은 부르는 쪽 책임이다.
+     *
+     * <p>영상처럼 큰 파일을 내려줄 때 쓴다. read() 로 통째로 읽으면 수십 MB 가 메모리에 올라가서,
+     * 여러 명이 동시에 받으면 서버가 버거워진다.
+     */
+    InputStream openStream(String path) throws IOException;
 
     /**
      * save 가 돌려준 주소를 다시 저장 경로로 바꾼다.

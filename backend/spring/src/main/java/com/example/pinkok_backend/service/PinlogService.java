@@ -67,6 +67,7 @@ public class PinlogService {
     private static final int MAX_CLIPS = 60;
     private static final String FOLDER = "pinlogs/";
     private static final DateTimeFormatter FOLDER_FORMAT = DateTimeFormatter.ofPattern("yyyy/MM");
+    private static final DateTimeFormatter NAME_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final PinlogRepository pinlogRepository;
     private final PinlogClipRepository pinlogClipRepository;
@@ -377,6 +378,56 @@ public class PinlogService {
                 .map(media -> ClipOptionResponse.of(
                         media.get(0).getDiary().getItineraryItem(), sortForDisplay(media, userId), userId))
                 .toList();
+    }
+
+    /**
+     * 완성된 영상을 내려받는다. 앱은 이걸 받아 폰 갤러리에 저장한다.
+     *
+     * <p>영상 파일 자체는 /files/... 주소로도 열리지만(재생용), 다운로드는 이 API 로 받는 게 낫다.
+     * <ul>
+     *   <li>팀원인지 확인한다 — 주소만 알면 누구나 받을 수 있는 상태를 막는다</li>
+     *   <li>파일 이름을 "PinKok_제주도여행_20261013.mp4" 처럼 붙여준다. 갤러리에 UUID 이름으로
+     *       저장되면 나중에 뭐가 뭔지 알 수 없다</li>
+     *   <li>아직 합성 중이거나 실패한 PinLog 는 404 로 막는다</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public Download download(Long pinlogId, Long userId) {
+        Pinlog pinlog = getOrThrow(pinlogId);
+        tripAccessGuard.requireMember(pinlog.getTrip().getId(), userId);
+
+        if (!STATUS_DONE.equals(pinlog.getStatus()) || pinlog.getVideoUrl() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "아직 완성되지 않은 PinLog 입니다. (status=" + pinlog.getStatus() + ")");
+        }
+
+        String path = fileStorage.pathOf(pinlog.getVideoUrl());
+        if (path == null || !fileStorage.exists(path)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "영상 파일을 찾을 수 없습니다.");
+        }
+
+        try {
+            // 크기를 같이 주면 앱이 진행률("12MB 중 3MB")을 보여줄 수 있다
+            return new Download(fileStorage.openStream(path), downloadNameOf(pinlog), fileStorage.size(path));
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "영상을 읽지 못했습니다.", e);
+        }
+    }
+
+    /** 갤러리에서 알아볼 수 있는 파일 이름. 파일 이름에 쓸 수 없는 글자는 빼준다. */
+    private String downloadNameOf(Pinlog pinlog) {
+        String base = pinlog.getTitle() == null || pinlog.getTitle().isBlank()
+                ? pinlog.getTrip().getTitle()
+                : pinlog.getTitle();
+        String safe = base.replaceAll("[\\\\/:*?\"<>|]", "").replaceAll("\\s+", "_").trim();
+        String date = pinlog.getCompletedAt() == null
+                ? LocalDate.now().format(NAME_DATE_FORMAT)
+                : pinlog.getCompletedAt().format(NAME_DATE_FORMAT);
+        return "PinKok_" + safe + "_" + date + ".mp4";
+    }
+
+    /** 내려받을 영상. 스트림은 받은 쪽에서 다 쓰고 닫는다. */
+    public record Download(InputStream content, String fileName, long size) {
     }
 
     @Transactional

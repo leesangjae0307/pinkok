@@ -2,9 +2,7 @@ package com.example.pinkok_backend.service;
 
 import com.example.pinkok_backend.dto.SignupRequest;
 import com.example.pinkok_backend.entity.Avatar;
-import com.example.pinkok_backend.entity.TripMember;
 import com.example.pinkok_backend.entity.User;
-import com.example.pinkok_backend.repository.TripMemberRepository;
 import com.example.pinkok_backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -13,30 +11,28 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Objects;
 
 @Service
 public class UserService {
 
-    private static final String OWNER = "OWNER";
     private static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AvatarService avatarService;
     private final FileService fileService;
-    private final TripMemberRepository tripMemberRepository;
+    private final TripService tripService;
     private final RefreshTokenService refreshTokenService;
 
     public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder,
                        AvatarService avatarService, FileService fileService,
-                       TripMemberRepository tripMemberRepository, RefreshTokenService refreshTokenService) {
+                       TripService tripService, RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.avatarService = avatarService;
         this.fileService = fileService;
-        this.tripMemberRepository = tripMemberRepository;
+        this.tripService = tripService;
         this.refreshTokenService = refreshTokenService;
     }
 
@@ -125,9 +121,10 @@ public class UserService {
      * 같이 간 사람의 여행 화면과 PinLog 영상이 깨진다. 그래서 기록은 남기고,
      * 이메일·닉네임·프로필 사진 같은 <b>개인을 알아볼 수 있는 정보만</b> 지운다.
      *
-     * <p>만든 여행(OWNER)이 있으면 탈퇴를 막는다. 주인이 사라진 여행은 아무도 수정·삭제할 수
-     * 없게 되기 때문이다. 먼저 그 여행을 삭제하고 탈퇴하면 된다.
-     * (주인을 다른 팀원에게 넘기는 기능은 아직 없다)
+     * <p>내가 주인이던 여행은 <b>닉네임 가나다 순 첫 번째 팀원에게 자동으로 넘어간다.</b>
+     * 떠나는 사람에게 "주인을 직접 넘기고 오라"고 요구하면 번거롭고, 주인 없는 여행을 남기면
+     * 아무도 그 여행을 수정·삭제할 수 없게 되기 때문이다. 혼자 쓰던 여행은 넘길 사람이 없어
+     * 함께 삭제된다. (직접 고르고 싶으면 PATCH /trips/{id}/owner 로 미리 넘기면 된다)
      */
     @Transactional
     public void delete(Long userId, String password) {
@@ -137,14 +134,8 @@ public class UserService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "비밀번호가 올바르지 않습니다.");
         }
 
-        List<TripMember> ownedTrips = tripMemberRepository.findAllByUser_IdOrderByJoinedAtDesc(userId).stream()
-                .filter(member -> OWNER.equals(member.getRole()))
-                .filter(member -> member.getTrip().getDeletedAt() == null)
-                .toList();
-        if (!ownedTrips.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "내가 만든 여행이 " + ownedTrips.size() + "개 있습니다. 먼저 정리한 뒤에 탈퇴해주세요.");
-        }
+        // 내가 주인이던 여행은 남은 팀원에게 넘기고, 혼자 쓰던 여행은 같이 지운다
+        tripService.cleanupOwnedTripsFor(userId);
 
         String oldProfileImageUrl = user.getProfileImageUrl();
 

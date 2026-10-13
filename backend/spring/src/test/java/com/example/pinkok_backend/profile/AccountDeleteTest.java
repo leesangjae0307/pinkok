@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -37,6 +38,9 @@ class AccountDeleteTest {
 
     @Autowired
     DatabaseCleaner databaseCleaner;
+
+    @Autowired
+    com.example.pinkok_backend.repository.TripRepository tripRepository;
 
     @BeforeEach
     void setUp() {
@@ -119,26 +123,70 @@ class AccountDeleteTest {
     }
 
     @Test
-    @DisplayName("내가 만든 여행이 남아 있으면 탈퇴를 막는다 (409)")
-    void ownerCannotWithdraw() throws Exception {
+    @DisplayName("혼자 쓰던 여행은 탈퇴할 때 같이 삭제된다 (넘길 사람이 없으므로)")
+    void soloTripIsDeleted() throws Exception {
         String token = signup("bye3", "주인장");
 
         MvcResult trip = mockMvc.perform(post("/trips")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"title\":\"내가 만든 여행\"}"))
+                        .content("{\"title\":\"혼자 간 여행\"}"))
                 .andExpect(status().isCreated())
                 .andReturn();
         Number tripId = JsonPath.read(trip.getResponse().getContentAsString(), "$.id");
 
-        MvcResult blocked = withdraw(token, "pass1234");
-        assertThat(blocked.getResponse().getStatus()).isEqualTo(409);
-        assertThat(blocked.getResponse().getContentAsString()).contains("먼저 정리한 뒤에");
-
-        // 여행을 지우면 탈퇴할 수 있다
-        mockMvc.perform(delete("/trips/" + tripId).header("Authorization", "Bearer " + token))
-                .andExpect(status().isNoContent());
         assertThat(withdraw(token, "pass1234").getResponse().getStatus()).isEqualTo(204);
+
+        // 넘길 사람이 없었으므로 여행도 함께 지워진다 (소프트 삭제)
+        assertThat(tripRepository.findByIdAndDeletedAtIsNull(tripId.longValue())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("주인이 탈퇴하면 닉네임 가나다 순 첫 번째 팀원에게 주인이 넘어간다")
+    void ownerIsHandedOverOnWithdraw() throws Exception {
+        String owner = signup("owner3b", "주인장");
+        signup("mate3b1", "하늘");
+        signup("mate3b2", "가람");
+
+        MvcResult trip = mockMvc.perform(post("/trips")
+                        .header("Authorization", "Bearer " + owner)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"같이 간 여행\",\"inviteeUsernames\":[\"mate3b1\",\"mate3b2\"]}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        Number tripId = JsonPath.read(trip.getResponse().getContentAsString(), "$.id");
+
+        String sky = acceptInvitation("mate3b1");
+        String garam = acceptInvitation("mate3b2");
+
+        assertThat(withdraw(owner, "pass1234").getResponse().getStatus()).isEqualTo(204);
+
+        // "가람" 이 "하늘" 보다 앞서므로 가람이 새 주인이 된다
+        mockMvc.perform(get("/trips/" + tripId).header("Authorization", "Bearer " + garam))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.myRole").value("OWNER"));
+        mockMvc.perform(get("/trips/" + tripId).header("Authorization", "Bearer " + sky))
+                .andExpect(jsonPath("$.myRole").value("MEMBER"));
+
+        // 새 주인은 주인만 할 수 있는 일(수정)을 할 수 있다
+        mockMvc.perform(patch("/trips/" + tripId)
+                        .header("Authorization", "Bearer " + garam)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"이름 바꿈\"}"))
+                .andExpect(status().isOk());
+    }
+
+    /** 받은 초대를 수락하고 토큰을 돌려준다. */
+    private String acceptInvitation(String username) throws Exception {
+        String token = login(username);
+        MvcResult invitations = mockMvc.perform(get("/trip-invitations")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn();
+        Number invitationId = JsonPath.read(invitations.getResponse().getContentAsString(), "$[0].id");
+        mockMvc.perform(post("/trip-invitations/" + invitationId + "/accept")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        return token;
     }
 
     @Test

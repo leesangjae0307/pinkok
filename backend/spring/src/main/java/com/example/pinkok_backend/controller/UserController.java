@@ -1,5 +1,6 @@
 package com.example.pinkok_backend.controller;
 
+import com.example.pinkok_backend.dto.AccountDeleteRequest;
 import com.example.pinkok_backend.dto.AvatarSelectionRequest;
 import com.example.pinkok_backend.dto.NicknameUpdateRequest;
 import com.example.pinkok_backend.dto.ProfileImageUpdateRequest;
@@ -12,6 +13,7 @@ import com.example.pinkok_backend.service.TripInvitationService;
 import com.example.pinkok_backend.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,6 +39,19 @@ public class UserController {
         this.userRepository = userRepository;
         this.userService = userService;
         this.tripInvitationService = tripInvitationService;
+    }
+
+    /**
+     * 회원 탈퇴. 되돌릴 수 없어서 비밀번호를 한 번 더 확인한다.
+     *
+     * <p>계정과 개인정보는 지우지만 남긴 기록·영상은 남는다 — 여행을 함께 쓴 팀원의 화면과
+     * PinLog 가 깨지지 않게 하기 위해서다. 내가 만든 여행이 남아 있으면 409 로 막는다.
+     */
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> delete(@CurrentUserId Long userId,
+                                       @Valid @RequestBody AccountDeleteRequest request) {
+        userService.delete(userId, request.getPassword());
+        return ResponseEntity.noContent().build();
     }
 
     /**

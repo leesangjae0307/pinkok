@@ -68,6 +68,11 @@ public class RefreshTokenService {
         RefreshToken existing = refreshTokenRepository.findByTokenHash(hash)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, INVALID_OR_EXPIRED));
 
+        if (existing.getUser().getDeletedAt() != null) {
+            // 탈퇴한 계정 — 토큰이 아직 안 끊겼더라도 재발급은 막는다
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, INVALID_OR_EXPIRED);
+        }
+
         LocalDateTime now = LocalDateTime.now();
 
         if (existing.getRevokedAt() != null) {
@@ -96,6 +101,16 @@ public class RefreshTokenService {
                         refreshTokenRepository.save(token);
                     }
                 });
+    }
+
+    /**
+     * 그 사람의 모든 로그인 세션을 끊는다 (탈퇴할 때). 기기 여러 대에 로그인돼 있을 수 있다.
+     */
+    @Transactional
+    public void revokeAllForUser(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        refreshTokenRepository.findAllByUser_IdAndRevokedAtIsNull(userId)
+                .forEach(token -> token.setRevokedAt(now));
     }
 
     private void revokeAllForUser(Long userId, LocalDateTime now) {

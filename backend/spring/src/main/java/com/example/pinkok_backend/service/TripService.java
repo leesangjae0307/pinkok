@@ -6,6 +6,7 @@ import com.example.pinkok_backend.dto.TripUpdateRequest;
 import com.example.pinkok_backend.entity.Trip;
 import com.example.pinkok_backend.entity.TripMember;
 import com.example.pinkok_backend.entity.User;
+import com.example.pinkok_backend.repository.ItineraryItemRepository;
 import com.example.pinkok_backend.repository.TripMemberRepository;
 import com.example.pinkok_backend.repository.TripRepository;
 import com.example.pinkok_backend.repository.UserRepository;
@@ -17,6 +18,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class TripService {
@@ -27,15 +30,18 @@ public class TripService {
     private final TripMemberRepository tripMemberRepository;
     private final UserRepository userRepository;
     private final TripAccessGuard tripAccessGuard;
+    private final ItineraryItemRepository itineraryItemRepository;
 
     public TripService(TripRepository tripRepository,
                        TripMemberRepository tripMemberRepository,
                        UserRepository userRepository,
-                       TripAccessGuard tripAccessGuard) {
+                       TripAccessGuard tripAccessGuard,
+                       ItineraryItemRepository itineraryItemRepository) {
         this.tripRepository = tripRepository;
         this.tripMemberRepository = tripMemberRepository;
         this.userRepository = userRepository;
         this.tripAccessGuard = tripAccessGuard;
+        this.itineraryItemRepository = itineraryItemRepository;
     }
 
     /** 여행을 만들면 만든 사람이 자동으로 OWNER 로 등록된다. */
@@ -68,15 +74,22 @@ public class TripService {
         owner.setJoinedAt(now);
         tripMemberRepository.save(owner);
 
-        return TripResponse.of(trip, OWNER);
+        return TripResponse.of(trip, OWNER, 0); // 방금 만든 여행이라 핀이 없다
     }
 
     /** 내가 팀원으로 속한 여행 목록 (만든 것 + 초대받아 들어간 것 전부). */
     @Transactional(readOnly = true)
     public List<TripResponse> listMine(Long userId) {
-        return tripMemberRepository.findAllByUser_IdOrderByJoinedAtDesc(userId).stream()
+        List<TripMember> memberships = tripMemberRepository.findAllByUser_IdOrderByJoinedAtDesc(userId).stream()
                 .filter(member -> member.getTrip().getDeletedAt() == null)
-                .map(member -> TripResponse.of(member.getTrip(), member.getRole()))
+                .toList();
+        // 핀 개수는 여행마다 따로 세지 않고 한 번에 묶어서 센다 (N+1 방지)
+        Map<Long, Integer> pinCounts = memberships.isEmpty() ? Map.of()
+                : itineraryItemRepository.countByTripIds(memberships.stream().map(m -> m.getTrip().getId()).toList()).stream()
+                        .collect(Collectors.toMap(ItineraryItemRepository.TripPinCount::getTripId, c -> c.getCnt().intValue()));
+        return memberships.stream()
+                .map(member -> TripResponse.of(member.getTrip(), member.getRole(),
+                        pinCounts.getOrDefault(member.getTrip().getId(), 0)))
                 .toList();
     }
 
@@ -87,7 +100,7 @@ public class TripService {
         String role = tripMemberRepository.findByTrip_IdAndUser_Id(tripId, userId)
                 .map(TripMember::getRole)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "이 여행에 접근할 권한이 없습니다."));
-        return TripResponse.of(trip, role);
+        return TripResponse.of(trip, role, itineraryItemRepository.countByTrip_Id(tripId));
     }
 
     /** 여행 정보 수정은 OWNER 만 할 수 있다. */
@@ -106,7 +119,7 @@ public class TripService {
         if (request.getIsPublic() != null) trip.setIsPublic(request.getIsPublic());
         trip.setUpdatedAt(LocalDateTime.now());
 
-        return TripResponse.of(tripRepository.save(trip), OWNER);
+        return TripResponse.of(tripRepository.save(trip), OWNER, itineraryItemRepository.countByTrip_Id(tripId));
     }
 
     /** 삭제는 OWNER 만, 소프트 삭제(deleted_at) 로 처리한다. */

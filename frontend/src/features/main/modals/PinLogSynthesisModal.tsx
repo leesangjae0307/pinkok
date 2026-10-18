@@ -20,8 +20,8 @@ interface PinLogSynthesisModalProps {
 type PinLogStatus = 'IDLE' | 'QUEUED' | 'PROCESSING' | 'DONE' | 'FAILED';
 
 interface ClipOption {
-  diaryMediaId: string;
-  placeId: string;
+  diaryMediaId: number;
+  placeId: number;
   thumbnailUrl: string;
   durationMs: number;
   author: { nickname: string; avatar: AvatarSource };
@@ -29,7 +29,7 @@ interface ClipOption {
 }
 
 export interface SynthesizedVlog {
-  id: string;
+  id: number;
   title: string;
   totalDuration: number;
   clipsCount: number;
@@ -77,8 +77,8 @@ export default function PinLogSynthesisModal({
     [records, currentUserAvatarUrl],
   );
 
-  const [selectedMedia, setSelectedMedia] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
+  const [selectedMedia, setSelectedMedia] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
     orderedPlaces.forEach((place) => {
       const options = clipOptions.filter((o) => o.placeId === place.id);
       const preferred = options.find((o) => o.mine) || options[0];
@@ -88,7 +88,7 @@ export default function PinLogSynthesisModal({
   });
   const [status, setStatus] = useState<PinLogStatus>('IDLE');
   const [pollCount, setPollCount] = useState(0);
-  const [pinLogId, setPinLogId] = useState<string | null>(null);
+  const [pinLogId, setPinLogId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [result, setResult] = useState<SynthesizedVlog | null>(null);
 
@@ -103,7 +103,7 @@ export default function PinLogSynthesisModal({
 
   const finishGeneration = () => {
     const completed: SynthesizedVlog = {
-      id: pinLogId || `pinlog-${Date.now()}`,
+      id: pinLogId ?? Date.now(),
       title: '제주 시그니처 가로형 PinLog',
       totalDuration: Number((totalDurationMs / 1000).toFixed(1)),
       clipsCount: selectedOptions.length,
@@ -149,7 +149,7 @@ export default function PinLogSynthesisModal({
       return;
     }
     // POST /pinlogs { tripId, clips: [{ diaryMediaId }] }
-    setPinLogId(`pinlog-${Date.now()}`);
+    setPinLogId(Date.now());
     setPollCount(0);
     setStatus('QUEUED');
   };

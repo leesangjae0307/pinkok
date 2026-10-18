@@ -10,6 +10,9 @@ import avatarPinkCamera from '../../assets/images/avatar-pink-camera.png';
 import avatarMapPhone from '../../assets/images/avatar-map-phone.png';
 import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
+import { logout } from '../../api/authApi';
+import { errorMessage } from '../../api/axios';
+import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
   INITIAL_PLACE_RECORDS,
   INITIAL_TRIPS,
@@ -26,17 +29,17 @@ import type { SynthesizedVlog } from './modals/PinLogSynthesisModal';
 export type NotificationType = 'TRIP_INVITED' | 'TRIP_REMINDER' | 'TRIP_PLACE_ADDED';
 
 export interface NotificationItem {
-  id: string;
+  id: number;
   type: NotificationType;
   targetType: 'INVITATION' | 'TRIP';
-  targetId: string;
+  targetId: number;
   message: string;
   createdAt: string;
   read: boolean;
 }
 
 export interface TripInvitation {
-  id: string;
+  id: number;
   inviterName: string;
   inviterAvatar: string;
   tripTitle: string;
@@ -56,28 +59,28 @@ export interface ProfileAvatar {
 
 const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
-    id: 'notification-invite-jeju',
+    id: 1,
     type: 'TRIP_INVITED',
     targetType: 'INVITATION',
-    targetId: 'invitation-jeju',
+    targetId: 1,
     message: "'감지은'님이 '제주도 여행'에 초대했어요 ✉️",
     createdAt: '방금 전',
     read: false,
   },
   {
-    id: 'notification-trip-reminder',
+    id: 2,
     type: 'TRIP_REMINDER',
     targetType: 'TRIP',
-    targetId: 'jeju-2026',
+    targetId: 1,
     message: "'제주도 여행' D-1입니다. 핀로그를 작성해 보세요! 🎬",
     createdAt: '2시간 전',
     read: false,
   },
   {
-    id: 'notification-system',
+    id: 3,
     type: 'TRIP_PLACE_ADDED',
     targetType: 'TRIP',
-    targetId: 'tokyo-2026',
+    targetId: 2,
     message: '도쿄 여행에 새 장소 3개가 추가되었어요.',
     createdAt: '어제',
     read: true,
@@ -86,7 +89,7 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
 
 const INITIAL_TRIP_INVITATIONS: TripInvitation[] = [
   {
-    id: 'invitation-jeju',
+    id: 1,
     inviterName: '감지은',
     inviterAvatar: '🎀',
     tripTitle: '제주도 여행',
@@ -95,19 +98,18 @@ const INITIAL_TRIP_INVITATIONS: TripInvitation[] = [
 ];
 
 const INVITED_JEJU_TRIP: TripFolder = {
-  id: 'invited-jeju-2026',
+  id: 4,
   title: '제주도 여행 ✈️',
   date: '2026.10.12 - 10.15',
   dDay: 'D-28',
   image: 'https://images.unsplash.com/photo-1548115184-bc6544d06a58?auto=format&fit=crop&w=600&q=80',
   placesCount: 6,
-  isLiked: true,
   tag: '팀여행',
 };
 
 export const INITIAL_EXTRACTED_PLACES: ExtractedPlace[] = [
   {
-    id: 'ext-cafe',
+    id: 101,
     name: '앤트러사이트 한림점',
     category: '제주 / 감성 베이커리 카페',
     rating: 4.9,
@@ -123,7 +125,7 @@ export const INITIAL_EXTRACTED_PLACES: ExtractedPlace[] = [
     confidence: 98,
   },
   {
-    id: 'ext-beach',
+    id: 102,
     name: '협재해수욕장',
     category: '제주 / 해변 · 자연 명소',
     rating: 4.8,
@@ -139,7 +141,7 @@ export const INITIAL_EXTRACTED_PLACES: ExtractedPlace[] = [
     confidence: 95,
   },
   {
-    id: 'ext-sunset',
+    id: 103,
     name: '비양도 석양 포인트',
     category: '제주 / 전망대 후보',
     rating: 4.6,
@@ -174,19 +176,19 @@ export const TRAVEL_TASTES = [
 
 export { avatarSilverBucket };
 
-function useAppState() {
+function useAppState(onLogout: () => void) {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [trips, setTrips] = useState<TripFolder[]>(INITIAL_TRIPS);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [tripInvitations, setTripInvitations] = useState<TripInvitation[]>(INITIAL_TRIP_INVITATIONS);
-  const [focusedInvitationId, setFocusedInvitationId] = useState<string | null>(null);
+  const [focusedInvitationId, setFocusedInvitationId] = useState<number | null>(null);
   const [isTripMapOpen, setIsTripMapOpen] = useState(false);
   const [activeTrip, setActiveTrip] = useState<TripFolder>(INITIAL_TRIPS[0]);
   const [tripSearchQuery, setTripSearchQuery] = useState('');
   const [recommendationPeople, setRecommendationPeople] = useState('2');
-  const [recommendationStyle, setRecommendationStyle] = useState('힐링');
+  const [recommendationStyle, setRecommendationStyle] = useState<string>(TRAVEL_STYLES[0].code);
   const [recommendationRegion, setRecommendationRegion] = useState('제주');
   const [inviteTrip, setInviteTrip] = useState<TripFolder | null>(null);
 
@@ -199,12 +201,12 @@ function useAppState() {
   const [inputUrl, setInputUrl] = useState('https://instagram.com/p/C_jeju_cafe_art');
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedPlaces, setExtractedPlaces] = useState<ExtractedPlace[]>(INITIAL_EXTRACTED_PLACES);
-  const [selectedExtractedPlaceIds, setSelectedExtractedPlaceIds] = useState<string[]>(
+  const [selectedExtractedPlaceIds, setSelectedExtractedPlaceIds] = useState<number[]>(
     INITIAL_EXTRACTED_PLACES.map((p) => p.id),
   );
   const [isTripPickerOpen, setIsTripPickerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [selectedTripForExtract, setSelectedTripForExtract] = useState('jeju-2026');
+  const [selectedTripForExtract, setSelectedTripForExtract] = useState(1);
 
   // 여행 지도 & 팀 기록
   const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem>(MAP_PLACES[0]);
@@ -241,6 +243,16 @@ function useAppState() {
     toastTimer.current = setTimeout(() => setToastMessage(null), 2800);
   };
 
+  // 서버 호출이 실패해도 토큰은 지워져 있으므로 로그인 화면으로 보낸다.
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      showToast(errorMessage(e, '로그아웃 처리 중 문제가 있었지만 기기에서는 로그아웃했어요.'));
+    }
+    onLogout();
+  };
+
   // 장소 기록 저장 (1인 1기록 규칙)
   const handleSavePlaceRecord = (record: PlaceRecord) => {
     setPlaceRecords((prev) => {
@@ -255,7 +267,7 @@ function useAppState() {
     showToast('장소 기록이 성공적으로 저장되었습니다! 📍');
   };
 
-  const handleDeletePlaceRecord = (recordId: string) => {
+  const handleDeletePlaceRecord = (recordId: number) => {
     setPlaceRecords((prev) => prev.filter((r) => r.id !== recordId));
     showToast('장소 기록이 삭제되었습니다.');
   };
@@ -278,7 +290,7 @@ function useAppState() {
     setIsExtracting(true);
     setTimeout(() => {
       setIsExtracting(false);
-      const refreshed = INITIAL_EXTRACTED_PLACES.map((p) => ({ ...p, id: `${p.id}-${Date.now()}` }));
+      const refreshed = INITIAL_EXTRACTED_PLACES.map((p) => ({ ...p, id: Date.now() + p.id }));
       setExtractedPlaces(refreshed);
       setSelectedExtractedPlaceIds(refreshed.map((p) => p.id));
       setIsTripPickerOpen(false);
@@ -286,13 +298,13 @@ function useAppState() {
     }, 2000);
   };
 
-  const handleToggleExtractedPlace = (placeId: string) => {
+  const handleToggleExtractedPlace = (placeId: number) => {
     setSelectedExtractedPlaceIds((cur) =>
       cur.includes(placeId) ? cur.filter((id) => id !== placeId) : [...cur, placeId],
     );
   };
 
-  const handleAddPlaceToTrip = (tripId: string) => {
+  const handleAddPlaceToTrip = (tripId: number) => {
     const targetTrip = trips.find((t) => t.id === tripId);
     const count = selectedExtractedPlaceIds.length;
     if (!count) return;
@@ -393,7 +405,9 @@ function useAppState() {
   };
 
   const handleAiTripRecommendation = () => {
-    setInputUrl(`${recommendationPeople}명 · ${recommendationRegion} · ${recommendationStyle} 여행 추천`);
+    setInputUrl(
+      `${recommendationPeople}명 · ${recommendationRegion} · ${travelStyleLabel(recommendationStyle)} 여행 추천`,
+    );
     setActiveTab('extract');
     showToast('선택한 조건으로 AI 추천 장소를 준비했어요.');
   };
@@ -458,6 +472,7 @@ function useAppState() {
     handleRejectInvitation,
     handleOptimizeRoute,
     handleAiTripRecommendation,
+    handleLogout,
   };
 }
 
@@ -465,9 +480,9 @@ export type AppState = ReturnType<typeof useAppState>;
 
 const AppContext = createContext<AppState | null>(null);
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
+export function AppProvider({ children, onLogout }: { children: React.ReactNode; onLogout: () => void }) {
   // 웹 원본과 같은 단일 상태 구조 (나중에 Zustand 스토어로 옮기기 쉬운 형태)
-  const state = useAppState();
+  const state = useAppState(onLogout);
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
 }
 

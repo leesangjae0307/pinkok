@@ -86,7 +86,7 @@ export default function TripMapView() {
   const teamRecordCounts = placeRecords.reduce((acc, r) => {
     acc[r.pinId] = (acc[r.pinId] || 0) + 1;
     return acc;
-  }, {} as { [key: string]: number });
+  }, {} as { [key: number]: number });
 
   const focusX = (selectedMapPin.lng / 100) * layout.width;
   const focusY = (selectedMapPin.lat / 100) * layout.height;

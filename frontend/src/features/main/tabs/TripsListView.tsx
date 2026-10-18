@@ -9,7 +9,17 @@ import {
   PixelSelect,
   ShadowBox,
 } from '../../../components/pixel/Primitives';
+import { TRAVEL_STYLES } from '../../../constants';
 import { avatarSilverBucket, useApp } from '../AppContext';
+
+/** 목업 date 문자열('2026.10.12 - 10.15')에서 일수를 계산한다. 서버 연동 시 startDate/endDate 로 대체. */
+function tripDayCount(date: string): number {
+  const nums = date.match(/\d+/g)?.map(Number) ?? [];
+  if (nums.length < 5) return 1;
+  const [year, startMonth, startDay, endMonth, endDay] = nums;
+  const diff = new Date(year, endMonth - 1, endDay).getTime() - new Date(year, startMonth - 1, startDay).getTime();
+  return Math.round(diff / 86400000) + 1;
+}
 
 export default function TripsListView() {
   const {
@@ -150,7 +160,7 @@ export default function TripsListView() {
 
         <View className="gap-3">
           {filteredTrips.map((trip) => {
-            const days = trip.id.includes('tokyo') ? '5 days' : trip.id.includes('busan') ? '2 days' : '4 days';
+            const days = `${tripDayCount(trip.date)} days`;
             const openTrip = () => {
               setActiveTrip(trip);
               setIsTripMapOpen(true);
@@ -247,7 +257,7 @@ export default function TripsListView() {
               accessibilityLabel="여행 스타일"
               value={recommendationStyle}
               onChange={setRecommendationStyle}
-              options={['힐링', '맛집', '액티비티', '감성 사진'].map((v) => ({ value: v, label: v }))}
+              options={TRAVEL_STYLES.map((s) => ({ value: s.code, label: s.label }))}
             />
             <PixelSelect
               className="flex-1"

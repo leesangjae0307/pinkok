@@ -121,7 +121,7 @@ function GlobalModals() {
           tripTitle={inviteTrip.title}
           currentAvatarUrl={selectedProfileAvatar.image}
           onClose={() => setInviteTrip(null)}
-          onInvite={(nickname, userId) => showToast(`${nickname}(@${userId})님에게 여행 초대를 보냈어요.`)}
+          onInvite={(nickname, loginId) => showToast(`${nickname}(@${loginId})님에게 여행 초대를 보냈어요.`)}
         />
       )}
 
@@ -148,9 +148,9 @@ function Shell() {
   );
 }
 
-export default function MainApp() {
+export default function MainApp({ onLogout }: { onLogout: () => void }) {
   return (
-    <AppProvider>
+    <AppProvider onLogout={onLogout}>
       <Shell />
     </AppProvider>
   );

@@ -31,6 +31,7 @@ export default function SettingsScreen() {
     setMarketingNotification,
     cacheSize,
     handleClearCache,
+    handleLogout,
   } = useApp();
 
   return (
@@ -178,7 +179,7 @@ export default function SettingsScreen() {
       {/* 로그아웃 */}
       <View className="items-center pb-6 pt-3">
         <Pressable
-          onPress={() => showToast('안전하게 로그아웃되었습니다.')}
+          onPress={handleLogout}
           className="flex-row items-center gap-1.5 rounded-2xl border border-[#82F0DC] bg-white/80 px-6 py-2.5 active:scale-95 active:bg-white"
         >
           <Text className="text-xs font-bold text-slate-600">🚪 로그아웃</Text>

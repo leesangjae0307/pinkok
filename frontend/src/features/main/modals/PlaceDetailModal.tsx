@@ -14,7 +14,7 @@ interface PlaceDetailModalProps {
   records: PlaceRecord[];
   onClose: () => void;
   onSaveRecord: (record: PlaceRecord) => void;
-  onDeleteRecord: (recordId: string) => void;
+  onDeleteRecord: (recordId: number) => void;
   onOpenPinLogMaker: () => void;
   currentUserAvatarUrl: number;
 }
@@ -80,7 +80,7 @@ export default function PlaceDetailModal({
             setIsUploadingVideo(true);
             // POST /files 응답 매핑: thumbnailUrl + durationMs
             const uploadResponse = {
-              id: `clip-${place.id}-${CURRENT_USER.id}-${Date.now()}`,
+              id: Date.now(),
               thumbnailUrl: place.thumbnail,
               durationMs: 2800,
             };
@@ -121,7 +121,7 @@ export default function PlaceDetailModal({
       return;
     }
     const record: PlaceRecord = {
-      id: myExistingRecord ? myExistingRecord.id : `rec-${Date.now()}`,
+      id: myExistingRecord ? myExistingRecord.id : Date.now(),
       pinId: place.id,
       userId: CURRENT_USER.id,
       authorName: CURRENT_USER.name,
@@ -407,7 +407,7 @@ export default function PlaceDetailModal({
                         <Pressable
                           onPress={() =>
                             setVideoClip({
-                              id: `clip-gallery-${Date.now()}`,
+                              id: Date.now(),
                               duration: 2.5,
                               thumbnail: place.thumbnail,
                               createdAt: '방금 전',

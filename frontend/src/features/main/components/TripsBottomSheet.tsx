@@ -16,10 +16,10 @@ interface TripsBottomSheetProps {
   selectedDay: number | 'all';
   onSelectDay: (day: number | 'all') => void;
   places: PlaceItem[];
-  selectedPlaceId: string;
+  selectedPlaceId: number;
   onSelectPlace: (place: PlaceItem) => void;
   onOpenTeamRecord: (place: PlaceItem) => void;
-  teamRecordCounts: { [pinId: string]: number };
+  teamRecordCounts: { [pinId: number]: number };
   onOptimizeRoute: () => void;
   isOptimizingRoute: boolean;
 }

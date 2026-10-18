@@ -29,6 +29,8 @@ import avatarPinkCamera from '../../assets/images/avatar-pink-camera.png';
 import avatarMapPhone from '../../assets/images/avatar-map-phone.png';
 import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
+import { fetchAvatars, login, signup } from '../../api/authApi';
+import { errorMessage } from '../../api/axios';
 import { PixelBackArrow, PixelGoogleIcon, PixelKakaoIcon } from '../../components/pixel/PixelIcons';
 import { AnimatedLoop, LinearGradient } from '../../components/pixel/Primitives';
 
@@ -265,6 +267,22 @@ function LoginScreen({
   const [password, setPassword] = useState('pinkok123!');
   const [showPassword, setShowPassword] = useState(false);
   const [focus, setFocus] = useState<'email' | 'pw' | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleLogin = async () => {
+    setIsSubmitting(true);
+    try {
+      await login(email.trim(), password);
+      onComplete();
+    } catch (e) {
+      Alert.alert('PINKOK', errorMessage(e, '이메일 또는 비밀번호를 확인해 주세요.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 소셜 로그인은 백엔드에 엔드포인트가 없음
+  const notReady = () => Alert.alert('PINKOK', '간편 로그인은 준비 중입니다. 이메일로 로그인해 주세요.');
 
   return (
     <View className="relative flex-1 overflow-hidden bg-sky-soft">
@@ -346,10 +364,13 @@ function LoginScreen({
 
               {/* 로그인 버튼 */}
               <Pressable
-                onPress={onComplete}
-                className="mt-4 h-12 w-full items-center justify-center rounded-2xl border-2 border-[#1E293B] bg-[#56EADD] active:translate-y-0.5 active:bg-[#43d9cc]"
+                onPress={handleLogin}
+                disabled={isSubmitting}
+                className={`mt-4 h-12 w-full items-center justify-center rounded-2xl border-2 border-[#1E293B] active:translate-y-0.5 ${
+                  isSubmitting ? 'bg-slate-200' : 'bg-[#56EADD] active:bg-[#43d9cc]'
+                }`}
               >
-                <Text className="text-base font-black text-slate-900">로그인</Text>
+                <Text className="text-base font-black text-slate-900">{isSubmitting ? '로그인 중…' : '로그인'}</Text>
               </Pressable>
 
               {/* 비밀번호 찾기 | 회원가입 */}
@@ -374,22 +395,22 @@ function LoginScreen({
 
               <View className="flex-row justify-center gap-4">
                 <Pressable
-                  onPress={onComplete}
-                  accessibilityLabel="네이버로 로그인"
+                  onPress={notReady}
+                  accessibilityLabel="네이버로 로그인 (준비 중)"
                   className="h-12 w-12 items-center justify-center rounded-2xl border-2 border-[#1E293B] bg-white shadow-md active:translate-y-0.5"
                 >
                   <NaverIcon />
                 </Pressable>
                 <Pressable
-                  onPress={onComplete}
-                  accessibilityLabel="Google로 로그인"
+                  onPress={notReady}
+                  accessibilityLabel="Google로 로그인 (준비 중)"
                   className="h-12 w-12 items-center justify-center rounded-2xl border-2 border-[#1E293B] bg-white shadow-md active:translate-y-0.5"
                 >
                   <PixelGoogleIcon size={22} />
                 </Pressable>
                 <Pressable
-                  onPress={onComplete}
-                  accessibilityLabel="카카오로 로그인"
+                  onPress={notReady}
+                  accessibilityLabel="카카오로 로그인 (준비 중)"
                   className="h-12 w-12 items-center justify-center rounded-2xl border-2 border-[#1E293B] bg-[#FEE500] shadow-md active:translate-y-0.5"
                 >
                   <PixelKakaoIcon size={22} />
@@ -433,13 +454,18 @@ function AgreementRow({
   );
 }
 
+/**
+ * 로컬 아바타 에셋 ↔ 서버 `GET /avatars` 코드. 서버의 `static/images/avatars/{code}.png` 와
+ * 바이트 단위로 같은 파일임을 확인해서 짝지었다.
+ * 서버 목록에 없는 코드면 avatarId 없이 가입한다(서버에서 선택 항목).
+ */
 const PIXEL_AVATARS = [
-  { id: 'book-winter', label: '책 읽는 겨울 여행가', gender: '여', image: avatarBookWinter },
-  { id: 'silver-bucket', label: '은발 버킷햇 여행가', gender: '여', image: avatarSilverBucket },
-  { id: 'pink-camera', label: '핑크 카메라 여행가', gender: '여', image: avatarPinkCamera },
-  { id: 'map-phone', label: '지도 보는 도시 여행가', gender: '남', image: avatarMapPhone },
-  { id: 'headphone-wink', label: '윙크 헤드폰 여행가', gender: '남', image: avatarHeadphoneWink },
-  { id: 'sunglasses', label: '선글라스 로컬 여행가', gender: '남', image: avatarSunglasses },
+  { id: 'book-winter', serverCode: 'F1', label: '책 읽는 겨울 여행가', gender: '여', image: avatarBookWinter },
+  { id: 'silver-bucket', serverCode: 'F2', label: '은발 버킷햇 여행가', gender: '여', image: avatarSilverBucket },
+  { id: 'pink-camera', serverCode: 'F3', label: '핑크 카메라 여행가', gender: '여', image: avatarPinkCamera },
+  { id: 'map-phone', serverCode: 'M1', label: '지도 보는 도시 여행가', gender: '남', image: avatarMapPhone },
+  { id: 'headphone-wink', serverCode: 'M2', label: '윙크 헤드폰 여행가', gender: '남', image: avatarHeadphoneWink },
+  { id: 'sunglasses', serverCode: 'M3', label: '선글라스 로컬 여행가', gender: '남', image: avatarSunglasses },
 ];
 
 /* ------------------------------ 서브 화면 공통 헤더 ----------------------------- */
@@ -497,20 +523,38 @@ function BottomSubmit({ label, disabled, onPress }: { label: string; disabled: b
 
 function SignUpScreen({ onBack, onComplete }: { onBack: () => void; onComplete: () => void }) {
   const [nickname, setNickname] = useState('여행하는 콕이');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('hello@pinkok.kr');
   const [isEmailChecked, setIsEmailChecked] = useState(true);
-  const [emailCheckMessage, setEmailCheckMessage] = useState('사용 가능한 이메일입니다.');
+  const [emailCheckMessage, setEmailCheckMessage] = useState('사용 가능한 이메일 형식입니다.');
   const [password, setPassword] = useState('pinkok123!');
   const [confirmation, setConfirmation] = useState('pinkok123!');
   const [selectedAvatarId, setSelectedAvatarId] = useState('book-winter');
   const [requiredTerms, setRequiredTerms] = useState(true);
   const [optionalTerms, setOptionalTerms] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [avatarIdByCode, setAvatarIdByCode] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    // 로그인 없이 호출 가능. 실패해도 avatarId 없이 가입할 수 있으므로 조용히 넘긴다.
+    fetchAvatars()
+      .then((list) => setAvatarIdByCode(Object.fromEntries(list.map((a) => [a.code, a.id]))))
+      .catch(() => {});
+  }, []);
 
   const mismatch = confirmation.length > 0 && password !== confirmation;
   const canSubmit =
-    nickname.length >= 2 && email.includes('@') && isEmailChecked && password.length >= 8 && !mismatch && requiredTerms;
+    nickname.length >= 2 &&
+    username.trim().length >= 3 &&
+    email.includes('@') &&
+    isEmailChecked &&
+    password.length >= 8 &&
+    !mismatch &&
+    requiredTerms &&
+    !isSubmitting;
 
+  // 서버에 중복 확인 전용 엔드포인트가 없어서 형식만 본다. 실제 중복은 가입 시 409 로 온다.
   const handleCheckEmailDuplicate = () => {
     if (!email.includes('@')) {
       setEmailCheckMessage('올바른 이메일 형식을 입력해주세요.');
@@ -518,7 +562,27 @@ function SignUpScreen({ onBack, onComplete }: { onBack: () => void; onComplete: 
       return;
     }
     setIsEmailChecked(true);
-    setEmailCheckMessage('✓ 사용 가능한 이메일 주소입니다!');
+    setEmailCheckMessage('형식은 올바릅니다. 중복 여부는 가입할 때 확인돼요.');
+  };
+
+  const handleSignUp = async () => {
+    const serverCode = PIXEL_AVATARS.find((a) => a.id === selectedAvatarId)?.serverCode;
+    setIsSubmitting(true);
+    try {
+      await signup({
+        email: email.trim(),
+        password,
+        username: username.trim(),
+        nickname: nickname.trim(),
+        avatarId: serverCode ? avatarIdByCode[serverCode] : undefined,
+      });
+      await login(email.trim(), password);
+      onComplete();
+    } catch (e) {
+      Alert.alert('PINKOK', errorMessage(e, '가입에 실패했어요. 입력 내용을 확인해 주세요.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -601,6 +665,15 @@ function SignUpScreen({ onBack, onComplete }: { onBack: () => void; onComplete: 
             icon="user"
           />
 
+          <AuthInput
+            label="아이디"
+            value={username}
+            onChange={setUsername}
+            placeholder="팀원이 나를 찾을 때 쓰는 @아이디"
+            message="영문·숫자 3~30자. 닉네임과 달리 팀원 검색에 쓰여요."
+            icon="user"
+          />
+
           {/* 프로필 아바타 선택 */}
           <View className="pt-2">
             <View className="mb-2">
@@ -670,7 +743,7 @@ function SignUpScreen({ onBack, onComplete }: { onBack: () => void; onComplete: 
         </View>
       </ScrollView>
 
-      <BottomSubmit label="가입완료" disabled={!canSubmit} onPress={onComplete} />
+      <BottomSubmit label={isSubmitting ? '가입 중…' : '가입완료'} disabled={!canSubmit} onPress={handleSignUp} />
     </KeyboardAvoidingView>
   );
 }

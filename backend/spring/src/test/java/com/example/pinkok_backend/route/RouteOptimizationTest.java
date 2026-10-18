@@ -265,4 +265,27 @@ class RouteOptimizationTest {
                         .content(String.format("{\"tripId\":%d}", tripId)))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("날짜 미배정 핀이 섞여 있어도 '변경 전 거리'가 같은 핀들 기준이라 최적화 후가 더 길어 보이지 않는다")
+    void beforeDistance_includesUnassignedPins() throws Exception {
+        String token = signupAndLogin("route7@pinkok.com", "routeuser7");
+        long tripId = createTrip(token);
+        long day1 = createDay(token, tripId, 1);
+        createDay(token, tripId, 2);
+        addItem(token, tripId, day1, "서1", 33.460, 126.310);
+        // 아래는 모두 날짜 미배정 (예: AI 후보를 여행에 추가한 직후)
+        addItem(token, tripId, null, "동1", 33.460, 126.930);
+        addItem(token, tripId, null, "서2", 33.465, 126.320);
+        addItem(token, tripId, null, "동2", 33.455, 126.940);
+        addItem(token, tripId, null, "서3", 33.470, 126.330);
+        addItem(token, tripId, null, "동3", 33.450, 126.950);
+
+        String body = optimize(token, tripId, "").getResponse().getContentAsString();
+
+        int before = JsonPath.read(body, "$.beforeDistanceM");
+        int after = JsonPath.read(body, "$.totalDistanceM");
+        assertTrue(before > 0, "before=" + before);
+        assertTrue(after < before, "before=" + before + " after=" + after);
+    }
 }

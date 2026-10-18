@@ -1,1 +1,0 @@
-export { default as DiaryScreen } from './screens/DiaryScreen';

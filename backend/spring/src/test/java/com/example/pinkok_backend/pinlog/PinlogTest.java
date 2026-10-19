@@ -405,6 +405,15 @@ class PinlogTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
+        // 앱이 갤러리에 저장할 때 쓸 이름은 응답 JSON 으로도 내려준다.
+        // 헤더의 한글 이름(filename*)을 읽지 못하는 클라이언트가 있어서다.
+        String doneJson = mockMvc.perform(get("/pinlogs/" + pinlogId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(doneJson, "$.downloadFileName"))
+                .isEqualTo("PinKok_제주_3박4일_" + java.time.LocalDate.now()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")) + ".mp4");
+
         String disposition = download.getResponse().getHeader("Content-Disposition");
         assertThat(disposition).startsWith("attachment;");
         // 갤러리에서 알아볼 수 있게 이름을 붙여준다 (한글 제목은 UTF-8 로 인코딩된다)

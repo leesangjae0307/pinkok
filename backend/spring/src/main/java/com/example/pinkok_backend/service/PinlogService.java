@@ -67,7 +67,6 @@ public class PinlogService {
     private static final int MAX_CLIPS = 60;
     private static final String FOLDER = "pinlogs/";
     private static final DateTimeFormatter FOLDER_FORMAT = DateTimeFormatter.ofPattern("yyyy/MM");
-    private static final DateTimeFormatter NAME_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final PinlogRepository pinlogRepository;
     private final PinlogClipRepository pinlogClipRepository;
@@ -408,22 +407,10 @@ public class PinlogService {
 
         try {
             // 크기를 같이 주면 앱이 진행률("12MB 중 3MB")을 보여줄 수 있다
-            return new Download(fileStorage.openStream(path), downloadNameOf(pinlog), fileStorage.size(path));
+            return new Download(fileStorage.openStream(path), PinlogResponse.downloadFileNameOf(pinlog), fileStorage.size(path));
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "영상을 읽지 못했습니다.", e);
         }
-    }
-
-    /** 갤러리에서 알아볼 수 있는 파일 이름. 파일 이름에 쓸 수 없는 글자는 빼준다. */
-    private String downloadNameOf(Pinlog pinlog) {
-        String base = pinlog.getTitle() == null || pinlog.getTitle().isBlank()
-                ? pinlog.getTrip().getTitle()
-                : pinlog.getTitle();
-        String safe = base.replaceAll("[\\\\/:*?\"<>|]", "").replaceAll("\\s+", "_").trim();
-        String date = pinlog.getCompletedAt() == null
-                ? LocalDate.now().format(NAME_DATE_FORMAT)
-                : pinlog.getCompletedAt().format(NAME_DATE_FORMAT);
-        return "PinKok_" + safe + "_" + date + ".mp4";
     }
 
     /** 내려받을 영상. 스트림은 받은 쪽에서 다 쓰고 닫는다. */

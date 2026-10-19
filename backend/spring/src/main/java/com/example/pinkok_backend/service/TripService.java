@@ -16,8 +16,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.text.Collator;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -25,22 +28,26 @@ import java.util.stream.Collectors;
 public class TripService {
 
     private static final String OWNER = "OWNER";
+    private static final String MEMBER = "MEMBER";
 
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
     private final UserRepository userRepository;
     private final TripAccessGuard tripAccessGuard;
+    private final TripInvitationService tripInvitationService;
     private final ItineraryItemRepository itineraryItemRepository;
 
     public TripService(TripRepository tripRepository,
                        TripMemberRepository tripMemberRepository,
                        UserRepository userRepository,
                        TripAccessGuard tripAccessGuard,
+                       TripInvitationService tripInvitationService,
                        ItineraryItemRepository itineraryItemRepository) {
         this.tripRepository = tripRepository;
         this.tripMemberRepository = tripMemberRepository;
         this.userRepository = userRepository;
         this.tripAccessGuard = tripAccessGuard;
+        this.tripInvitationService = tripInvitationService;
         this.itineraryItemRepository = itineraryItemRepository;
     }
 
@@ -73,6 +80,9 @@ public class TripService {
         owner.setRole(OWNER);
         owner.setJoinedAt(now);
         tripMemberRepository.save(owner);
+
+        // 같이 갈 사람을 적어 보냈으면 초대장을 보낸다. 수락해야 팀원이 되므로 지금은 아직 나 혼자다.
+        tripInvitationService.inviteAll(trip, user, request.getInviteeUsernames());
 
         return TripResponse.of(trip, OWNER, 0); // 방금 만든 여행이라 핀이 없다
     }
@@ -120,6 +130,95 @@ public class TripService {
         trip.setUpdatedAt(LocalDateTime.now());
 
         return TripResponse.of(tripRepository.save(trip), OWNER, itineraryItemRepository.countByTrip_Id(tripId));
+    }
+
+    /**
+     * 여행 주인을 다른 팀원에게 넘긴다. 넘긴 사람은 일반 팀원(MEMBER)이 된다.
+     *
+     * <p>주인만 할 수 있는 일(여행 정보 수정·삭제·팀원 초대/내보내기)이 있어서, 주인이 빠질 때
+     * 누군가는 그 자리를 이어받아야 한다. 탈퇴할 때도 이 과정을 거친다.
+     */
+    @Transactional
+    public TripResponse transferOwner(Long tripId, Long userId, Long newOwnerUserId) {
+        tripAccessGuard.requireOwner(tripId, userId);
+        Trip trip = getTripOrThrow(tripId);
+
+        if (userId.equals(newOwnerUserId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 이 여행의 주인입니다.");
+        }
+
+        TripMember newOwner = tripMemberRepository.findByTrip_IdAndUser_Id(tripId, newOwnerUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "이 여행의 팀원에게만 넘길 수 있습니다."));
+        TripMember oldOwner = tripMemberRepository.findByTrip_IdAndUser_Id(tripId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "이 여행의 팀원이 아닙니다."));
+
+        handOver(oldOwner, newOwner);
+        trip.setUpdatedAt(LocalDateTime.now());
+        tripRepository.save(trip);
+
+        return TripResponse.of(trip, MEMBER, itineraryItemRepository.countByTrip_Id(tripId));
+    }
+
+    /** 주인 자리를 넘긴다. 주인이 둘이 되지 않도록 둘을 같이 바꾼다. */
+    private void handOver(TripMember oldOwner, TripMember newOwner) {
+        oldOwner.setRole(MEMBER);
+        newOwner.setRole(OWNER);
+        tripMemberRepository.save(oldOwner);
+        tripMemberRepository.save(newOwner);
+    }
+
+    /**
+     * 탈퇴할 때, 내가 주인인 여행들을 정리한다.
+     *
+     * <p>팀원이 남아 있으면 <b>닉네임 가나다 순으로 첫 번째 사람</b>에게 주인을 넘긴다.
+     * 떠나는 사람에게 "주인을 직접 넘기고 오라"고 요구하면 번거롭고, 그렇다고 주인 없는 여행을
+     * 남기면 아무도 그 여행을 수정·삭제할 수 없게 되기 때문이다.
+     * 혼자 쓰던 여행은 넘길 사람이 없으므로 같이 삭제한다(소프트 삭제).
+     *
+     * @return 주인을 넘긴 여행 수와 삭제한 여행 수
+     */
+    @Transactional
+    public OwnedTripCleanup cleanupOwnedTripsFor(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        int transferred = 0;
+        int deleted = 0;
+
+        for (TripMember ownership : tripMemberRepository.findAllByUser_IdOrderByJoinedAtDesc(userId)) {
+            if (!OWNER.equals(ownership.getRole()) || ownership.getTrip().getDeletedAt() != null) {
+                continue;
+            }
+            Trip trip = ownership.getTrip();
+
+            TripMember successor = nextOwnerOf(trip.getId(), userId);
+            if (successor == null) {
+                trip.setDeletedAt(now);
+                trip.setUpdatedAt(now);
+                tripRepository.save(trip);
+                deleted++;
+            } else {
+                handOver(ownership, successor);
+                trip.setUpdatedAt(now);
+                tripRepository.save(trip);
+                transferred++;
+            }
+        }
+        return new OwnedTripCleanup(transferred, deleted);
+    }
+
+    /** 닉네임 가나다 순으로 첫 번째 팀원. 아무도 없으면 null. */
+    private TripMember nextOwnerOf(Long tripId, Long leavingUserId) {
+        Collator korean = Collator.getInstance(Locale.KOREAN);
+        return tripMemberRepository.findAllByTrip_Id(tripId).stream()
+                .filter(member -> !member.getUser().getId().equals(leavingUserId))
+                .min(Comparator
+                        .comparing((TripMember member) -> member.getUser().getNickname(), korean)
+                        .thenComparing(member -> member.getUser().getId()))
+                .orElse(null);
+    }
+
+    /** 탈퇴 정리 결과. 앱에서 "여행 2개의 주인이 바뀌었습니다" 처럼 안내할 때 쓸 수 있다. */
+    public record OwnedTripCleanup(int transferred, int deleted) {
     }
 
     /** 삭제는 OWNER 만, 소프트 삭제(deleted_at) 로 처리한다. */

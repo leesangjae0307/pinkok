@@ -16,17 +16,24 @@ import java.util.Objects;
 @Service
 public class UserService {
 
+    private static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AvatarService avatarService;
     private final FileService fileService;
+    private final TripService tripService;
+    private final RefreshTokenService refreshTokenService;
 
     public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                       AvatarService avatarService, FileService fileService) {
+                       AvatarService avatarService, FileService fileService,
+                       TripService tripService, RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.avatarService = avatarService;
         this.fileService = fileService;
+        this.tripService = tripService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Transactional
@@ -105,6 +112,49 @@ public class UserService {
             fileService.deleteAfterCommit(oldImageUrl);
         }
         return userRepository.save(user);
+    }
+
+    /**
+     * 회원 탈퇴. 행을 지우지 않고 <b>지웠다고 표시</b>하고 개인정보만 없앤다(소프트 삭제).
+     *
+     * <p>여행을 여럿이 함께 쓰기 때문이다. 정훈이 탈퇴했다고 그가 남긴 기록과 영상을 지워버리면
+     * 같이 간 사람의 여행 화면과 PinLog 영상이 깨진다. 그래서 기록은 남기고,
+     * 이메일·닉네임·프로필 사진 같은 <b>개인을 알아볼 수 있는 정보만</b> 지운다.
+     *
+     * <p>내가 주인이던 여행은 <b>닉네임 가나다 순 첫 번째 팀원에게 자동으로 넘어간다.</b>
+     * 떠나는 사람에게 "주인을 직접 넘기고 오라"고 요구하면 번거롭고, 주인 없는 여행을 남기면
+     * 아무도 그 여행을 수정·삭제할 수 없게 되기 때문이다. 혼자 쓰던 여행은 넘길 사람이 없어
+     * 함께 삭제된다. (직접 고르고 싶으면 PATCH /trips/{id}/owner 로 미리 넘기면 된다)
+     */
+    @Transactional
+    public void delete(Long userId, String password) {
+        User user = getUserOrThrow(userId);
+
+        if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "비밀번호가 올바르지 않습니다.");
+        }
+
+        // 내가 주인이던 여행은 남은 팀원에게 넘기고, 혼자 쓰던 여행은 같이 지운다
+        tripService.cleanupOwnedTripsFor(userId);
+
+        String oldProfileImageUrl = user.getProfileImageUrl();
+
+        user.setDeletedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        // 같은 이메일로 다시 가입할 수 있도록 비운다 (이메일에 UNIQUE 제약이 있다)
+        user.setEmail(null);
+        user.setPasswordHash(null);
+        user.setNickname(WITHDRAWN_NICKNAME);
+        user.setProfileImageUrl(null);
+        user.setAvatar(null);
+        user.setProviderUid(null);
+        userRepository.save(user);
+
+        // 아이디(username)는 남긴다. 팀원 목록이나 기록 작성자를 추적할 수 있어야 하고,
+        // 지워버리면 남이 같은 아이디로 가입해 "그 사람인 척" 할 수 있다.
+
+        refreshTokenService.revokeAllForUser(userId);
+        fileService.deleteAfterCommit(oldProfileImageUrl);
     }
 
     private User getUserOrThrow(Long userId) {

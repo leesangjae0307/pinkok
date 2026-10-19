@@ -77,6 +77,7 @@ public class PinlogService {
     private final VideoComposer videoComposer;
     private final FileStorage fileStorage;
     private final FileService fileService;
+    private final NotificationService notificationService;
     private final TaskExecutor pinlogTaskExecutor;
 
     public PinlogService(PinlogRepository pinlogRepository,
@@ -88,6 +89,7 @@ public class PinlogService {
                          VideoComposer videoComposer,
                          FileStorage fileStorage,
                          FileService fileService,
+                         NotificationService notificationService,
                          TaskExecutor pinlogTaskExecutor) {
         this.pinlogRepository = pinlogRepository;
         this.pinlogClipRepository = pinlogClipRepository;
@@ -98,6 +100,7 @@ public class PinlogService {
         this.videoComposer = videoComposer;
         this.fileStorage = fileStorage;
         this.fileService = fileService;
+        this.notificationService = notificationService;
         this.pinlogTaskExecutor = pinlogTaskExecutor;
     }
 
@@ -272,6 +275,14 @@ public class PinlogService {
             pinlog.setCompletedAt(LocalDateTime.now());
             pinlogRepository.save(pinlog);
 
+            // 합성은 수십 초가 걸려서 그 사이 앱을 꺼뒀을 수 있다. 다 됐다고 알려준다.
+            notificationService.notify(pinlog.getUser(),
+                    NotificationService.TYPE_PINLOG_DONE,
+                    "PinLog 영상이 완성됐어요",
+                    titleOf(pinlog) + " 영상을 확인해보세요.",
+                    NotificationService.TARGET_PINLOG,
+                    pinlog.getId());
+
         } catch (Exception e) {
             // 실패해도 흔적을 남긴다. 아무 기록 없이 멈춰 있으면 원인을 찾을 수 없다.
             log.warn("PinLog 합성 실패 (id={})", pinlogId, e);
@@ -279,6 +290,14 @@ public class PinlogService {
             pinlog.setErrorMessage(truncate(e.getMessage(), 500));
             pinlog.setCompletedAt(LocalDateTime.now());
             pinlogRepository.save(pinlog);
+
+            // 실패도 알려줘야 한다. 안 그러면 사용자는 영영 기다린다.
+            notificationService.notify(pinlog.getUser(),
+                    NotificationService.TYPE_PINLOG_DONE,
+                    "PinLog 영상을 만들지 못했어요",
+                    titleOf(pinlog) + " 영상 합성에 실패했어요. 다시 시도해주세요.",
+                    NotificationService.TARGET_PINLOG,
+                    pinlog.getId());
 
         } finally {
             deleteQuietly(workDir);
@@ -360,6 +379,44 @@ public class PinlogService {
                 .toList();
     }
 
+    /**
+     * 완성된 영상을 내려받는다. 앱은 이걸 받아 폰 갤러리에 저장한다.
+     *
+     * <p>영상 파일 자체는 /files/... 주소로도 열리지만(재생용), 다운로드는 이 API 로 받는 게 낫다.
+     * <ul>
+     *   <li>팀원인지 확인한다 — 주소만 알면 누구나 받을 수 있는 상태를 막는다</li>
+     *   <li>파일 이름을 "PinKok_제주도여행_20261013.mp4" 처럼 붙여준다. 갤러리에 UUID 이름으로
+     *       저장되면 나중에 뭐가 뭔지 알 수 없다</li>
+     *   <li>아직 합성 중이거나 실패한 PinLog 는 404 로 막는다</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public Download download(Long pinlogId, Long userId) {
+        Pinlog pinlog = getOrThrow(pinlogId);
+        tripAccessGuard.requireMember(pinlog.getTrip().getId(), userId);
+
+        if (!STATUS_DONE.equals(pinlog.getStatus()) || pinlog.getVideoUrl() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "아직 완성되지 않은 PinLog 입니다. (status=" + pinlog.getStatus() + ")");
+        }
+
+        String path = fileStorage.pathOf(pinlog.getVideoUrl());
+        if (path == null || !fileStorage.exists(path)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "영상 파일을 찾을 수 없습니다.");
+        }
+
+        try {
+            // 크기를 같이 주면 앱이 진행률("12MB 중 3MB")을 보여줄 수 있다
+            return new Download(fileStorage.openStream(path), PinlogResponse.downloadFileNameOf(pinlog), fileStorage.size(path));
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "영상을 읽지 못했습니다.", e);
+        }
+    }
+
+    /** 내려받을 영상. 스트림은 받은 쪽에서 다 쓰고 닫는다. */
+    public record Download(InputStream content, String fileName, long size) {
+    }
+
     @Transactional
     public void delete(Long pinlogId, Long userId) {
         Pinlog pinlog = getOrThrow(pinlogId);
@@ -415,6 +472,13 @@ public class PinlogService {
     private String extensionOf(String path) {
         int dot = path.lastIndexOf('.');
         return dot < 0 ? "" : path.substring(dot);
+    }
+
+    /** 알림 문구에 쓸 이름. 제목을 안 적었으면 여행 이름으로 대신한다. */
+    private String titleOf(Pinlog pinlog) {
+        return pinlog.getTitle() == null || pinlog.getTitle().isBlank()
+                ? "'" + pinlog.getTrip().getTitle() + "'"
+                : "'" + pinlog.getTitle() + "'";
     }
 
     private String truncate(String value, int max) {

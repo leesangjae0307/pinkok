@@ -51,6 +51,16 @@ public class LocalFileStorage implements FileStorage {
     }
 
     @Override
+    public long size(String path) throws IOException {
+        return Files.size(resolve(path));
+    }
+
+    @Override
+    public InputStream openStream(String path) throws IOException {
+        return Files.newInputStream(resolve(path));
+    }
+
+    @Override
     public String pathOf(String url) {
         if (url == null || !url.startsWith(URL_PREFIX) || url.length() == URL_PREFIX.length()) {
             return null;

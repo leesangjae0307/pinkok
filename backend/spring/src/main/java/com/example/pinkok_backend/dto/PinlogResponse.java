@@ -5,6 +5,7 @@ import com.example.pinkok_backend.entity.PinlogClip;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -17,12 +18,22 @@ import java.util.List;
 @Getter
 public class PinlogResponse {
 
+    private static final DateTimeFormatter FILE_NAME_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
+
     private final Long id;
     private final Long tripId;
     private final String title;
     /** QUEUED / PROCESSING / DONE / FAILED */
     private final String status;
     private final String videoUrl;
+    /**
+     * 갤러리에 저장할 때 쓸 파일 이름 (완성됐을 때만).
+     *
+     * <p>다운로드 응답 헤더에도 같은 이름이 들어가지만, 한글 이름은 헤더에 그대로 담을 수 없어
+     * 인코딩된 형태로 나간다. 그걸 읽지 못하는 클라이언트가 있어서(포스트맨이 그렇다) 앱이
+     * 바로 쓸 수 있도록 여기에도 담아준다.
+     */
+    private final String downloadFileName;
     private final String thumbnailUrl;
     private final Integer durationMs;
     private final String resolution;
@@ -42,6 +53,7 @@ public class PinlogResponse {
         this.title = pinlog.getTitle();
         this.status = pinlog.getStatus();
         this.videoUrl = pinlog.getVideoUrl();
+        this.downloadFileName = pinlog.getVideoUrl() == null ? null : downloadFileNameOf(pinlog);
         this.thumbnailUrl = pinlog.getThumbnailUrl();
         this.durationMs = pinlog.getDurationMs();
         this.resolution = pinlog.getResolution();
@@ -57,5 +69,20 @@ public class PinlogResponse {
 
     public static PinlogResponse of(Pinlog pinlog, List<PinlogClip> clips, Long currentUserId) {
         return new PinlogResponse(pinlog, clips, currentUserId);
+    }
+
+    /**
+     * 갤러리에서 알아볼 수 있는 파일 이름을 만든다. 예: {@code PinKok_제주도_여행_20261020.mp4}
+     *
+     * <p>UUID 이름으로 저장되면 나중에 뭐가 뭔지 찾을 수 없다. 제목을 안 적었으면 여행 이름을 쓰고,
+     * 파일 이름에 쓸 수 없는 글자(\ / : * ? " &lt; &gt; |)는 빼고 공백은 밑줄로 바꾼다.
+     */
+    public static String downloadFileNameOf(Pinlog pinlog) {
+        String base = pinlog.getTitle() == null || pinlog.getTitle().isBlank()
+                ? pinlog.getTrip().getTitle()
+                : pinlog.getTitle();
+        String safe = base.replaceAll("[\\\\/:*?\"<>|]", "").replaceAll("\\s+", "_").trim();
+        LocalDateTime when = pinlog.getCompletedAt() == null ? pinlog.getCreatedAt() : pinlog.getCompletedAt();
+        return "PinKok_" + safe + "_" + when.format(FILE_NAME_DATE) + ".mp4";
     }
 }

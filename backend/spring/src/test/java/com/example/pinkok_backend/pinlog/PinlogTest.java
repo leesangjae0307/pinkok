@@ -388,6 +388,68 @@ class PinlogTest {
     }
 
     @Test
+    @DisplayName("완성된 영상을 내려받으면 갤러리에서 알아볼 수 있는 파일 이름이 붙는다")
+    void downloadFinishedVideo() throws Exception {
+        String token = signupAndLogin("pinlogdl@pinkok.com", "pinlogdl");
+        Long tripId = createTrip(token);
+        Long dayId = createDay(token, tripId, 1);
+        writeDiaryWithMedia(token, addPin(token, tripId, dayId, "협재"), uploadVideo(token));
+
+        MvcResult created = createPinlog(token,
+                String.format("{\"tripId\":%d,\"title\":\"제주 3박4일\"}", tripId));
+        Long pinlogId = ((Number) JsonPath.read(created.getResponse().getContentAsString(), "$.id")).longValue();
+        awaitFinalStatus(token, pinlogId);
+
+        MvcResult download = mockMvc.perform(get("/pinlogs/" + pinlogId + "/download")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        // 앱이 갤러리에 저장할 때 쓸 이름은 응답 JSON 으로도 내려준다.
+        // 헤더의 한글 이름(filename*)을 읽지 못하는 클라이언트가 있어서다.
+        String doneJson = mockMvc.perform(get("/pinlogs/" + pinlogId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(doneJson, "$.downloadFileName"))
+                .isEqualTo("PinKok_제주_3박4일_" + java.time.LocalDate.now()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")) + ".mp4");
+
+        String disposition = download.getResponse().getHeader("Content-Disposition");
+        assertThat(disposition).startsWith("attachment;");
+        // 갤러리에서 알아볼 수 있게 이름을 붙여준다 (한글 제목은 UTF-8 로 인코딩된다)
+        assertThat(disposition).contains("PinKok_").contains(".mp4");
+        assertThat(download.getResponse().getContentType()).isEqualTo("video/mp4");
+        assertThat(download.getResponse().getContentAsByteArray()).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("아직 완성되지 않았거나 팀원이 아니면 내려받을 수 없다")
+    void downloadRestrictions() throws Exception {
+        String owner = signupAndLogin("pinlogdl2@pinkok.com", "pinlogdl2");
+        String stranger = signupAndLogin("pinlogdl3@pinkok.com", "pinlogdl3");
+        Long tripId = createTrip(owner);
+        Long dayId = createDay(owner, tripId, 1);
+        writeDiaryWithMedia(owner, addPin(owner, tripId, dayId, "협재"), uploadVideo(owner));
+
+        fakeVideoComposer.failNextWith("일부러 실패");
+        MvcResult created = createPinlog(owner, String.format("{\"tripId\":%d}", tripId));
+        Long pinlogId = ((Number) JsonPath.read(created.getResponse().getContentAsString(), "$.id")).longValue();
+        awaitFinalStatus(owner, pinlogId);
+
+        // 합성에 실패한 PinLog 는 받을 수 없다
+        mockMvc.perform(get("/pinlogs/" + pinlogId + "/download")
+                        .header("Authorization", "Bearer " + owner))
+                .andExpect(status().isNotFound());
+
+        // 팀원이 아니면 403, 토큰이 없으면 401 — 주소만 알아도 못 받는다
+        mockMvc.perform(get("/pinlogs/" + pinlogId + "/download")
+                        .header("Authorization", "Bearer " + stranger))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/pinlogs/" + pinlogId + "/download"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("합성이 실패하면 FAILED 와 실패 이유가 남는다")
     void composeFailure_isRecorded() throws Exception {
         String token = signupAndLogin("pinlog7@pinkok.com", "pinlog7");

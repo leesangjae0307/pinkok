@@ -1,6 +1,7 @@
 package com.example.pinkok_backend.controller;
 
 import com.example.pinkok_backend.dto.TripCreateRequest;
+import com.example.pinkok_backend.dto.TripOwnerTransferRequest;
 import com.example.pinkok_backend.dto.TripResponse;
 import com.example.pinkok_backend.dto.TripUpdateRequest;
 import com.example.pinkok_backend.security.CurrentUserId;
@@ -47,6 +48,17 @@ public class TripController {
                                 @PathVariable Long tripId,
                                 @Valid @RequestBody TripUpdateRequest request) {
         return tripService.update(tripId, userId, request);
+    }
+
+    /**
+     * 여행 주인을 다른 팀원에게 넘긴다. OWNER 만 가능(403), 넘긴 사람은 일반 팀원이 된다.
+     * 새 주인은 이미 그 여행의 팀원이어야 한다.
+     */
+    @PatchMapping("/{tripId}/owner")
+    public TripResponse transferOwner(@CurrentUserId Long userId,
+                                      @PathVariable Long tripId,
+                                      @Valid @RequestBody TripOwnerTransferRequest request) {
+        return tripService.transferOwner(tripId, userId, request.getNewOwnerUserId());
     }
 
     /** 여행 삭제(소프트 삭제). OWNER 만 가능(403). */

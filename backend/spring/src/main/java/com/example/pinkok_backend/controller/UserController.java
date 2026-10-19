@@ -1,21 +1,28 @@
 package com.example.pinkok_backend.controller;
 
+import com.example.pinkok_backend.dto.AccountDeleteRequest;
 import com.example.pinkok_backend.dto.AvatarSelectionRequest;
 import com.example.pinkok_backend.dto.NicknameUpdateRequest;
 import com.example.pinkok_backend.dto.ProfileImageUpdateRequest;
 import com.example.pinkok_backend.dto.UserResponse;
+import com.example.pinkok_backend.dto.UserSearchResponse;
 import com.example.pinkok_backend.entity.User;
 import com.example.pinkok_backend.repository.UserRepository;
 import com.example.pinkok_backend.security.CurrentUserId;
+import com.example.pinkok_backend.service.TripInvitationService;
 import com.example.pinkok_backend.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
@@ -25,10 +32,39 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final UserService userService;
+    private final TripInvitationService tripInvitationService;
 
-    public UserController(UserRepository userRepository, UserService userService) {
+    public UserController(UserRepository userRepository, UserService userService,
+                          TripInvitationService tripInvitationService) {
         this.userRepository = userRepository;
         this.userService = userService;
+        this.tripInvitationService = tripInvitationService;
+    }
+
+    /**
+     * 회원 탈퇴. 되돌릴 수 없어서 비밀번호를 한 번 더 확인한다.
+     *
+     * <p>계정과 개인정보는 지우지만 남긴 기록·영상은 남는다 — 여행을 함께 쓴 팀원의 화면과
+     * PinLog 가 깨지지 않게 하기 위해서다. 내가 만든 여행이 남아 있으면 409 로 막는다.
+     */
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> delete(@CurrentUserId Long userId,
+                                       @Valid @RequestBody AccountDeleteRequest request) {
+        userService.delete(userId, request.getPassword());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 팀원으로 초대할 사람 찾기. 아이디(@username)와 닉네임 둘 다로 검색된다 (2글자 이상).
+     *
+     * <p>닉네임은 중복될 수 있어서 화면에는 아이디를 같이 보여줘야 한다. 초대할 때 서버로
+     * 보내는 값도 아이디다. {@code tripId} 를 같이 주면 이미 팀원이거나 초대 중인 사람을 표시해준다.
+     */
+    @GetMapping("/search")
+    public List<UserSearchResponse> search(@CurrentUserId Long userId,
+                                           @RequestParam String keyword,
+                                           @RequestParam(required = false) Long tripId) {
+        return tripInvitationService.search(userId, keyword, tripId);
     }
 
     /**

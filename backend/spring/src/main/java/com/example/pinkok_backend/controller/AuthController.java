@@ -3,13 +3,16 @@ package com.example.pinkok_backend.controller;
 import com.example.pinkok_backend.dto.LoginRequest;
 import com.example.pinkok_backend.dto.RefreshTokenRequest;
 import com.example.pinkok_backend.dto.SignupRequest;
+import com.example.pinkok_backend.dto.SocialLoginRequest;
 import com.example.pinkok_backend.dto.TokenResponse;
 import com.example.pinkok_backend.dto.UserResponse;
 import com.example.pinkok_backend.service.AuthService;
+import com.example.pinkok_backend.service.SocialAuthService;
 import com.example.pinkok_backend.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,10 +24,12 @@ public class AuthController {
 
     private final UserService userService;
     private final AuthService authService;
+    private final SocialAuthService socialAuthService;
 
-    public AuthController(UserService userService, AuthService authService) {
+    public AuthController(UserService userService, AuthService authService, SocialAuthService socialAuthService) {
         this.userService = userService;
         this.authService = authService;
+        this.socialAuthService = socialAuthService;
     }
 
     @PostMapping("/signup")
@@ -36,6 +41,16 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    /**
+     * 소셜 로그인 (카카오·구글). 앱이 SDK 로 받은 토큰을 보내면 우리 서비스의 토큰을 돌려준다.
+     * 카카오는 액세스 토큰, 구글은 ID 토큰이다. 처음이면 계정이 자동으로 만들어지고 응답의 {@code newUser} 가 true 다.
+     */
+    @PostMapping("/social/{provider}")
+    public ResponseEntity<TokenResponse> socialLogin(@PathVariable String provider,
+                                                     @Valid @RequestBody SocialLoginRequest request) {
+        return ResponseEntity.ok(socialAuthService.login(provider, request.token()));
     }
 
     /**

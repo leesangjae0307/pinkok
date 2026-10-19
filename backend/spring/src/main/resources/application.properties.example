@@ -53,3 +53,10 @@ gemini.retry-base-delay-ms=1000
 # 완성 영상 크기. 기본은 가로(16:9). 세로로 하려면 720 x 1280 으로 바꾼다
 pinlog.width=1280
 pinlog.height=720
+
+# ---- 소셜 로그인 (카카오 · 구글) ----
+# 설정 방법: backend/docs/소셜로그인-설정.md
+# 카카오: developers.kakao.com > 내 애플리케이션 > 앱 ID (숫자). 앱이 보낸 토큰이 우리 앱 것인지 확인하는 데 쓴다.
+kakao.app-id=${KAKAO_APP_ID:}
+# 구글: Google Cloud Console > 사용자 인증 정보의 OAuth 클라이언트 ID. 안드로이드/iOS/웹 ID 를 쉼표로 여러 개 적을 수 있다.
+google.client-ids=${GOOGLE_CLIENT_IDS:}

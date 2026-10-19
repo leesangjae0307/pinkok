@@ -8,6 +8,8 @@ import com.example.pinkok_backend.entity.ItineraryDay;
 import com.example.pinkok_backend.entity.ItineraryItem;
 import com.example.pinkok_backend.entity.Place;
 import com.example.pinkok_backend.entity.Trip;
+import com.example.pinkok_backend.repository.DiaryMediaRepository;
+import com.example.pinkok_backend.repository.DiaryRepository;
 import com.example.pinkok_backend.repository.ItineraryDayRepository;
 import com.example.pinkok_backend.repository.ItineraryItemRepository;
 import com.example.pinkok_backend.repository.TripRepository;
@@ -33,17 +35,23 @@ public class ItineraryItemService {
     private final TripRepository tripRepository;
     private final PlaceService placeService;
     private final TripAccessGuard tripAccessGuard;
+    private final DiaryRepository diaryRepository;
+    private final DiaryMediaRepository diaryMediaRepository;
 
     public ItineraryItemService(ItineraryItemRepository itineraryItemRepository,
                                 ItineraryDayRepository itineraryDayRepository,
                                 TripRepository tripRepository,
                                 PlaceService placeService,
-                                TripAccessGuard tripAccessGuard) {
+                                TripAccessGuard tripAccessGuard,
+                                DiaryRepository diaryRepository,
+                                DiaryMediaRepository diaryMediaRepository) {
         this.itineraryItemRepository = itineraryItemRepository;
         this.itineraryDayRepository = itineraryDayRepository;
         this.tripRepository = tripRepository;
         this.placeService = placeService;
         this.tripAccessGuard = tripAccessGuard;
+        this.diaryRepository = diaryRepository;
+        this.diaryMediaRepository = diaryMediaRepository;
     }
 
     @Transactional
@@ -80,8 +88,9 @@ public class ItineraryItemService {
     @Transactional(readOnly = true)
     public List<ItineraryItemResponse> list(Long tripId, Long userId) {
         tripAccessGuard.requireMember(tripId, userId);
+        Map<Long, ItineraryItemResponse.Stats> stats = statsOf(tripId);
         return itineraryItemRepository.findAllByTrip_IdOrderByDay_DayNumberAscVisitOrderAsc(tripId).stream()
-                .map(ItineraryItemResponse::from)
+                .map(item -> ItineraryItemResponse.from(item, stats.get(item.getId())))
                 .toList();
     }
 
@@ -100,7 +109,8 @@ public class ItineraryItemService {
         if (request.getTransportMode() != null) item.setTransportMode(request.getTransportMode());
         if (request.getMemo() != null) item.setMemo(request.getMemo());
 
-        return ItineraryItemResponse.from(itineraryItemRepository.save(item));
+        ItineraryItem saved = itineraryItemRepository.save(item);
+        return ItineraryItemResponse.from(saved, statsOf(saved.getTrip().getId()).get(saved.getId()));
     }
 
     @Transactional
@@ -139,7 +149,36 @@ public class ItineraryItemService {
         }
         itineraryItemRepository.saveAllAndFlush(items);
 
-        return ids.stream().map(id -> ItineraryItemResponse.from(byId.get(id))).toList();
+        Map<Long, ItineraryItemResponse.Stats> stats = statsOf(day.getTrip().getId());
+        return ids.stream().map(id -> ItineraryItemResponse.from(byId.get(id), stats.get(id))).toList();
+    }
+
+    /**
+     * 여행 안 핀들의 기록 통계(별점 평균·기록 수·첫 사진 썸네일). 핀 개수와 상관없이 쿼리 2번으로 끝낸다.
+     * 기록이 없는 핀은 맵에 없다 (호출한 쪽에서 {@code get} 이 null 이면 "기록 없음"으로 처리).
+     */
+    private Map<Long, ItineraryItemResponse.Stats> statsOf(Long tripId) {
+        Map<Long, DiaryMediaRepository.ItemFirstMedia> firstMedia = diaryMediaRepository.firstMediaByTripId(tripId).stream()
+                .collect(Collectors.toMap(DiaryMediaRepository.ItemFirstMedia::getItemId, m -> m, (a, b) -> a));
+
+        Map<Long, ItineraryItemResponse.Stats> result = new java.util.HashMap<>();
+        for (DiaryRepository.ItemDiaryStat s : diaryRepository.statsByTripId(tripId)) {
+            Double avg = s.getAvgRating() == null ? null : Math.round(s.getAvgRating() * 10) / 10.0;
+            result.put(s.getItemId(), new ItineraryItemResponse.Stats(
+                    avg, s.getReviewCount().intValue(), thumbnailOf(firstMedia.get(s.getItemId()))));
+        }
+        return result;
+    }
+
+    /** 사진은 썸네일이 없으면 원본을, 영상은 썸네일(첫 장면)이 없으면 보여줄 게 없어서 null */
+    private static String thumbnailOf(DiaryMediaRepository.ItemFirstMedia media) {
+        if (media == null) {
+            return null;
+        }
+        if (media.getThumbnailUrl() != null) {
+            return media.getThumbnailUrl();
+        }
+        return "IMAGE".equals(media.getMediaType()) ? media.getFileUrl() : null;
     }
 
     private int nextOrder(Long dayId) {

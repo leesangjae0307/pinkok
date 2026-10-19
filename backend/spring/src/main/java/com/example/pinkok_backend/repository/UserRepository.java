@@ -36,4 +36,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
             order by u.username asc
             """)
     List<User> search(@Param("keyword") String keyword, Pageable pageable);
+
+    /** 소셜 로그인(카카오·구글)에서 같은 계정인지 확인할 때. */
+    Optional<User> findByProviderAndProviderUid(String provider, String providerUid);
 }

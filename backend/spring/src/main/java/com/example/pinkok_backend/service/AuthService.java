@@ -62,16 +62,26 @@ public class AuthService {
     }
 
     private TokenResponse issueTokens(User user) {
+        return issueTokens(user, false);
+    }
+
+    /** 소셜 로그인처럼 다른 경로로 사용자를 확인한 뒤 우리 토큰을 발급할 때 쓴다. */
+    TokenResponse issueTokens(User user, boolean newUser) {
         String refreshToken = refreshTokenService.issue(user);
-        return buildTokenResponse(user, refreshToken);
+        return buildTokenResponse(user, refreshToken, newUser);
     }
 
     private TokenResponse buildTokenResponse(User user, String refreshToken) {
+        return buildTokenResponse(user, refreshToken, false);
+    }
+
+    private TokenResponse buildTokenResponse(User user, String refreshToken, boolean newUser) {
         String accessToken = tokenProvider.createAccessToken(user.getId(), user.getEmail());
         return new TokenResponse(
                 accessToken,
                 tokenProvider.getAccessTokenValidityMs() / 1000,
                 refreshToken,
-                UserResponse.from(user));
+                UserResponse.from(user),
+                newUser);
     }
 }

@@ -34,5 +34,26 @@ public interface DiaryMediaRepository extends JpaRepository<DiaryMedia, Long> {
             """)
     List<DiaryMedia> findAllByTripId(@Param("tripId") Long tripId);
 
+    /**
+     * 여행 안의 핀마다 "첫 번째로 올라온" 사진·영상 하나 (핀 썸네일용). 핀마다 min(id) 하나만 읽는다.
+     */
+    @Query("""
+            select i.id as itemId, m.thumbnailUrl as thumbnailUrl, m.fileUrl as fileUrl, m.mediaType as mediaType
+            from DiaryMedia m join m.diary d join d.itineraryItem i
+            where i.trip.id = :tripId
+              and m.id = (select min(m2.id) from DiaryMedia m2 where m2.diary.itineraryItem.id = i.id)
+            """)
+    List<ItemFirstMedia> firstMediaByTripId(@Param("tripId") Long tripId);
+
+    interface ItemFirstMedia {
+        Long getItemId();
+
+        String getThumbnailUrl();
+
+        String getFileUrl();
+
+        String getMediaType();
+    }
+
     void deleteAllByDiary_Id(Long diaryId);
 }

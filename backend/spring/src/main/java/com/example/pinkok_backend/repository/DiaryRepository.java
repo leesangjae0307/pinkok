@@ -42,4 +42,24 @@ public interface DiaryRepository extends JpaRepository<Diary, Long> {
             order by d.createdAt asc
             """)
     List<Diary> findAllByItineraryItemId(@Param("itineraryItemId") Long itineraryItemId);
+
+    /**
+     * 여행 안의 핀마다 기록 개수와 별점 평균. 별점을 안 매긴 기록은 평균에서 빠지고(avg 가 null 을 무시),
+     * 기록 개수에는 포함된다. 핀이 여러 개여도 쿼리는 한 번이다.
+     */
+    @Query("""
+            select i.id as itemId, count(d) as reviewCount, avg(d.rating) as avgRating
+            from Diary d join d.itineraryItem i
+            where i.trip.id = :tripId
+            group by i.id
+            """)
+    List<ItemDiaryStat> statsByTripId(@Param("tripId") Long tripId);
+
+    interface ItemDiaryStat {
+        Long getItemId();
+
+        Long getReviewCount();
+
+        Double getAvgRating();
+    }
 }

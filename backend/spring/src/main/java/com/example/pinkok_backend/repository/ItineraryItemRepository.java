@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface ItineraryItemRepository extends JpaRepository<ItineraryItem, Long> {
@@ -16,6 +17,18 @@ public interface ItineraryItemRepository extends JpaRepository<ItineraryItem, Lo
     List<ItineraryItem> findAllByTrip_IdOrderByDay_DayNumberAscVisitOrderAsc(Long tripId);
 
     int countByDay_Id(Long dayId);
+
+    int countByTrip_Id(Long tripId);
+
+    /** 여행 목록에서 쓰는 "핀 개수". 여행마다 따로 세지 않고 한 번에 묶어서 센다 (N+1 방지). */
+    @Query("select i.trip.id as tripId, count(i) as cnt from ItineraryItem i where i.trip.id in :tripIds group by i.trip.id")
+    List<TripPinCount> countByTripIds(@Param("tripIds") Collection<Long> tripIds);
+
+    interface TripPinCount {
+        Long getTripId();
+
+        Long getCnt();
+    }
 
     /** 이 여행 일정에 이미 있는 장소명. 추천에서 제외할 때 쓴다 (lazy 로딩 없이 문자열만). */
     @Query("select i.place.name from ItineraryItem i where i.trip.id = :tripId")

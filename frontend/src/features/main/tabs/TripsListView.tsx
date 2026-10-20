@@ -86,7 +86,6 @@ export default function TripsListView() {
         ) : null}
       </View>
 
-      {/* GET /trip-invitations */}
       {tripInvitations.length > 0 && (
         <View
           className={`gap-2 rounded-3xl bg-white/90 p-3.5 shadow-md ${
@@ -148,7 +147,6 @@ export default function TripsListView() {
         </View>
       )}
 
-      {/* GET /trips */}
       <View className="gap-3">
         <View className="flex-row items-center justify-between px-1">
           <View className="flex-row items-center gap-2">

@@ -78,7 +78,6 @@ export default function PlaceDetailModal({
             if (timer) clearInterval(timer);
             setIsRecording(false);
             setIsUploadingVideo(true);
-            // POST /files 응답 매핑: thumbnailUrl + durationMs
             const uploadResponse = {
               id: Date.now(),
               thumbnailUrl: place.thumbnail,
@@ -171,7 +170,7 @@ export default function PlaceDetailModal({
             </View>
             <View className="absolute left-4 top-4 rounded-xl bg-black/60 px-3 py-2">
               <Text className="text-xs font-black text-white">{place.name}</Text>
-              <Text className="mt-1 text-[10px] text-white/70">POST /files · 최대 3초</Text>
+              <Text className="mt-1 text-[10px] text-white/70">최대 3초까지 촬영돼요</Text>
             </View>
             {busy && (
               <View className="absolute bottom-0 left-0 right-0 h-2 bg-black/60">

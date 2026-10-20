@@ -54,7 +54,6 @@ export default function PinLogSynthesisModal({
 }: PinLogSynthesisModalProps) {
   const orderedPlaces = useMemo(() => [...places].sort((a, b) => a.order - b.order), [places]);
 
-  // GET /pinlogs/clip-options?tripId=1 응답 매핑
   const clipOptions = useMemo<ClipOption[]>(
     () =>
       records.flatMap((record) =>
@@ -123,7 +122,7 @@ export default function PinLogSynthesisModal({
     onSynthesizeComplete(completed);
   };
 
-  // GET /pinlogs/{id}: QUEUED/PROCESSING 동안 2.4초마다 폴링
+  // 합성이 끝날 때까지 2.4초마다 상태를 다시 확인한다.
   useEffect(() => {
     if (status !== 'QUEUED' && status !== 'PROCESSING') return;
     const timer = setTimeout(() => {
@@ -148,7 +147,6 @@ export default function PinLogSynthesisModal({
       setStatus('FAILED');
       return;
     }
-    // POST /pinlogs { tripId, clips: [{ diaryMediaId }] }
     setPinLogId(Date.now());
     setPollCount(0);
     setStatus('QUEUED');
@@ -156,7 +154,6 @@ export default function PinLogSynthesisModal({
 
   const handleDelete = () => {
     if (!result?.mine) return;
-    // DELETE /pinlogs/{id}
     setResult(null);
     setStatus('IDLE');
     setPinLogId(null);

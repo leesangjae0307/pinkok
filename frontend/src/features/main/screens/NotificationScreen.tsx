@@ -30,7 +30,6 @@ export default function NotificationScreen() {
         </View>
       </View>
 
-      {/* GET /notifications */}
       <View className="mt-4 gap-3">
         {notifications.map((n) => (
           <Pressable

@@ -330,7 +330,6 @@ function useAppState(onLogout: () => void) {
   };
 
   const handleNotificationSelect = (notification: NotificationItem) => {
-    // PATCH /notifications/{id}/read
     setNotifications((cur) => cur.map((n) => (n.id === notification.id ? { ...n, read: true } : n)));
 
     if (notification.type === 'TRIP_INVITED' && notification.targetType === 'INVITATION') {
@@ -359,7 +358,6 @@ function useAppState(onLogout: () => void) {
   };
 
   const handleAcceptInvitation = (invitation: TripInvitation) => {
-    // POST /trip-invitations/{id}/accept
     setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
     setTrips((cur) => (cur.some((t) => t.id === INVITED_JEJU_TRIP.id) ? cur : [INVITED_JEJU_TRIP, ...cur]));
     setFocusedInvitationId(null);
@@ -367,7 +365,6 @@ function useAppState(onLogout: () => void) {
   };
 
   const handleRejectInvitation = (invitation: TripInvitation) => {
-    // POST /trip-invitations/{id}/reject
     setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
     setFocusedInvitationId(null);
     showToast(`'${invitation.tripTitle}' 초대를 거절했어요.`);

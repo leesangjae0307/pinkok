@@ -502,10 +502,22 @@ function AuthHeader({ onBack, eyebrow, title }: { onBack: () => void; eyebrow: s
   );
 }
 
-function BottomSubmit({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) {
+function BottomSubmit({
+  label,
+  disabled,
+  onPress,
+  hint,
+}: {
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+  /** 버튼이 꺼져 있을 때 "왜 안 눌리는지" 알려주는 한 줄 (없으면 표시 안 함) */
+  hint?: string;
+}) {
   const insets = useSafeAreaInsets();
   return (
     <View className="border-t-2 border-sky-border bg-cloud px-5 pt-3" style={{ paddingBottom: insets.bottom + 20 }}>
+      {disabled && hint ? <Text className="mb-2 text-center text-xs font-bold text-danger">{hint}</Text> : null}
       <Pressable
         disabled={disabled}
         onPress={onPress}
@@ -544,15 +556,34 @@ function SignUpScreen({ onBack, onComplete }: { onBack: () => void; onComplete: 
   }, []);
 
   const mismatch = confirmation.length > 0 && password !== confirmation;
-  const canSubmit =
-    nickname.length >= 2 &&
-    username.trim().length >= 3 &&
-    email.includes('@') &&
-    isEmailChecked &&
-    password.length >= 8 &&
-    !mismatch &&
-    requiredTerms &&
-    !isSubmitting;
+
+  // 서버 규칙(SignupRequest): 비밀번호 8~64자, 아이디 3~30자 영문 소문자·숫자·밑줄, 닉네임은 화면 안내대로 2~12자
+  const trimmedUsername = username.trim();
+  const nicknameOk = nickname.trim().length >= 2 && nickname.trim().length <= 12;
+  const usernameLengthOk = trimmedUsername.length >= 3 && trimmedUsername.length <= 30;
+  const usernameCharsOk = /^[a-z0-9_]*$/.test(trimmedUsername);
+  const passwordOk = password.length >= 8 && password.length <= 64;
+
+  /** 가입완료가 꺼져 있는 이유 중 가장 먼저 해결할 한 가지 (모두 충족하면 null) */
+  const missingReason: string | null = !email.includes('@')
+    ? '올바른 이메일을 입력해 주세요.'
+    : !isEmailChecked
+      ? "이메일 옆 '중복확인' 버튼을 눌러 주세요."
+      : !passwordOk
+        ? `비밀번호를 8자 이상 입력해 주세요. (현재 ${password.length}자)`
+        : mismatch || confirmation.length === 0
+          ? '비밀번호 확인이 일치하지 않아요.'
+          : !nicknameOk
+            ? '닉네임은 2~12자로 입력해 주세요.'
+            : !usernameLengthOk
+              ? `아이디를 3자 이상 입력해 주세요. (현재 ${trimmedUsername.length}자)`
+              : !usernameCharsOk
+                ? '아이디는 영문 소문자, 숫자, 밑줄(_)만 쓸 수 있어요.'
+                : !requiredTerms
+                  ? '필수 약관에 동의해 주세요.'
+                  : null;
+
+  const canSubmit = missingReason === null && !isSubmitting;
 
   // 서버에 중복 확인 전용 엔드포인트가 없어서 형식만 본다. 실제 중복은 가입 시 409 로 온다.
   const handleCheckEmailDuplicate = () => {
@@ -641,7 +672,12 @@ function SignUpScreen({ onBack, onComplete }: { onBack: () => void; onComplete: 
             value={password}
             onChange={setPassword}
             placeholder="비밀번호를 입력해주세요"
-            message="영문, 숫자를 포함해 8자 이상 입력해주세요."
+            message={
+              password.length > 0 && !passwordOk
+                ? `8자 이상 입력해주세요. (현재 ${password.length}자)`
+                : '8자 이상 입력해주세요.'
+            }
+            error={password.length > 0 && !passwordOk}
             icon="lock"
           />
 
@@ -662,15 +698,21 @@ function SignUpScreen({ onBack, onComplete }: { onBack: () => void; onComplete: 
             onChange={setNickname}
             placeholder="닉네임을 입력해주세요"
             message="2~12자의 닉네임을 입력해주세요."
+            error={nickname.length > 0 && !nicknameOk}
             icon="user"
           />
 
           <AuthInput
             label="아이디"
             value={username}
-            onChange={setUsername}
+            onChange={(t) => setUsername(t.toLowerCase())}
             placeholder="팀원이 나를 찾을 때 쓰는 @아이디"
-            message="영문·숫자 3~30자. 닉네임과 달리 팀원 검색에 쓰여요."
+            message={
+              !usernameCharsOk
+                ? '영문 소문자, 숫자, 밑줄(_)만 쓸 수 있어요.'
+                : '영문 소문자·숫자·밑줄(_) 3~30자. 닉네임과 달리 팀원 검색에 쓰여요.'
+            }
+            error={trimmedUsername.length > 0 && (!usernameCharsOk || !usernameLengthOk)}
             icon="user"
           />
 
@@ -743,7 +785,12 @@ function SignUpScreen({ onBack, onComplete }: { onBack: () => void; onComplete: 
         </View>
       </ScrollView>
 
-      <BottomSubmit label={isSubmitting ? '가입 중…' : '가입완료'} disabled={!canSubmit} onPress={handleSignUp} />
+      <BottomSubmit
+        label={isSubmitting ? '가입 중…' : '가입완료'}
+        disabled={!canSubmit}
+        onPress={handleSignUp}
+        hint={missingReason ?? undefined}
+      />
     </KeyboardAvoidingView>
   );
 }

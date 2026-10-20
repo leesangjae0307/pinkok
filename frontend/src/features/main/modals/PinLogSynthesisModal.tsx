@@ -237,7 +237,11 @@ export default function PinLogSynthesisModal({
                       className="overflow-hidden rounded-xl border border-[#82F0DC] bg-white"
                       style={{ width: '31.5%' }}
                     >
-                      <Image source={{ uri: clip.thumbnail }} resizeMode="cover" className="aspect-video w-full" />
+                      {/* 비율은 감싸는 View 의 style 로 잡는다. Image 의 aspect-* 클래스는
+                          적용되지 않아 높이가 잡히지 않는다(아바타에서 확인). */}
+                      <View style={{ width: '100%', aspectRatio: 16 / 9 }}>
+                        <Image source={{ uri: clip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+                      </View>
                       <View className="p-2">
                         <Text numberOfLines={1} className="text-[9px] font-black text-slate-800">
                           {index + 1}. {clip.placeName}
@@ -340,7 +344,10 @@ export default function PinLogSynthesisModal({
                                   }`}
                                 >
                                   <View className="relative">
-                                    <Image source={{ uri: option.thumbnailUrl }} resizeMode="cover" className="aspect-video w-full" />
+                                    {/* 비율은 감싸는 View 의 style 로 잡는다(위와 같은 이유). */}
+                                    <View style={{ width: '100%', aspectRatio: 16 / 9 }}>
+                                      <Image source={{ uri: option.thumbnailUrl }} resizeMode="cover" className="h-full w-full" />
+                                    </View>
                                     <View className="absolute bottom-1 right-1 rounded bg-black/75 px-1">
                                       <Text className="font-pixel text-[7px] text-white">{(option.durationMs / 1000).toFixed(1)}s</Text>
                                     </View>

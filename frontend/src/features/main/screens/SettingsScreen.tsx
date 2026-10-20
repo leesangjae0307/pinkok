@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { PixelBackArrow, PixelKakaoIcon, PixelToggleSwitch } from '../../../components/pixel/PixelIcons';
+import { PixelBackArrow, PixelToggleSwitch } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
 import { useApp } from '../AppContext';
 
@@ -23,6 +23,7 @@ function Chevron() {
 
 export default function SettingsScreen() {
   const {
+    me,
     setIsSettingsOpen,
     showToast,
     pushNotification,
@@ -53,16 +54,24 @@ export default function SettingsScreen() {
         <GroupTitle>ACCOUNT</GroupTitle>
         <View className="gap-3 rounded-3xl border border-[#82F0DC] bg-white p-3.5 shadow-sm">
           <View className="flex-row items-center justify-between border-b border-slate-100 pb-2.5">
-            <View className="flex-row items-center gap-2">
+            <View className="min-w-0 flex-1 flex-row items-center gap-2">
               <Emoji>👤</Emoji>
-              <View>
+              <View className="min-w-0 flex-1">
                 <Text className="text-xs font-bold text-slate-800">계정 정보</Text>
-                <Text className="text-[10px] text-slate-400">pinkok_user@kakao.com</Text>
+                <Text className="text-[10px] text-slate-400" numberOfLines={1}>
+                  {me.email}
+                </Text>
               </View>
             </View>
-            <View className="flex-row items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1">
-              <PixelKakaoIcon size={14} />
-              <Text className="text-[10px] font-bold text-slate-700">카카오 연동</Text>
+            {/*
+              전에는 "카카오 연동" 배지를 항상 보여줬는데, 서버 응답에 연동
+              수단을 알려주는 필드가 없어서 사실이 아닐 수 있다. 확인할 수 있는
+              값인 아이디를 대신 보여준다.
+            */}
+            <View className="shrink-0 rounded-xl border border-[#82F0DC] bg-[#B4FAF0]/40 px-2 py-1">
+              <Text className="font-pixel text-[9px] text-[#075953]" numberOfLines={1}>
+                @{me.username}
+              </Text>
             </View>
           </View>
 

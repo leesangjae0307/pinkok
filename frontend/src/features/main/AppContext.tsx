@@ -10,7 +10,7 @@ import avatarPinkCamera from '../../assets/images/avatar-pink-camera.png';
 import avatarMapPhone from '../../assets/images/avatar-map-phone.png';
 import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
-import { logout } from '../../api/authApi';
+import { Me, logout } from '../../api/authApi';
 import { errorMessage } from '../../api/axios';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
@@ -176,7 +176,26 @@ export const TRAVEL_TASTES = [
 
 export { avatarSilverBucket };
 
-function useAppState(onLogout: () => void) {
+/**
+ * 서버 아바타 코드를 앱에 들어 있는 픽셀 에셋으로 바꾼다. 서버가 주는
+ * imageUrl 은 상대 경로라 그대로는 못 쓰고, 같은 그림이 앱에도 있어서
+ * 네트워크 없이 바로 그릴 수 있다. 모르는 코드면 null.
+ */
+const AVATAR_IMAGE_BY_SERVER_CODE: Record<string, number | undefined> = {
+  F1: avatarBookWinter,
+  F2: avatarSilverBucket,
+  F3: avatarPinkCamera,
+  M1: avatarMapPhone,
+  M2: avatarHeadphoneWink,
+  M3: avatarSunglasses,
+};
+
+export function avatarImageForCode(code: string | undefined | null): number | null {
+  if (!code) return null;
+  return AVATAR_IMAGE_BY_SERVER_CODE[code] ?? null;
+}
+
+function useAppState(me: Me, onLogout: () => void) {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [trips, setTrips] = useState<TripFolder[]>(INITIAL_TRIPS);
@@ -410,6 +429,8 @@ function useAppState(onLogout: () => void) {
   };
 
   return {
+    /** 로그인한 실제 사용자. 목업이 아니다. */
+    me,
     // 상태
     activeTab, setActiveTab,
     isSettingsOpen, setIsSettingsOpen,
@@ -477,9 +498,17 @@ export type AppState = ReturnType<typeof useAppState>;
 
 const AppContext = createContext<AppState | null>(null);
 
-export function AppProvider({ children, onLogout }: { children: React.ReactNode; onLogout: () => void }) {
+export function AppProvider({
+  children,
+  me,
+  onLogout,
+}: {
+  children: React.ReactNode;
+  me: Me;
+  onLogout: () => void;
+}) {
   // 웹 원본과 같은 단일 상태 구조 (나중에 Zustand 스토어로 옮기기 쉬운 형태)
-  const state = useAppState(onLogout);
+  const state = useAppState(me, onLogout);
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
 }
 

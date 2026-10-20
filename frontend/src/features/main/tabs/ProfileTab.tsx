@@ -3,7 +3,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 
 import { PixelProfileIcon } from '../../../components/pixel/PixelIcons';
 import { FadeIn, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
-import { TRAVEL_TASTES, useApp } from '../AppContext';
+import { TRAVEL_TASTES, avatarImageForCode, useApp } from '../AppContext';
 
 const GALLERY = [
   {
@@ -20,6 +20,7 @@ const GALLERY = [
 
 export default function ProfileTab() {
   const {
+    me,
     setIsSettingsOpen,
     selectedProfileAvatar,
     setPendingProfileAvatar,
@@ -27,6 +28,12 @@ export default function ProfileTab() {
     setProfileDetailModal,
     setActiveTab,
   } = useApp();
+
+  /**
+   * 가입할 때 고른 아바타가 서버에 있으면 그걸 쓰고, 없으면 앱에서 고른 것을
+   * 쓴다. 서버가 주지 않는 값을 지어내지 않으려고 코드로만 맞춘다.
+   */
+  const avatarImage = avatarImageForCode(me.avatar?.code) ?? selectedProfileAvatar.image;
 
   return (
     <FadeIn style={{ padding: 16, paddingBottom: 80, gap: 16 }}>
@@ -59,7 +66,7 @@ export default function ProfileTab() {
           }}
           className="relative h-20 w-20 overflow-hidden rounded-2xl border-2 border-[#075953] bg-[#B4FAF0]"
         >
-          <Image source={selectedProfileAvatar.image} resizeMode="cover" className="h-full w-full" />
+          <Image source={avatarImage} resizeMode="cover" className="h-full w-full" />
           <View className="absolute bottom-1 left-2 right-2 rounded-lg border border-[#075953] bg-white/90 px-2 py-0.5">
             <Text className="text-center text-[8px] font-black text-[#075953]">변경</Text>
           </View>
@@ -76,11 +83,16 @@ export default function ProfileTab() {
             </ShadowBox>
           </View>
           <View className="mt-2 flex-row items-baseline gap-2">
-            <Text className="text-lg font-black text-slate-900">김지은</Text>
-            <Text className="font-pixel text-[9px] text-[#08736d]">@gamjieun</Text>
+            <Text className="text-lg font-black text-slate-900" numberOfLines={1}>
+              {me.nickname}
+            </Text>
+            <Text className="font-pixel text-[9px] text-[#08736d]" numberOfLines={1}>
+              @{me.username}
+            </Text>
           </View>
-          <Text className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">
-            바다와 골목 카페를 발견하면 가장 먼저 핀을 남겨요.
+          {/* 서버에 자기소개 필드가 없어서 지어내지 않고 이메일을 보여준다. */}
+          <Text className="mt-1 text-[11px] font-semibold leading-4 text-slate-500" numberOfLines={1}>
+            {me.email}
           </Text>
         </View>
       </View>

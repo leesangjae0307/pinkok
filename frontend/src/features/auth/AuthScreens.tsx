@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 인증 플로우: 스플래시 → 로그인 → 회원가입 / 비밀번호 재설정
  * (웹 AuthScreens.tsx 를 React Native 로 이관)
  */
@@ -44,7 +44,7 @@ import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 
-import {fetchAvatars, login, signup} from '../../api/authApi';
+import {Me, fetchAvatars, login, signup} from '../../api/authApi';
 
 import {errorMessage} from '../../api/axios';
 
@@ -59,7 +59,7 @@ import {AnimatedLoop, LinearGradient} from '../../components/pixel/Primitives';
 type AuthScreen = 'splash' | 'login' | 'signup' | 'resetPassword';
 
 interface AuthScreensProps {
-  onComplete: () => void;
+  onComplete: (me: Me) => void;
 }
 
 const SKY_BORDER = '#0E7490';
@@ -404,7 +404,7 @@ function LoginScreen({
 
   onResetPassword: () => void;
 
-  onComplete: () => void;
+  onComplete: (me: Me) => void;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -424,9 +424,9 @@ function LoginScreen({
     setIsSubmitting(true);
 
     try {
-      await login(email.trim(), password);
-
-      onComplete();
+      // 로그인 응답의 user 를 그대로 올려보낸다. 토큰과 같은 응답에서 나온
+      // 값이라 토큰과 사용자가 어긋날 수 없다.
+      onComplete(await login(email.trim(), password));
     } catch (e) {
       Alert.alert(
         'PINKOK',
@@ -903,7 +903,7 @@ function SignUpScreen({
   onComplete,
 }: {
   onBack: () => void;
-  onComplete: () => void;
+  onComplete: (me: Me) => void;
 }) {
   const [nickname, setNickname] = useState('');
 
@@ -1015,9 +1015,9 @@ function SignUpScreen({
         avatarId: serverCode ? avatarIdByCode[serverCode] : undefined,
       });
 
-      await login(email.trim(), password);
-
-      onComplete();
+      // 가입 응답에도 사용자가 담겨 오지만 토큰이 없다. 세션을 세우려면 로그인을
+      // 한 번 더 해야 하므로, 화면에 쓸 사용자도 로그인 응답 쪽을 쓴다.
+      onComplete(await login(email.trim(), password));
     } catch (e) {
       Alert.alert(
         'PINKOK',
@@ -1277,6 +1277,7 @@ function ResetPasswordScreen({
   onComplete,
 }: {
   onBack: () => void;
+  /** 로그인 화면으로 돌아갈 뿐이라 사용자 정보를 만들지 않는다. */
   onComplete: () => void;
 }) {
   const [email, setEmail] = useState('hello@pinkok.kr');

@@ -6,6 +6,7 @@ import React from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Me } from '../../api/authApi';
 import { MAP_PLACES } from '../../data/mockData';
 import { AnimatedLoop } from '../../components/pixel/Primitives';
 import { AppProvider, useApp } from './AppContext';
@@ -148,9 +149,9 @@ function Shell() {
   );
 }
 
-export default function MainApp({ onLogout }: { onLogout: () => void }) {
+export default function MainApp({ me, onLogout }: { me: Me; onLogout: () => void }) {
   return (
-    <AppProvider onLogout={onLogout}>
+    <AppProvider me={me} onLogout={onLogout}>
       <Shell />
     </AppProvider>
   );

@@ -79,7 +79,11 @@ export function AvatarPickerModal() {
                     selected ? 'border-[#56EADD]' : 'border-white'
                   }`}
                 >
-                  <Image source={avatar.image} resizeMode="cover" className="aspect-square w-full" />
+                  {/* 정사각 비율은 감싸는 View 의 style 로 잡는다. Image 에 직접 준
+                      style 과 aspect-square 는 적용되지 않아 원본 높이로 늘어난다. */}
+                  <View style={{ width: '100%', aspectRatio: 1 }}>
+                    <Image source={avatar.image} resizeMode="cover" className="h-full w-full" />
+                  </View>
                   <Text className="min-h-10 px-1.5 py-2 text-center text-[9px] font-black leading-3 text-slate-700">
                     {avatar.label}
                   </Text>

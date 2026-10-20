@@ -465,12 +465,20 @@ function LoginScreen({
           showsVerticalScrollIndicator={false}>
           <View className="gap-3 px-5">
             <View className="items-center">
-              <Image
-                source={loginLogoCutout}
-                resizeMode="contain"
-                className="w-48"
-                style={{aspectRatio: 426 / 437}}
-              />
+              {/*
+                <Image> 에 직접 준 style 은 적용되지 않는다(NativeWind 가 붙은
+                트리라 className 만 반영된다). 크기는 감싸는 View 의 style 로
+                잡고, 이미지는 그 안을 h-full w-full 로 채운다. 이렇게 하지
+                않으면 이미지가 원본 높이(437dp)에 화면 폭으로 늘어나 좌우가
+                잘린다.
+              */}
+              <View style={{width: 192, aspectRatio: 426 / 437}}>
+                <Image
+                  source={loginLogoCutout}
+                  resizeMode="contain"
+                  className="h-full w-full"
+                />
+              </View>
             </View>
 
             <View
@@ -1210,11 +1218,16 @@ function SignUpScreen({
                         </View>
                       )}
 
-                      <Image
-                        source={avatar.image}
-                        resizeMode="cover"
-                        className="aspect-square w-full"
-                      />
+                      {/* 정사각 비율은 감싸는 View 의 style 로 잡는다. Image 에
+                          직접 준 style 과 aspect-square 는 적용되지 않아
+                          원본 높이(219dp)로 늘어나 세로로 길쭉해졌다. */}
+                      <View style={{width: '100%', aspectRatio: 1}}>
+                        <Image
+                          source={avatar.image}
+                          resizeMode="cover"
+                          className="h-full w-full"
+                        />
+                      </View>
 
                       <View className="items-center px-1 py-1.5">
                         <Text className="min-h-6 text-center text-[8px] font-black leading-3 text-slate-700">

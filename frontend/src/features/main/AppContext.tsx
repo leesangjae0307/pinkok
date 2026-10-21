@@ -235,6 +235,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [isTripPickerOpen, setIsTripPickerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedTripForExtract, setSelectedTripForExtract] = useState(1);
+  // 첨부한 스크린샷 파일명 (최대 10장). TODO(서버 연동): POST /files 로 올린 뒤 받은 id 로 교체.
+  const [extractImageNames, setExtractImageNames] = useState<string[]>([]);
 
   // 여행 지도 & 팀 기록
   const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem>(MAP_PLACES[0]);
@@ -384,7 +386,9 @@ function useAppState(me: Me, onLogout: () => void) {
 
   // AI 추출 시뮬레이션
   const handleExtractSubmit = () => {
-    if (!inputUrl) return;
+    if (!inputUrl && extractImageNames.length === 0) {
+      return;
+    }
     setIsExtracting(true);
     setTimeout(() => {
       setIsExtracting(false);
@@ -537,7 +541,8 @@ function useAppState(me: Me, onLogout: () => void) {
     selectedExtractedPlaceIds,
     isTripPickerOpen, setIsTripPickerOpen,
     toastMessage,
-    selectedTripForExtract,
+    selectedTripForExtract, setSelectedTripForExtract,
+    extractImageNames, setExtractImageNames,
     selectedMapPin, setSelectedMapPin,
     isPlaceDetailModalOpen, setIsPlaceDetailModalOpen,
     startPlaceCamera, setStartPlaceCamera,

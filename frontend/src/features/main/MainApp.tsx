@@ -105,6 +105,7 @@ function ScreenBody() {
 
 function GlobalModals() {
   const {
+    me,
     isPlaceDetailModalOpen,
     selectedMapPin,
     placeRecords,
@@ -174,6 +175,8 @@ function GlobalModals() {
         <TeamInviteModal
           tripTitle={inviteTrip.title}
           currentAvatarUrl={selectedProfileAvatar.image}
+          currentNickname={me.nickname}
+          showTeamManagement
           onClose={() => setInviteTrip(null)}
           onInvite={(nickname, loginId) => showToast(`${nickname}(@${loginId})님에게 여행 초대를 보냈어요.`)}
         />

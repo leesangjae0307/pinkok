@@ -2,9 +2,11 @@ import React from 'react';
 import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 
-import { PixelExtractIcon, PixelHotAirBalloon, PixelStar } from '../../../components/pixel/PixelIcons';
-import { AnimatedLoop, FadeIn, PixelPressable } from '../../../components/pixel/Primitives';
+import { PixelExtractIcon, PixelStar } from '../../../components/pixel/PixelIcons';
+import { AnimatedLoop, FadeIn, PixelPressable, PixelSelect } from '../../../components/pixel/Primitives';
 import { useApp } from '../AppContext';
+
+const MAX_IMAGES = 10;
 
 export default function ExtractTab() {
   const {
@@ -17,20 +19,26 @@ export default function ExtractTab() {
     setIsTripPickerOpen,
     trips,
     selectedTripForExtract,
+    setSelectedTripForExtract,
+    extractImageNames,
+    setExtractImageNames,
     showToast,
     handleExtractSubmit,
     handleToggleExtractedPlace,
     handleAddPlaceToTrip,
   } = useApp();
 
-  const handlePickScreenshot = async () => {
-    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
-    const asset = res.assets?.[0];
-    if (asset) {
-      setInputUrl(asset.fileName ?? asset.uri ?? '스크린샷');
-      showToast('스크린샷이 분석 대기열에 추가됐어요.');
+  const handlePickScreenshots = async () => {
+    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: MAX_IMAGES });
+    const assets = (res.assets ?? []).slice(0, MAX_IMAGES);
+    if (assets.length > 0) {
+      setExtractImageNames(assets.map((asset, i) => asset.fileName ?? `스크린샷 ${i + 1}`));
+      showToast(`스크린샷 ${assets.length}장이 분석 대기열에 추가됐어요.`);
     }
   };
+
+  // 저장된 선택이 지워진 여행이면 맨 앞 여행으로 대신한다.
+  const targetTripId = trips.some((t) => t.id === selectedTripForExtract) ? selectedTripForExtract : trips[0]?.id;
 
   const noneSelected = selectedExtractedPlaceIds.length === 0;
 
@@ -41,7 +49,7 @@ export default function ExtractTab() {
         <View className="flex-row items-center gap-2">
           <PixelExtractIcon size={34} active />
           <View>
-            <Text className="font-pixel text-xl tracking-tight text-[#0f6861]">PINKOK</Text>
+            <Text className="font-pixel text-xl tracking-tight text-[#0f6861]">EXTRACT</Text>
             <Text className="-mt-1 text-[11px] font-semibold text-slate-600">AI 장소 자동 추출기</Text>
           </View>
         </View>
@@ -70,7 +78,7 @@ export default function ExtractTab() {
           className="flex-1 p-0 text-xs font-medium text-slate-800"
         />
         <Pressable
-          onPress={handlePickScreenshot}
+          onPress={handlePickScreenshots}
           accessibilityLabel="여행 스크린샷 업로드"
           className="h-10 w-10 items-center justify-center rounded-2xl border border-[#82F0DC] bg-[#B4FAF0]/50 active:bg-[#B4FAF0]"
         >
@@ -86,13 +94,35 @@ export default function ExtractTab() {
         </Pressable>
       </View>
 
-      {/* 로딩: 떠다니는 열기구 */}
+      {extractImageNames.length > 0 && (
+        <View className="rounded-2xl border border-[#82F0DC] bg-white/80 p-3">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[10px] font-black text-[#075953]">
+              첨부 이미지 {extractImageNames.length}/{MAX_IMAGES}
+            </Text>
+            <Pressable onPress={() => setExtractImageNames([])} hitSlop={8}>
+              <Text className="text-[9px] font-black text-rose-500">전체 삭제</Text>
+            </Pressable>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2" contentContainerClassName="gap-1.5">
+            {extractImageNames.map((name, index) => (
+              <View key={`${name}-${index}`} className="max-w-28 rounded-lg bg-[#B4FAF0] px-2 py-1">
+                <Text numberOfLines={1} className="text-[9px] font-bold text-[#075953]">
+                  {index + 1}. {name}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* 로딩: 떠다니는 AI 로봇 */}
       {isExtracting ? (
         <FadeIn>
           <View className="my-4 items-center gap-4 rounded-3xl border-2 border-[#56EADD] bg-white p-8 shadow-md">
             <AnimatedLoop kind="float">
               <View className="h-20 w-20 items-center justify-center rounded-full border-2 border-[#50E6DC] bg-[#B4FAF0]">
-                <PixelHotAirBalloon size={44} active />
+                <PixelExtractIcon size={52} active />
               </View>
             </AnimatedLoop>
             <View className="items-center gap-1">
@@ -218,27 +248,29 @@ export default function ExtractTab() {
                   <Text className="text-xs font-extrabold text-slate-800">내 여행 선택</Text>
                   <Text className="font-pixel text-[8px] text-[#075953]">BATCH ADD</Text>
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
-                  {trips.map((trip) => (
+                {trips.length > 0 && targetTripId !== undefined ? (
+                  <View className="gap-2">
+                    <PixelSelect
+                      size="lg"
+                      accessibilityLabel="추출 장소를 보낼 내 여행"
+                      value={String(targetTripId)}
+                      options={trips.map((trip) => ({ value: String(trip.id), label: `${trip.dDay} · ${trip.title}` }))}
+                      onChange={(value) => setSelectedTripForExtract(Number(value))}
+                    />
                     <Pressable
-                      key={trip.id}
-                      onPress={() => handleAddPlaceToTrip(trip.id)}
-                      className={`w-36 rounded-2xl border-2 p-2.5 ${
-                        selectedTripForExtract === trip.id ? 'border-[#50E6DC] bg-[#B4FAF0]/65' : 'border-slate-200 bg-slate-50'
-                      }`}
+                      onPress={() => handleAddPlaceToTrip(targetTripId)}
+                      className="h-11 w-full items-center justify-center rounded-xl border-2 border-pixel-navy bg-slate-900 active:opacity-80"
                     >
-                      <Text className="font-pixel text-[8px] text-[#075953]">{trip.dDay}</Text>
-                      <Text numberOfLines={1} className="mt-1 text-xs font-bold text-slate-800">
-                        {trip.title}
+                      <Text className="text-xs font-black text-[#56EADD]">
+                        선택한 여행에 {selectedExtractedPlaceIds.length}곳 보내기
                       </Text>
-                      <View className="mt-2 rounded-xl bg-slate-900 px-2 py-1">
-                        <Text className="text-center text-[9px] font-bold text-[#56EADD]">
-                          {selectedExtractedPlaceIds.length}곳 보내기
-                        </Text>
-                      </View>
                     </Pressable>
-                  ))}
-                </ScrollView>
+                  </View>
+                ) : (
+                  <Text className="py-3 text-center text-xs font-bold text-slate-400">
+                    보낼 여행이 없어요. 여행 탭에서 먼저 만들어 주세요.
+                  </Text>
+                )}
               </View>
             )}
           </FadeIn>

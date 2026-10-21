@@ -14,6 +14,7 @@ import { Me, logout } from '../../api/authApi';
 import { errorMessage } from '../../api/axios';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
+  CURRENT_USER,
   INITIAL_PLACE_RECORDS,
   INITIAL_TRIPS,
   MAP_PLACES,
@@ -25,6 +26,7 @@ import {
   VlogClip,
 } from '../../data/mockData';
 import type { SynthesizedVlog } from './modals/PinLogSynthesisModal';
+import type { QuickClip } from './modals/QuickPinLogCameraModal';
 
 export type NotificationType = 'TRIP_INVITED' | 'TRIP_REMINDER' | 'TRIP_PLACE_ADDED';
 
@@ -232,6 +234,9 @@ function useAppState(me: Me, onLogout: () => void) {
   const [isPlaceDetailModalOpen, setIsPlaceDetailModalOpen] = useState(false);
   const [placeRecords, setPlaceRecords] = useState<PlaceRecord[]>(INITIAL_PLACE_RECORDS);
   const [isPinLogMakerOpen, setIsPinLogMakerOpen] = useState(false);
+  // 홈 빠른 촬영: 촬영 대상 여행과 열림 여부
+  const [pinLogTrip, setPinLogTrip] = useState<TripFolder>(INITIAL_TRIPS[0]);
+  const [isQuickPinLogCameraOpen, setIsQuickPinLogCameraOpen] = useState(false);
   const [mapPlaces, setMapPlaces] = useState<PlaceItem[]>(MAP_PLACES);
   const [isOptimizingRoute, setIsOptimizingRoute] = useState(false);
 
@@ -284,6 +289,42 @@ function useAppState(me: Me, onLogout: () => void) {
       return [record, ...prev];
     });
     showToast('장소 기록이 성공적으로 저장되었습니다! 📍');
+  };
+
+  /** 'D-28' → 28. 형식이 다르면 맨 뒤로 보낸다. */
+  const dDayNumber = (dDay: string) => {
+    const n = Number(dDay.replace(/\D/g, ''));
+    return Number.isFinite(n) && dDay.trim() !== '' ? n : Number.MAX_SAFE_INTEGER;
+  };
+
+  // 홈 "핀로그 촬영": D-Day 가 가장 가까운 여행으로 빠른 촬영 화면을 연다.
+  const openQuickPinLogCamera = () => {
+    if (!trips.length) {
+      showToast('먼저 여행을 만들어 주세요.');
+      return;
+    }
+    const closestTrip = [...trips].sort((a, b) => dDayNumber(a.dDay) - dDayNumber(b.dDay))[0];
+    setPinLogTrip(closestTrip);
+    setIsQuickPinLogCameraOpen(true);
+  };
+
+  // 빠른 촬영 영상을 그 장소의 내 기록에 붙인다. 기록이 없으면 새로 만든다(1인 1기록).
+  const handleQuickPinLogUpload = (place: PlaceItem, clip: QuickClip) => {
+    const existing = placeRecords.find((r) => r.pinId === place.id && r.userId === CURRENT_USER.id);
+    handleSavePlaceRecord({
+      id: existing?.id ?? Date.now(),
+      pinId: place.id,
+      userId: CURRENT_USER.id,
+      authorName: CURRENT_USER.name,
+      authorAvatar: selectedProfileAvatar.image,
+      createdAt: '방금 전',
+      rating: existing?.rating ?? 5,
+      memo: existing?.memo ?? '홈 빠른 촬영으로 추가한 PinLog 영상',
+      photos: existing?.photos ?? [],
+      videoClip: clip,
+    });
+    setIsQuickPinLogCameraOpen(false);
+    setActiveTab('pinlog');
   };
 
   const handleDeletePlaceRecord = (recordId: number) => {
@@ -460,6 +501,8 @@ function useAppState(me: Me, onLogout: () => void) {
     isPlaceDetailModalOpen, setIsPlaceDetailModalOpen,
     placeRecords,
     isPinLogMakerOpen, setIsPinLogMakerOpen,
+    pinLogTrip, setPinLogTrip,
+    isQuickPinLogCameraOpen, setIsQuickPinLogCameraOpen,
     mapPlaces,
     isOptimizingRoute,
     tripsSheetHeight, setTripsSheetHeight,
@@ -478,6 +521,8 @@ function useAppState(me: Me, onLogout: () => void) {
     showToast,
     handleSavePlaceRecord,
     handleDeletePlaceRecord,
+    openQuickPinLogCamera,
+    handleQuickPinLogUpload,
     handleSynthesizeComplete,
     handleExtractSubmit,
     handleToggleExtractedPlace,

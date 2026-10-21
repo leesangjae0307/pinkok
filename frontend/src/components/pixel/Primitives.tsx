@@ -267,12 +267,15 @@ export function PixelSelect({
   onChange,
   className,
   accessibilityLabel,
+  size = 'sm',
 }: {
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   className?: string;
   accessibilityLabel?: string;
+  /** sm: 필터용 작은 셀렉트(h-9), lg: 폼 입력용 큰 셀렉트(h-12, 민트 테두리) */
+  size?: 'sm' | 'lg';
 }) {
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.value === value);
@@ -284,11 +287,20 @@ export function PixelSelect({
         accessibilityLabel={accessibilityLabel}
         className={className}
       >
-        <View className="h-9 flex-row items-center justify-between rounded-xl border border-[#075953]/30 bg-white px-2">
-          <Text className="text-[10px] font-black text-slate-700" numberOfLines={1}>
+        <View
+          className={
+            size === 'lg'
+              ? 'h-12 flex-row items-center justify-between rounded-xl border-2 border-[#56EADD] bg-white px-3'
+              : 'h-9 flex-row items-center justify-between rounded-xl border border-[#075953]/30 bg-white px-2'
+          }
+        >
+          <Text
+            className={size === 'lg' ? 'flex-1 text-sm font-black text-slate-900' : 'text-[10px] font-black text-slate-700'}
+            numberOfLines={1}
+          >
             {current?.label ?? value}
           </Text>
-          <Text className="text-[8px] text-slate-500">▼</Text>
+          <Text className={size === 'lg' ? 'text-[10px] text-slate-500' : 'text-[8px] text-slate-500'}>▼</Text>
         </View>
       </Pressable>
 

@@ -22,6 +22,7 @@ import ProfileTab from './tabs/ProfileTab';
 import PlaceDetailModal from './modals/PlaceDetailModal';
 import PinLogSynthesisModal from './modals/PinLogSynthesisModal';
 import TeamInviteModal from './modals/TeamInviteModal';
+import QuickPinLogCameraModal from './modals/QuickPinLogCameraModal';
 import { AvatarPickerModal, ClipPlaybackModal, ProfileDetailModal } from './modals/ProfileModals';
 
 function Toast() {
@@ -88,6 +89,11 @@ function GlobalModals() {
     inviteTrip,
     setInviteTrip,
     showToast,
+    isQuickPinLogCameraOpen,
+    setIsQuickPinLogCameraOpen,
+    pinLogTrip,
+    mapPlaces,
+    handleQuickPinLogUpload,
   } = useApp();
 
   return (
@@ -114,6 +120,15 @@ function GlobalModals() {
           currentUserAvatarUrl={selectedProfileAvatar.image}
           onClose={() => setIsPinLogMakerOpen(false)}
           onSynthesizeComplete={handleSynthesizeComplete}
+        />
+      )}
+
+      {isQuickPinLogCameraOpen && (
+        <QuickPinLogCameraModal
+          trip={pinLogTrip}
+          places={mapPlaces}
+          onClose={() => setIsQuickPinLogCameraOpen(false)}
+          onUpload={handleQuickPinLogUpload}
         />
       )}
 

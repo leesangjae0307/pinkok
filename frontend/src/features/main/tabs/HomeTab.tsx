@@ -1,12 +1,20 @@
 import React from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
-import { PixelBellIcon, PixelExtractIcon, PixelHotAirBalloon } from '../../../components/pixel/PixelIcons';
+import { PixelBellIcon, PixelExtractIcon, PixelHotAirBalloon, PixelPinLogIcon } from '../../../components/pixel/PixelIcons';
 import { AnimatedLoop, FadeIn, LinearGradient, PixelPressable } from '../../../components/pixel/Primitives';
 import { useApp } from '../AppContext';
 
 export default function HomeTab() {
-  const { trips, unreadNotificationCount, setIsNotificationOpen, setActiveTrip, setActiveTab, setIsTripMapOpen } = useApp();
+  const {
+    trips,
+    unreadNotificationCount,
+    setIsNotificationOpen,
+    setActiveTrip,
+    setActiveTab,
+    setIsTripMapOpen,
+    openQuickPinLogCamera,
+  } = useApp();
   const firstTrip = trips[0];
 
   return (
@@ -106,6 +114,24 @@ export default function HomeTab() {
           <PixelExtractIcon size={48} active />
         </LinearGradient>
       </Pressable>
+
+      {/* 빠른 핀로그 촬영: D-Day 가 가장 가까운 여행의 카메라를 바로 연다 */}
+      <PixelPressable
+        shadowColor="#FF5A87"
+        offset={4}
+        radius={24}
+        wrapperClassName="w-full"
+        className="w-full flex-row items-center justify-between rounded-3xl border-2 border-pixel-navy bg-slate-900 p-4"
+        accessibilityLabel="핀로그 빠른 촬영 열기"
+        onPress={openQuickPinLogCamera}
+      >
+        <View className="flex-1">
+          <Text className="font-pixel text-[9px] text-[#56EADD]">QUICK RECORD</Text>
+          <Text className="mt-1 text-sm font-black text-white">핀로그 촬영</Text>
+          <Text className="mt-1 text-[10px] font-semibold text-slate-300">가장 가까운 D-Day 여행 카메라를 바로 열어요.</Text>
+        </View>
+        <PixelPinLogIcon size={48} active />
+      </PixelPressable>
 
       {/* AI 팁 */}
       <View className="flex-row items-center gap-3 rounded-2xl border border-[#82F0DC] bg-white/90 p-3">

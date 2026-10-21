@@ -12,7 +12,7 @@ npx react-native run-android   # 새 네이티브 라이브러리가 추가돼�
 ```
 
 - 이미 Metro가 켜져 있었다면 끄고 `npx react-native start --reset-cache`로 다시 켜 주세요 (NativeWind CSS 캐시 초기화).
-- 픽셀 폰트(Press Start 2P)는 `android/app/src/main/assets/fonts/`에 미리 넣어 뒀어요. iOS에서는 `npx react-native-asset`을 한 번 실행하면 돼요.
+- 폰트(본문 Plus Jakarta Sans + 픽셀 Press Start 2P)는 `android/app/src/main/assets/fonts/`에 미리 넣어 뒀어요. iOS에서는 `npx react-native-asset`을 한 번 실행하면 돼요. 자세한 내용은 `FONT_SETUP.md` 참고.
 
 ## 새로 추가된 라이브러리
 
@@ -33,7 +33,7 @@ App.tsx                         로그인 여부에 따라 Auth / Main 전환
 global.css, tailwind.config.js  NativeWind 설정 (웹 @theme 색상 토큰 그대로)
 src/
   assets/images/                웹에서 쓰던 PNG (로고, 탭 아이콘, 아바타, 배경)
-  assets/fonts/                 Galmuri(기존) + PressStart2P(웹 font-pixel)
+  assets/fonts/                 PlusJakartaSans(웹 본문 폰트, 굵기별) + PressStart2P(웹 font-pixel)
   data/mockData.ts              웹 목업 데이터 그대로
   components/pixel/
     PixelIcons.tsx              픽셀 아이콘 세트

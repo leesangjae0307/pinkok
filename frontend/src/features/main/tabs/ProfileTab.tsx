@@ -2,7 +2,7 @@ import React from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
 import { PixelProfileIcon } from '../../../components/pixel/PixelIcons';
-import { FadeIn, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
+import { FadeIn, PixelPressable } from '../../../components/pixel/Primitives';
 import { TRAVEL_TASTES, avatarImageForCode, useApp } from '../AppContext';
 
 const GALLERY = [
@@ -23,8 +23,8 @@ export default function ProfileTab() {
     me,
     setIsSettingsOpen,
     selectedProfileAvatar,
-    setPendingProfileAvatar,
-    setIsAvatarPickerOpen,
+    profileNickname,
+    openProfileEditor,
     setProfileDetailModal,
     setActiveTab,
   } = useApp();
@@ -41,7 +41,7 @@ export default function ProfileTab() {
       <View className="flex-row items-center justify-between pt-1">
         <View className="flex-row items-center gap-2">
           <PixelProfileIcon size={30} active />
-          <Text className="text-sm font-black text-[#075953]">프로필</Text>
+          <Text className="font-pixel text-lg tracking-tight text-[#075953]">PROFILE</Text>
         </View>
         <Pressable
           onPress={() => setIsSettingsOpen(true)}
@@ -60,10 +60,7 @@ export default function ProfileTab() {
           radius={16}
           pressEffect="scale"
           accessibilityLabel="프로필 아바타 변경"
-          onPress={() => {
-            setPendingProfileAvatar(selectedProfileAvatar);
-            setIsAvatarPickerOpen(true);
-          }}
+          onPress={openProfileEditor}
           className="relative h-20 w-20 overflow-hidden rounded-2xl border-2 border-[#075953] bg-[#B4FAF0]"
         >
           <Image source={avatarImage} resizeMode="cover" className="h-full w-full" />
@@ -72,28 +69,14 @@ export default function ProfileTab() {
           </View>
         </PixelPressable>
         <View className="min-w-0 flex-1">
-          <View className="self-start">
-            <ShadowBox
-              shadowColor="#075953"
-              offset={2}
-              radius={8}
-              className="rounded-lg border-2 border-[#075953] bg-[#56EADD] px-2 py-1"
-            >
-              <Text className="text-[10px] font-black text-[#075953]">🌊 바다뷰 수집가</Text>
-            </ShadowBox>
-          </View>
-          <View className="mt-2 flex-row items-baseline gap-2">
+          <View className="flex-row items-baseline gap-2">
             <Text className="text-lg font-black text-slate-900" numberOfLines={1}>
-              {me.nickname}
+              {profileNickname}
             </Text>
             <Text className="font-pixel text-[9px] text-[#08736d]" numberOfLines={1}>
               @{me.username}
             </Text>
           </View>
-          {/* 서버에 자기소개 필드가 없어서 지어내지 않고 이메일을 보여준다. */}
-          <Text className="mt-1 text-[11px] font-semibold leading-4 text-slate-500" numberOfLines={1}>
-            {me.email}
-          </Text>
         </View>
       </View>
 

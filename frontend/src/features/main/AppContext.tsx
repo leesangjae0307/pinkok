@@ -11,6 +11,7 @@ import avatarMapPhone from '../../assets/images/avatar-map-phone.png';
 import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 import { Me, logout } from '../../api/authApi';
+import { updateNickname } from '../../api/userApi';
 import { errorMessage } from '../../api/axios';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
@@ -260,7 +261,37 @@ function useAppState(me: Me, onLogout: () => void) {
   const [selectedProfileAvatar, setSelectedProfileAvatar] = useState<ProfileAvatar>(PROFILE_AVATARS[0]);
   const [pendingProfileAvatar, setPendingProfileAvatar] = useState<ProfileAvatar>(PROFILE_AVATARS[0]);
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
+  const [profileNickname, setProfileNickname] = useState(me.nickname);
+  const [pendingProfileNickname, setPendingProfileNickname] = useState(me.nickname);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isPinLogTripPickerOpen, setIsPinLogTripPickerOpen] = useState(false);
   const [profileDetailModal, setProfileDetailModal] = useState<'visited' | 'saved' | 'regions' | null>(null);
+
+  const openProfileEditor = () => {
+    setPendingProfileAvatar(selectedProfileAvatar);
+    setPendingProfileNickname(profileNickname);
+    setIsAvatarPickerOpen(true);
+  };
+
+  /** 닉네임은 PATCH /users/me 로 저장한다. 아바타 선택은 아직 서버 연동 전이라 앱 안에서만 바뀐다. */
+  const saveProfile = async () => {
+    const nickname = pendingProfileNickname.trim();
+    if (!nickname) {
+      return;
+    }
+    if (nickname !== profileNickname) {
+      try {
+        await updateNickname(nickname);
+      } catch {
+        showToast('닉네임을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+    }
+    setSelectedProfileAvatar(pendingProfileAvatar);
+    setProfileNickname(nickname);
+    setIsAvatarPickerOpen(false);
+    showToast('프로필을 변경했어요.');
+  };
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -559,6 +590,12 @@ function useAppState(me: Me, onLogout: () => void) {
     selectedProfileAvatar, setSelectedProfileAvatar,
     pendingProfileAvatar, setPendingProfileAvatar,
     isAvatarPickerOpen, setIsAvatarPickerOpen,
+    profileNickname,
+    pendingProfileNickname, setPendingProfileNickname,
+    isPasswordModalOpen, setIsPasswordModalOpen,
+    isPinLogTripPickerOpen, setIsPinLogTripPickerOpen,
+    openProfileEditor,
+    saveProfile,
     profileDetailModal, setProfileDetailModal,
     // 파생값
     displayedMapPlaces,

@@ -46,7 +46,7 @@ function ClipCard({ clip, onPress, showDots }: { clip: VlogClip; onPress: () => 
 }
 
 export default function PinLogTab() {
-  const { vlogClips, setActiveClipModal, setIsPinLogMakerOpen } = useApp();
+  const { vlogClips, setActiveClipModal, setIsPinLogTripPickerOpen } = useApp();
 
   return (
     <FadeIn style={{ padding: 16, paddingBottom: 80, gap: 16 }}>
@@ -55,7 +55,10 @@ export default function PinLogTab() {
           <View className="h-11 w-11 items-center justify-center">
             <PixelPinLogIcon size={34} active />
           </View>
-          <Text className="text-base font-black tracking-tight text-[#0f6861]">PINKOK 1초 영상 핀로그</Text>
+          <View>
+            <Text className="font-pixel text-xl tracking-tight text-[#0f6861]">PINLOG</Text>
+            <Text className="text-[11px] font-semibold text-slate-600">소중한 순간을 담는 짧은 브이로그</Text>
+          </View>
         </View>
       </View>
 
@@ -63,7 +66,7 @@ export default function PinLogTab() {
         shadowColor="#075953"
         offset={3}
         radius={16}
-        onPress={() => setIsPinLogMakerOpen(true)}
+        onPress={() => setIsPinLogTripPickerOpen(true)}
         wrapperClassName="w-full"
         className="h-11 w-full flex-row items-center justify-center gap-1.5 rounded-2xl border-2 border-pixel-navy bg-mint-primary"
       >

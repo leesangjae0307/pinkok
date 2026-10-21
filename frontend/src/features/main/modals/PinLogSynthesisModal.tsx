@@ -13,6 +13,8 @@ interface PinLogSynthesisModalProps {
   places: PlaceItem[];
   records: PlaceRecord[];
   currentUserAvatarUrl: number;
+  /** 헤더에 보여줄 여행 이름 */
+  tripTitle?: string;
   onClose: () => void;
   onSynthesizeComplete: (result: SynthesizedVlog) => void;
 }
@@ -49,6 +51,7 @@ export default function PinLogSynthesisModal({
   places,
   records,
   currentUserAvatarUrl,
+  tripTitle,
   onClose,
   onSynthesizeComplete,
 }: PinLogSynthesisModalProps) {
@@ -177,7 +180,14 @@ export default function PinLogSynthesisModal({
             </Pressable>
             <View className="flex-1 flex-row items-center justify-center gap-2">
               <PixelHotAirBalloon size={30} active />
-              <Text className="text-sm font-black text-pixel-navy">PINKOK 1초 영상 핀로그</Text>
+              <View className="items-center">
+                <Text className="text-sm font-black text-pixel-navy">Pinlog 영상 생성</Text>
+                {tripTitle ? (
+                  <Text numberOfLines={1} className="mt-0.5 max-w-56 font-pixel text-[7px] text-[#075953]">
+                    {tripTitle}
+                  </Text>
+                ) : null}
+              </View>
             </View>
             <View className="w-9" />
           </View>

@@ -33,6 +33,8 @@ export default function SettingsScreen() {
     cacheSize,
     handleClearCache,
     handleLogout,
+    openProfileEditor,
+    setIsPasswordModalOpen,
   } = useApp();
 
   return (
@@ -76,12 +78,23 @@ export default function SettingsScreen() {
           </View>
 
           <Pressable
-            onPress={() => showToast('프로필 및 닉네임 수정 화면으로 이동합니다.')}
+            onPress={openProfileEditor}
             className="flex-row items-center justify-between pt-0.5 active:opacity-80"
           >
             <View className="flex-row items-center gap-2">
               <Emoji>✏️</Emoji>
               <Text className="text-xs font-bold text-slate-800">닉네임 및 기본 프로필 변경</Text>
+            </View>
+            <Chevron />
+          </Pressable>
+
+          <Pressable
+            onPress={() => setIsPasswordModalOpen(true)}
+            className="flex-row items-center justify-between border-t border-slate-100 pt-3 active:opacity-80"
+          >
+            <View className="flex-row items-center gap-2">
+              <Emoji>🔒</Emoji>
+              <Text className="text-xs font-bold text-slate-800">비밀번호 변경</Text>
             </View>
             <Chevron />
           </Pressable>

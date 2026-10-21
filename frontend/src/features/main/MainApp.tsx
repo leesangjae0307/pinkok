@@ -24,7 +24,8 @@ import PinLogSynthesisModal from './modals/PinLogSynthesisModal';
 import TeamInviteModal from './modals/TeamInviteModal';
 import QuickPinLogCameraModal from './modals/QuickPinLogCameraModal';
 import CreateTripScreen from './screens/CreateTripScreen';
-import { AvatarPickerModal, ClipPlaybackModal, ProfileDetailModal } from './modals/ProfileModals';
+import PinLogTripPickerModal from './modals/PinLogTripPickerModal';
+import { AvatarPickerModal, ClipPlaybackModal, PasswordModal, ProfileDetailModal } from './modals/ProfileModals';
 
 function Toast() {
   const insets = useSafeAreaInsets();
@@ -117,6 +118,9 @@ function GlobalModals() {
     selectedProfileAvatar,
     setIsPinLogMakerOpen,
     isPinLogMakerOpen,
+    isPinLogTripPickerOpen,
+    setIsPinLogTripPickerOpen,
+    trips,
     handleSynthesizeComplete,
     inviteTrip,
     setInviteTrip,
@@ -124,6 +128,7 @@ function GlobalModals() {
     isQuickPinLogCameraOpen,
     setIsQuickPinLogCameraOpen,
     pinLogTrip,
+    setPinLogTrip,
     mapPlaces,
     handleQuickPinLogUpload,
     isCreateTripInviteOpen,
@@ -152,11 +157,24 @@ function GlobalModals() {
         />
       )}
 
+      {isPinLogTripPickerOpen && (
+        <PinLogTripPickerModal
+          trips={trips}
+          onClose={() => setIsPinLogTripPickerOpen(false)}
+          onSelect={(trip) => {
+            setPinLogTrip(trip);
+            setIsPinLogTripPickerOpen(false);
+            setIsPinLogMakerOpen(true);
+          }}
+        />
+      )}
+
       {isPinLogMakerOpen && (
         <PinLogSynthesisModal
           places={MAP_PLACES}
           records={placeRecords}
           currentUserAvatarUrl={selectedProfileAvatar.image}
+          tripTitle={pinLogTrip.title}
           onClose={() => setIsPinLogMakerOpen(false)}
           onSynthesizeComplete={handleSynthesizeComplete}
         />
@@ -192,6 +210,7 @@ function GlobalModals() {
       )}
 
       <AvatarPickerModal />
+      <PasswordModal />
       <ProfileDetailModal />
       <ClipPlaybackModal />
     </>

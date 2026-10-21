@@ -2,7 +2,8 @@
  * 프로필 아바타 선택 / 내 여행 데이터 상세 / 1초 클립 재생 모달
  */
 import React from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MAP_PLACES } from '../../../data/mockData';
@@ -49,8 +50,9 @@ export function AvatarPickerModal() {
     setIsAvatarPickerOpen,
     pendingProfileAvatar,
     setPendingProfileAvatar,
-    setSelectedProfileAvatar,
-    showToast,
+    pendingProfileNickname,
+    setPendingProfileNickname,
+    saveProfile,
   } = useApp();
   if (!isAvatarPickerOpen) return null;
 
@@ -58,12 +60,23 @@ export function AvatarPickerModal() {
     <ModalBackdrop onRequestClose={() => setIsAvatarPickerOpen(false)}>
       <View className="w-full overflow-hidden rounded-[28px] border-4 border-pixel-navy bg-[#B4FAF0]" style={{ marginBottom: insets.bottom }}>
         <SheetHeader
-          title="프로필 아바타 선택"
-          subtitle="내 여행 스타일과 어울리는 픽셀 캐릭터를 선택해 보세요!"
+          title="프로필 편집"
+          subtitle="닉네임과 기본 픽셀 캐릭터를 함께 변경해요."
           onClose={() => setIsAvatarPickerOpen(false)}
           closeLabel="아바타 선택 닫기"
         />
-        <View className="flex-row flex-wrap justify-between gap-y-3 p-4">
+        <View className="px-4 pb-2 pt-4">
+          <Text className="text-[11px] font-black text-slate-700">닉네임</Text>
+          <TextInput
+            value={pendingProfileNickname}
+            onChangeText={setPendingProfileNickname}
+            maxLength={12}
+            placeholder="닉네임 입력"
+            placeholderTextColor="#94A3B8"
+            className="mt-1.5 h-11 rounded-xl border-2 border-pixel-navy bg-white px-3 py-0 text-sm font-black text-slate-900"
+          />
+        </View>
+        <View className="flex-row flex-wrap justify-between gap-y-3 p-4 pt-2">
           {PROFILE_AVATARS.map((avatar) => {
             const selected = pendingProfileAvatar.id === avatar.id;
             return (
@@ -104,13 +117,9 @@ export function AvatarPickerModal() {
             radius={12}
             wrapperClassName="w-full"
             className="h-12 w-full items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD]"
-            onPress={() => {
-              setSelectedProfileAvatar(pendingProfileAvatar);
-              setIsAvatarPickerOpen(false);
-              showToast(`${pendingProfileAvatar.label} 아바타로 변경했어요.`);
-            }}
+            onPress={saveProfile}
           >
-            <Text className="text-xs font-black text-pixel-navy">이 아바타로 변경하기</Text>
+            <Text className="text-xs font-black text-pixel-navy">프로필 저장하기</Text>
           </PixelPressable>
         </View>
       </View>
@@ -228,6 +237,94 @@ export function ClipPlaybackModal() {
           </Pressable>
         </View>
       </FadeIn>
+    </ModalBackdrop>
+  );
+}
+
+/** 비밀번호 변경 모달. 서버에 비밀번호 변경 API 가 아직 없어서 입력 검증과 토스트까지만 동작한다. */
+export function PasswordModal() {
+  const insets = useSafeAreaInsets();
+  const { isPasswordModalOpen, setIsPasswordModalOpen, showToast } = useApp();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  if (!isPasswordModalOpen) return null;
+
+  const close = () => {
+    setCurrent('');
+    setNext('');
+    setConfirm('');
+    setError('');
+    setIsPasswordModalOpen(false);
+  };
+
+  const submit = () => {
+    if (current.length < 8 || next.length < 8 || confirm.length < 8) {
+      setError('비밀번호는 8자 이상 입력해 주세요.');
+      return;
+    }
+    if (next.length > 64) {
+      setError('새 비밀번호는 64자 이하로 입력해 주세요.');
+      return;
+    }
+    if (next !== confirm) {
+      setError('새 비밀번호가 서로 달라요.');
+      return;
+    }
+    // TODO(서버 연동): 비밀번호 변경 API 가 생기면 여기서 호출하고 실패 시 error 로 보여준다.
+    close();
+    showToast('비밀번호가 안전하게 변경되었습니다.');
+  };
+
+  const fields = [
+    { label: '현재 비밀번호', value: current, set: setCurrent },
+    { label: '새 비밀번호', value: next, set: setNext },
+    { label: '새 비밀번호 확인', value: confirm, set: setConfirm },
+  ];
+
+  return (
+    <ModalBackdrop onRequestClose={close}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View className="w-full overflow-hidden rounded-[28px] border-4 border-pixel-navy bg-[#B4FAF0]" style={{ marginBottom: insets.bottom }}>
+          <SheetHeader eyebrow="PASSWORD" title="비밀번호 변경" onClose={close} closeLabel="비밀번호 변경 닫기" />
+          <View className="gap-3 p-4">
+            {fields.map((field) => (
+              <View key={field.label}>
+                <Text className="text-[11px] font-black text-slate-700">{field.label}</Text>
+                <TextInput
+                  value={field.value}
+                  onChangeText={(text) => {
+                    field.set(text);
+                    setError('');
+                  }}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="8자 이상 입력"
+                  placeholderTextColor="#94A3B8"
+                  className="mt-1.5 h-11 rounded-xl border-2 border-slate-200 bg-white px-3 py-0 text-xs font-bold text-slate-900"
+                />
+              </View>
+            ))}
+            <View className="rounded-xl bg-white/70 px-3 py-2">
+              <Text className={`text-[10px] font-semibold ${error ? 'text-rose-600' : 'text-slate-500'}`}>
+                {error || '영문, 숫자, 특수문자를 조합하면 더 안전해요.'}
+              </Text>
+            </View>
+            <PixelPressable
+              shadowColor="#075953"
+              offset={3}
+              radius={12}
+              wrapperClassName="w-full"
+              className="h-12 w-full items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD]"
+              onPress={submit}
+            >
+              <Text className="text-xs font-black text-pixel-navy">비밀번호 변경하기</Text>
+            </PixelPressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
     </ModalBackdrop>
   );
 }

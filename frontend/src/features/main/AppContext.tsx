@@ -27,6 +27,8 @@ import {
 } from '../../data/mockData';
 import type { SynthesizedVlog } from './modals/PinLogSynthesisModal';
 import type { QuickClip } from './modals/QuickPinLogCameraModal';
+import type { InvitedTripMember, NewTripPayload } from './screens/CreateTripScreen';
+import { daysBetween, toYmd } from '../../components/pixel/PixelCalendar';
 
 export type NotificationType = 'TRIP_INVITED' | 'TRIP_REMINDER' | 'TRIP_PLACE_ADDED';
 
@@ -213,6 +215,11 @@ function useAppState(me: Me, onLogout: () => void) {
   const [recommendationRegion, setRecommendationRegion] = useState('제주');
   const [inviteTrip, setInviteTrip] = useState<TripFolder | null>(null);
 
+  // 새 여행 만들기
+  const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
+  const [isCreateTripInviteOpen, setIsCreateTripInviteOpen] = useState(false);
+  const [newTripMembers, setNewTripMembers] = useState<InvitedTripMember[]>([]);
+
   // 환경설정
   const [pushNotification, setPushNotification] = useState(true);
   const [marketingNotification, setMarketingNotification] = useState(false);
@@ -232,6 +239,7 @@ function useAppState(me: Me, onLogout: () => void) {
   // 여행 지도 & 팀 기록
   const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem>(MAP_PLACES[0]);
   const [isPlaceDetailModalOpen, setIsPlaceDetailModalOpen] = useState(false);
+  const [startPlaceCamera, setStartPlaceCamera] = useState(false);
   const [placeRecords, setPlaceRecords] = useState<PlaceRecord[]>(INITIAL_PLACE_RECORDS);
   const [isPinLogMakerOpen, setIsPinLogMakerOpen] = useState(false);
   // 홈 빠른 촬영: 촬영 대상 여행과 열림 여부
@@ -325,6 +333,36 @@ function useAppState(me: Me, onLogout: () => void) {
     });
     setIsQuickPinLogCameraOpen(false);
     setActiveTab('pinlog');
+  };
+
+  const closeCreateTrip = () => {
+    setIsCreateTripOpen(false);
+    setNewTripMembers([]);
+  };
+
+  const addNewTripMember = (member: InvitedTripMember) =>
+    setNewTripMembers((cur) => (cur.some((m) => m.loginId === member.loginId) ? cur : [...cur, member]));
+
+  const removeNewTripMember = (loginId: string) =>
+    setNewTripMembers((cur) => cur.filter((m) => m.loginId !== loginId));
+
+  // TODO(서버 연동): POST /trips 로 만들고, newTripMembers 에게 초대를 보낸 뒤 응답의 여행을 목록에 넣는다.
+  const handleCreateTrip = (payload: NewTripPayload) => {
+    const dDay = daysBetween(toYmd(new Date()), payload.startDate);
+    const createdTrip: TripFolder = {
+      id: Date.now(),
+      title: `${payload.title} ${payload.emoji}`,
+      // 목업 형식 그대로: '2026.10.25 - 10.28'
+      date: `${payload.startDate.replace(/-/g, '.')} - ${payload.endDate.slice(5).replace('-', '.')}`,
+      dDay: dDay > 0 ? `D-${dDay}` : dDay === 0 ? 'D-DAY' : `D+${-dDay}`,
+      image: payload.coverImage,
+      placesCount: 0,
+      tag: payload.tags[0] ?? '여행',
+    };
+    setTrips((cur) => [createdTrip, ...cur]);
+    setActiveTrip(createdTrip);
+    closeCreateTrip();
+    showToast(`'${payload.title}' 여행을 만들었어요.`);
   };
 
   const handleDeletePlaceRecord = (recordId: number) => {
@@ -487,6 +525,9 @@ function useAppState(me: Me, onLogout: () => void) {
     recommendationStyle, setRecommendationStyle,
     recommendationRegion, setRecommendationRegion,
     inviteTrip, setInviteTrip,
+    isCreateTripOpen, setIsCreateTripOpen,
+    isCreateTripInviteOpen, setIsCreateTripInviteOpen,
+    newTripMembers,
     pushNotification, setPushNotification,
     marketingNotification, setMarketingNotification,
     cacheSize,
@@ -499,6 +540,7 @@ function useAppState(me: Me, onLogout: () => void) {
     selectedTripForExtract,
     selectedMapPin, setSelectedMapPin,
     isPlaceDetailModalOpen, setIsPlaceDetailModalOpen,
+    startPlaceCamera, setStartPlaceCamera,
     placeRecords,
     isPinLogMakerOpen, setIsPinLogMakerOpen,
     pinLogTrip, setPinLogTrip,
@@ -522,6 +564,10 @@ function useAppState(me: Me, onLogout: () => void) {
     handleSavePlaceRecord,
     handleDeletePlaceRecord,
     openQuickPinLogCamera,
+    closeCreateTrip,
+    addNewTripMember,
+    removeNewTripMember,
+    handleCreateTrip,
     handleQuickPinLogUpload,
     handleSynthesizeComplete,
     handleExtractSubmit,

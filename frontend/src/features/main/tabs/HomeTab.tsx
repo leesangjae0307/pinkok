@@ -3,6 +3,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 
 import { PixelBellIcon, PixelExtractIcon, PixelHotAirBalloon, PixelPinLogIcon } from '../../../components/pixel/PixelIcons';
 import { AnimatedLoop, FadeIn, LinearGradient, PixelPressable } from '../../../components/pixel/Primitives';
+import { toImageSource } from '../../../data/mockData';
 import { useApp } from '../AppContext';
 
 export default function HomeTab() {
@@ -66,7 +67,7 @@ export default function HomeTab() {
             setIsTripMapOpen(true);
           }}
         >
-          <Image source={{ uri: firstTrip.image }} resizeMode="cover" className="h-52 w-full" />
+          <Image source={toImageSource(firstTrip.image)} resizeMode="cover" className="h-52 w-full" />
           <LinearGradient
             colors={['rgba(15,23,42,0)', 'rgba(15,23,42,0.25)', '#020617']}
             start={{ x: 0, y: 0 }}

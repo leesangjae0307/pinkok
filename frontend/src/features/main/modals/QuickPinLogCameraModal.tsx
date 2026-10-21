@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PixelBackArrow, PixelPinLogIcon } from '../../../components/pixel/PixelIcons';
 import { PixelPressable, PixelSelect } from '../../../components/pixel/Primitives';
-import { PlaceItem, PlaceRecord, TripFolder } from '../../../data/mockData';
+import { PlaceItem, PlaceRecord, TripFolder, toImageSource } from '../../../data/mockData';
 
 export type QuickClip = NonNullable<PlaceRecord['videoClip']>;
 
@@ -58,7 +58,7 @@ export default function QuickPinLogCameraModal({
   }, [isRecording]);
 
   const selectedPlace = places.find((place) => place.id === placeId);
-  const viewfinder = selectedPlace?.thumbnail || trip.image;
+  const viewfinder = selectedPlace?.thumbnail ? { uri: selectedPlace.thumbnail } : toImageSource(trip.image);
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose} statusBarTranslucent>
@@ -83,7 +83,7 @@ export default function QuickPinLogCameraModal({
 
         {/* 뷰파인더 */}
         <View className="relative flex-1 overflow-hidden bg-black">
-          <Image source={{ uri: viewfinder }} resizeMode="cover" className="h-full w-full" />
+          <Image source={viewfinder} resizeMode="cover" className="h-full w-full" />
           {/* 웹의 brightness-75 / brightness-110 대신 어두운 레이어로 표현 */}
           {!isRecording && <View pointerEvents="none" className="absolute inset-0 bg-black/25" />}
 

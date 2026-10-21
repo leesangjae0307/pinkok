@@ -6,7 +6,7 @@ import { Image, PanResponder, Pressable, ScrollView, Text, View } from 'react-na
 import Svg, { Line } from 'react-native-svg';
 
 import { PlaceItem } from '../../../data/mockData';
-import { AnimatedLoop } from '../../../components/pixel/Primitives';
+import { AnimatedLoop, PixelPressable } from '../../../components/pixel/Primitives';
 
 interface TripsBottomSheetProps {
   /** 바텀시트가 놓인 영역의 실제 높이(px) */
@@ -19,6 +19,8 @@ interface TripsBottomSheetProps {
   selectedPlaceId: number;
   onSelectPlace: (place: PlaceItem) => void;
   onOpenTeamRecord: (place: PlaceItem) => void;
+  /** 장소 상세를 카메라 화면으로 바로 연다 */
+  onOpenCamera: (place: PlaceItem) => void;
   teamRecordCounts: { [pinId: number]: number };
   onOptimizeRoute: () => void;
   isOptimizingRoute: boolean;
@@ -44,6 +46,7 @@ export default function TripsBottomSheet({
   selectedPlaceId,
   onSelectPlace,
   onOpenTeamRecord,
+  onOpenCamera,
   teamRecordCounts,
   onOptimizeRoute,
   isOptimizingRoute,
@@ -222,18 +225,30 @@ export default function TripsBottomSheet({
                     </View>
                   </View>
 
-                  {/* 팀 기록 버튼 */}
-                  <Pressable
-                    onPress={() => onOpenTeamRecord(place)}
-                    className="flex-row items-center gap-1 rounded-xl border border-teal-600 bg-white px-2.5 py-1.5 active:translate-y-0.5 active:bg-teal-50"
-                  >
-                    <Text className="text-[10px] font-black text-teal-900">👥 기록</Text>
-                    {recordsCount > 0 && (
-                      <View className="rounded-full bg-teal-700 px-1">
-                        <Text className="font-pixel text-[8px] text-white">{recordsCount}</Text>
-                      </View>
-                    )}
-                  </Pressable>
+                  {/* 팀 기록 · 바로 촬영 */}
+                  <View className="items-end gap-1">
+                    <Pressable
+                      onPress={() => onOpenTeamRecord(place)}
+                      className="flex-row items-center gap-1 rounded-xl border border-teal-600 bg-white px-2.5 py-1.5 active:translate-y-0.5 active:bg-teal-50"
+                    >
+                      <Text className="text-[10px] font-black text-teal-900">👥 기록</Text>
+                      {recordsCount > 0 && (
+                        <View className="rounded-full bg-teal-700 px-1">
+                          <Text className="font-pixel text-[8px] text-white">{recordsCount}</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                    <PixelPressable
+                      shadowColor="#075953"
+                      offset={2}
+                      radius={12}
+                      accessibilityLabel={`${place.name}에서 바로 촬영`}
+                      className="rounded-xl border-2 border-pixel-navy bg-rose-500 px-2.5 py-1.5"
+                      onPress={() => onOpenCamera(place)}
+                    >
+                      <Text className="text-[9px] font-black text-white">● 바로 촬영</Text>
+                    </PixelPressable>
+                  </View>
                 </Pressable>
 
                 {/* 장소 간 이동 수단 */}

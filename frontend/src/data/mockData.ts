@@ -21,7 +21,8 @@ export interface TripFolder {
   title: string;
   date: string;
   dDay: string;
-  image: string;
+  /** 원격 URL 또는 로컬 이미지(기본 픽셀 표지). Image 에는 toImageSource() 로 넘긴다. */
+  image: AvatarSource;
   placesCount: number;
   tag: string;
 }

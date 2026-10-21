@@ -10,7 +10,7 @@ interface TeamInviteModalProps {
   currentAvatarUrl: number;
   onClose: () => void;
   /** loginId 는 숫자 PK 가 아니라 화면에 @ 로 보이는 로그인 아이디다. */
-  onInvite: (nickname: string, loginId: string) => void;
+  onInvite: (nickname: string, loginId: string, avatar: string) => void;
 }
 
 const TEAM_SEARCH_RESULTS = [
@@ -108,7 +108,7 @@ export default function TeamInviteModal({ tripTitle, currentAvatarUrl, onClose, 
                       disabled={invited}
                       onPress={() => {
                         setInvitedLoginIds((cur) => [...cur, member.loginId]);
-                        onInvite(member.nickname, member.loginId);
+                        onInvite(member.nickname, member.loginId, member.avatar);
                       }}
                       className="h-9 items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD] px-3"
                       disabledClassName="h-9 items-center justify-center rounded-xl border-2 border-slate-300 bg-slate-100 px-3"

@@ -17,6 +17,8 @@ interface PlaceDetailModalProps {
   onDeleteRecord: (recordId: number) => void;
   onOpenPinLogMaker: () => void;
   currentUserAvatarUrl: number;
+  /** true 면 기록 편집 + 카메라 화면으로 바로 연다 (지도 바텀시트의 "바로 촬영") */
+  startInCamera?: boolean;
 }
 
 const SAMPLE_PHOTOS = [
@@ -34,11 +36,12 @@ export default function PlaceDetailModal({
   onDeleteRecord,
   onOpenPinLogMaker,
   currentUserAvatarUrl,
+  startInCamera = false,
 }: PlaceDetailModalProps) {
   const insets = useSafeAreaInsets();
   const myExistingRecord = records.find((r) => r.pinId === place.id && r.userId === CURRENT_USER.id);
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(startInCamera);
   const [rating, setRating] = useState(myExistingRecord?.rating || 5);
   const [memoText, setMemoText] = useState(myExistingRecord?.memo || '');
   const [photos, setPhotos] = useState<string[]>(myExistingRecord?.photos || []);
@@ -46,7 +49,7 @@ export default function PlaceDetailModal({
   const [memoFocused, setMemoFocused] = useState(false);
 
   // 촬영 시뮬레이션
-  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(startInCamera);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingProgress, setRecordingProgress] = useState(0);
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);

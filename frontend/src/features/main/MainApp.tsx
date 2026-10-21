@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Me } from '../../api/authApi';
 import { MAP_PLACES } from '../../data/mockData';
-import { AnimatedLoop } from '../../components/pixel/Primitives';
+import { AnimatedLoop, PixelPressable } from '../../components/pixel/Primitives';
 import { AppProvider, useApp } from './AppContext';
 import BottomNav from './components/BottomNav';
 import NotificationScreen from './screens/NotificationScreen';
@@ -23,6 +23,7 @@ import PlaceDetailModal from './modals/PlaceDetailModal';
 import PinLogSynthesisModal from './modals/PinLogSynthesisModal';
 import TeamInviteModal from './modals/TeamInviteModal';
 import QuickPinLogCameraModal from './modals/QuickPinLogCameraModal';
+import CreateTripScreen from './screens/CreateTripScreen';
 import { AvatarPickerModal, ClipPlaybackModal, ProfileDetailModal } from './modals/ProfileModals';
 
 function Toast() {
@@ -44,7 +45,35 @@ function Toast() {
 }
 
 function ScreenBody() {
-  const { isNotificationOpen, isSettingsOpen, activeTab, isTripMapOpen } = useApp();
+  const {
+    me,
+    isNotificationOpen,
+    isSettingsOpen,
+    activeTab,
+    isTripMapOpen,
+    isCreateTripOpen,
+    selectedProfileAvatar,
+    newTripMembers,
+    closeCreateTrip,
+    setIsCreateTripInviteOpen,
+    removeNewTripMember,
+    handleCreateTrip,
+  } = useApp();
+
+  // 새 여행 만들기는 탭 위를 덮는 전체 화면 (웹과 같이 하단 탭바도 숨김)
+  if (isCreateTripOpen) {
+    return (
+      <CreateTripScreen
+        hostName={me.nickname}
+        hostAvatar={selectedProfileAvatar.image}
+        invitedMembers={newTripMembers}
+        onBack={closeCreateTrip}
+        onOpenInvite={() => setIsCreateTripInviteOpen(true)}
+        onRemoveMember={removeNewTripMember}
+        onCreate={handleCreateTrip}
+      />
+    );
+  }
 
   // 여행 지도는 자체 바텀시트가 스크롤을 담당하므로 ScrollView 밖에서 렌더링
   if (!isNotificationOpen && !isSettingsOpen && activeTab === 'trips' && isTripMapOpen) {
@@ -80,6 +109,8 @@ function GlobalModals() {
     selectedMapPin,
     placeRecords,
     setIsPlaceDetailModalOpen,
+    startPlaceCamera,
+    setStartPlaceCamera,
     handleSavePlaceRecord,
     handleDeletePlaceRecord,
     selectedProfileAvatar,
@@ -94,6 +125,9 @@ function GlobalModals() {
     pinLogTrip,
     mapPlaces,
     handleQuickPinLogUpload,
+    isCreateTripInviteOpen,
+    setIsCreateTripInviteOpen,
+    addNewTripMember,
   } = useApp();
 
   return (
@@ -102,7 +136,11 @@ function GlobalModals() {
         <PlaceDetailModal
           place={selectedMapPin}
           records={placeRecords}
-          onClose={() => setIsPlaceDetailModalOpen(false)}
+          onClose={() => {
+            setIsPlaceDetailModalOpen(false);
+            setStartPlaceCamera(false);
+          }}
+          startInCamera={startPlaceCamera}
           onSaveRecord={handleSavePlaceRecord}
           onDeleteRecord={handleDeletePlaceRecord}
           currentUserAvatarUrl={selectedProfileAvatar.image}
@@ -141,6 +179,15 @@ function GlobalModals() {
         />
       )}
 
+      {isCreateTripInviteOpen && (
+        <TeamInviteModal
+          tripTitle="새 여행"
+          currentAvatarUrl={selectedProfileAvatar.image}
+          onClose={() => setIsCreateTripInviteOpen(false)}
+          onInvite={(nickname, loginId, avatar) => addNewTripMember({ nickname, loginId, avatar })}
+        />
+      )}
+
       <AvatarPickerModal />
       <ProfileDetailModal />
       <ClipPlaybackModal />
@@ -148,16 +195,40 @@ function GlobalModals() {
   );
 }
 
+/** 여행 목록 오른쪽 아래에 떠 있는 "새 여행 만들기" 버튼 (웹의 sticky + 버튼) */
+function CreateTripFab() {
+  const { activeTab, isTripMapOpen, isSettingsOpen, isNotificationOpen, isCreateTripOpen, setIsCreateTripOpen } =
+    useApp();
+  if (activeTab !== 'trips' || isTripMapOpen || isSettingsOpen || isNotificationOpen || isCreateTripOpen) {
+    return null;
+  }
+  return (
+    <View pointerEvents="box-none" className="absolute bottom-3 right-4">
+      <PixelPressable
+        shadowColor="#075953"
+        offset={4}
+        radius={16}
+        accessibilityLabel="새 여행 만들기"
+        className="h-14 w-14 items-center justify-center rounded-2xl border-3 border-pixel-navy bg-[#56EADD]"
+        onPress={() => setIsCreateTripOpen(true)}
+      >
+        <Text className="font-pixel text-3xl text-pixel-navy">+</Text>
+      </PixelPressable>
+    </View>
+  );
+}
+
 function Shell() {
   const insets = useSafeAreaInsets();
-  const { isNotificationOpen } = useApp();
+  const { isNotificationOpen, isCreateTripOpen } = useApp();
 
   return (
     <View className="flex-1 bg-[#B4FAF0]" style={{ paddingTop: insets.top }}>
       <View className="relative flex-1 bg-[#B4FAF0]">
         <ScreenBody />
+        <CreateTripFab />
       </View>
-      {!isNotificationOpen && <BottomNav />}
+      {!isNotificationOpen && !isCreateTripOpen && <BottomNav />}
       <Toast />
       <GlobalModals />
     </View>

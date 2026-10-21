@@ -65,6 +65,7 @@ export default function TripMapView() {
     setInviteTrip,
     setIsPinLogMakerOpen,
     setIsPlaceDetailModalOpen,
+    setStartPlaceCamera,
     placeRecords,
     tripsSheetHeight,
     setTripsSheetHeight,
@@ -203,6 +204,12 @@ export default function TripMapView() {
         }}
         onOpenTeamRecord={(place) => {
           setSelectedMapPin(place);
+          setStartPlaceCamera(false);
+          setIsPlaceDetailModalOpen(true);
+        }}
+        onOpenCamera={(place) => {
+          setSelectedMapPin(place);
+          setStartPlaceCamera(true);
           setIsPlaceDetailModalOpen(true);
         }}
         teamRecordCounts={teamRecordCounts}

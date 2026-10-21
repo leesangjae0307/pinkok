@@ -10,6 +10,7 @@ import {
   ShadowBox,
 } from '../../../components/pixel/Primitives';
 import { TRAVEL_STYLES } from '../../../constants';
+import { toImageSource } from '../../../data/mockData';
 import { avatarSilverBucket, useApp } from '../AppContext';
 
 /** 목업 date 문자열('2026.10.12 - 10.15')에서 일수를 계산한다. 서버 연동 시 startDate/endDate 로 대체. */
@@ -51,11 +52,11 @@ export default function TripsListView() {
       <View className="flex-row items-center justify-between pt-1">
         <View className="flex-row items-center gap-2.5">
           <View className="h-10 w-10 items-center justify-center">
-            <PixelTripsIcon size={34} active />
+            <PixelTripsIcon size={30} active />
           </View>
           <View>
-            <Text className="font-pixel text-lg text-[#0f6861]">MY TRIPS</Text>
-            <Text className="text-[11px] font-semibold text-slate-600">초대받은 여행과 내 여행을 관리해요</Text>
+            <Text className="font-pixel text-xl tracking-tight text-[#0f6861]">TRIPS</Text>
+            <Text className="-mt-1 text-[11px] font-semibold text-slate-600">초대받은 여행과 내 여행목록 관리</Text>
           </View>
         </View>
         <View className="rounded-xl border border-[#82F0DC] bg-white px-2.5 py-1">
@@ -172,7 +173,7 @@ export default function TripsListView() {
                   onPress={openTrip}
                   className="relative h-20 w-20 overflow-hidden rounded-2xl border border-slate-100 active:scale-95"
                 >
-                  <Image source={{ uri: trip.image }} resizeMode="cover" className="h-full w-full" />
+                  <Image source={toImageSource(trip.image)} resizeMode="cover" className="h-full w-full" />
                   <View className="absolute left-1 top-1 rounded-md bg-slate-900/80 px-1.5 py-0.5">
                     <Text className="font-pixel text-[8px] text-[#FFC837]">{trip.dDay}</Text>
                   </View>

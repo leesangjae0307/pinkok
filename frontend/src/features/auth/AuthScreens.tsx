@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 인증 플로우: 스플래시 → 로그인 → 회원가입 / 비밀번호 재설정
  * (웹 AuthScreens.tsx 를 React Native 로 이관)
  */
@@ -29,8 +29,6 @@ import splashOriginalBg from '../../assets/images/splash-original-bg.png';
 import beachCleanBg from '../../assets/images/beach-clean-bg.png';
 
 import loginLogoCutout from '../../assets/images/login-logo-cutout.png';
-
-import authPinLogo from '../../assets/images/auth-pin-logo.png';
 
 import avatarBookWinter from '../../assets/images/avatar-book-winter.png';
 
@@ -708,7 +706,6 @@ const PIXEL_AVATARS = [
     id: 'book-winter',
     serverCode: 'F1',
     label: '책 읽는 겨울 여행가',
-    gender: '여',
     image: avatarBookWinter,
   },
 
@@ -716,7 +713,6 @@ const PIXEL_AVATARS = [
     id: 'silver-bucket',
     serverCode: 'F2',
     label: '은발 버킷햇 여행가',
-    gender: '여',
     image: avatarSilverBucket,
   },
 
@@ -724,7 +720,6 @@ const PIXEL_AVATARS = [
     id: 'pink-camera',
     serverCode: 'F3',
     label: '핑크 카메라 여행가',
-    gender: '여',
     image: avatarPinkCamera,
   },
 
@@ -732,7 +727,6 @@ const PIXEL_AVATARS = [
     id: 'map-phone',
     serverCode: 'M1',
     label: '지도 보는 도시 여행가',
-    gender: '남',
     image: avatarMapPhone,
   },
 
@@ -740,7 +734,6 @@ const PIXEL_AVATARS = [
     id: 'headphone-wink',
     serverCode: 'M2',
     label: '윙크 헤드폰 여행가',
-    gender: '남',
     image: avatarHeadphoneWink,
   },
 
@@ -748,7 +741,6 @@ const PIXEL_AVATARS = [
     id: 'sunglasses',
     serverCode: 'M3',
     label: '선글라스 로컬 여행가',
-    gender: '남',
     image: avatarSunglasses,
   },
 ];
@@ -800,13 +792,6 @@ function AuthHeader({
         <Text className="text-lg font-black text-pixel-navy">{title}</Text>
       </View>
 
-      <View className="absolute bottom-2 right-5 z-10 h-11 w-11 items-center justify-center rounded-xl border border-white/60 bg-white/80 p-0.5">
-        <Image
-          source={authPinLogo}
-          resizeMode="contain"
-          className="h-full w-full"
-        />
-      </View>
     </View>
   );
 }
@@ -917,6 +902,12 @@ function SignUpScreen({
 
   const [username, setUsername] = useState('');
 
+  const [isUsernameChecked, setIsUsernameChecked] = useState(false);
+
+  const [usernameCheckMessage, setUsernameCheckMessage] = useState('');
+
+  const [usernameFocused, setUsernameFocused] = useState(false);
+
   const [email, setEmail] = useState('');
 
   const [isEmailChecked, setIsEmailChecked] = useState(false);
@@ -993,6 +984,18 @@ function SignUpScreen({
 
     setIsEmailChecked(true);
     setEmailCheckMessage('형식은 올바릅니다. 중복 여부는 가입할 때 확인돼요.');
+  };
+
+  // 아이디도 서버에 중복 확인 API가 없어서 형식만 검사한다. 중복은 가입 요청에서 걸러진다.
+  const handleCheckUsername = () => {
+    if (usernameIssue) {
+      setIsUsernameChecked(false);
+      setUsernameCheckMessage(usernameIssue);
+      return;
+    }
+
+    setIsUsernameChecked(true);
+    setUsernameCheckMessage('✓ 형식은 올바릅니다. 중복 여부는 가입할 때 확인돼요.');
   };
 
   const handleSignUp = async () => {
@@ -1104,6 +1107,66 @@ function SignUpScreen({
             ) : null}
           </View>
 
+          <View>
+            <Text className="mb-1 text-xs font-extrabold text-pixel-navy">
+              고유 아이디
+            </Text>
+
+            <View className="flex-row gap-2">
+              <View
+                className={`h-12 flex-1 flex-row items-center rounded-lg border-2 bg-white px-3 ${
+                  usernameFocused ? 'border-mint-primary' : 'border-sky-border'
+                }`}>
+                <Text className="mr-1 font-pixel text-xs text-[#075953]">@</Text>
+
+                <TextInput
+                  value={username}
+                  maxLength={30}
+                  onChangeText={t => {
+                    // 서버 규칙(영문 소문자·숫자·밑줄)에 맞지 않는 글자는 입력 단계에서 걸러낸다.
+                    setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+
+                    setIsUsernameChecked(false);
+
+                    setUsernameCheckMessage('');
+                  }}
+                  placeholder="pinkok123"
+                  placeholderTextColor="#64748B"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => setUsernameFocused(true)}
+                  onBlur={() => setUsernameFocused(false)}
+                  className="h-full flex-1 p-0 text-sm font-semibold text-ink"
+                />
+              </View>
+
+              <Pressable
+                onPress={handleCheckUsername}
+                className={`items-center justify-center rounded-lg border-2 border-pixel-navy px-3 active:translate-y-1 ${
+                  isUsernameChecked ? 'bg-teal-500' : 'bg-mint-primary'
+                }`}>
+                <Text
+                  className={`font-pixel text-[9px] ${
+                    isUsernameChecked ? 'text-white' : 'text-pixel-navy'
+                  }`}>
+                  {isUsernameChecked ? '확인완료' : '중복 확인'}
+                </Text>
+              </Pressable>
+            </View>
+
+            <Text
+              className={`mt-1 text-xs ${
+                usernameCheckMessage
+                  ? isUsernameChecked
+                    ? 'font-bold text-teal-700'
+                    : 'font-bold text-danger'
+                  : 'text-muted'
+              }`}>
+              {usernameCheckMessage ||
+                '영문 소문자·숫자·밑줄(_) 3~30자. 팀원이 나를 찾을 때 쓰여요.'}
+            </Text>
+          </View>
+
           <AuthInput
             label="비밀번호"
             secure
@@ -1144,21 +1207,6 @@ function SignUpScreen({
             error={nickname.trim().length > 50}
             icon="user"
           />
-
-          <AuthInput
-            label="아이디"
-            value={username}
-            onChange={setUsername}
-            placeholder="팀원이 나를 찾을 때 쓰는 @아이디"
-            error={username.length > 0 && usernameIssue !== null}
-            message={
-              username.length > 0 && usernameIssue
-                ? usernameIssue
-                : '영문 소문자·숫자·밑줄(_) 3~30자. 닉네임과 달리 팀원 검색에 쓰여요.'
-            }
-            icon="user"
-          />
-
 
           <View className="pt-2">
             <View className="mb-2">
@@ -1233,20 +1281,6 @@ function SignUpScreen({
                         <Text className="min-h-6 text-center text-[8px] font-black leading-3 text-slate-700">
                           {avatar.label}
                         </Text>
-
-                        <View
-                          className={`mt-1 rounded px-1 ${
-                            avatar.gender === '남' ? 'bg-blue-50' : 'bg-rose-50'
-                          }`}>
-                          <Text
-                            className={`font-pixel text-[7px] ${
-                              avatar.gender === '남'
-                                ? 'text-blue-700'
-                                : 'text-rose-700'
-                            }`}>
-                            {avatar.gender}
-                          </Text>
-                        </View>
                       </View>
                     </View>
                   </Pressable>

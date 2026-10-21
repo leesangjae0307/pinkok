@@ -3,6 +3,16 @@
  * NativeWind v4 + Tailwind v3
  * @type {import('tailwindcss').Config}
  */
+const plugin = require('tailwindcss/plugin');
+
+/**
+ * Plus Jakarta Sans (웹과 같은 본문 폰트).
+ * RN Android 는 굵기마다 폰트 파일이 따로 필요해서 font-* 유틸을 "굵기별 폰트 + 일반 굵기"로 바꿔 준다.
+ * fontWeight 를 400 으로 두는 건 굵은 폰트 위에 안드로이드가 한 번 더 굵게 덧칠하는 걸 막기 위해서다.
+ * 웹이 불러오는 굵기는 500~800 뿐이라 font-black(900)은 웹처럼 ExtraBold 로 보인다.
+ */
+const jakarta = (name) => ({fontFamily: name, fontWeight: '400'});
+
 module.exports = {
   content: ['./App.{js,jsx,ts,tsx}', './src/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
@@ -61,5 +71,16 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    plugin(({addUtilities}) => {
+      addUtilities({
+        '.font-normal': jakarta('PlusJakartaSans-Medium'),
+        '.font-medium': jakarta('PlusJakartaSans-Medium'),
+        '.font-semibold': jakarta('PlusJakartaSans-SemiBold'),
+        '.font-bold': jakarta('PlusJakartaSans-Bold'),
+        '.font-extrabold': jakarta('PlusJakartaSans-ExtraBold'),
+        '.font-black': jakarta('PlusJakartaSans-ExtraBold'),
+      });
+    }),
+  ],
 };

@@ -759,8 +759,11 @@ function AuthHeader({
   const insets = useSafeAreaInsets();
 
   return (
+    /* 바깥 View 에는 패딩을 두지 않는다. h-full/w-full 은 부모의 content box
+       (패딩 안쪽) 기준이라, 여기에 px-5 pb-3 이 있으면 배경이 그만큼 작게
+       깔리면서 위·오른쪽이 어긋난다. 패딩은 아래 내용 래퍼가 맡는다. */
     <View
-      className="relative flex-row items-end overflow-hidden bg-sky-soft px-5 pb-3"
+      className="relative overflow-hidden bg-sky-soft"
       style={{height: 144 + insets.top}}>
       <Image
         source={beachCleanBg}
@@ -779,19 +782,20 @@ function AuthHeader({
         style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0}}
       />
 
-      <Pressable
-        onPress={onBack}
-        accessibilityLabel="로그인으로 돌아가기"
-        className="z-10 h-9 w-9 items-center justify-center rounded-lg border-2 border-pixel-navy bg-white shadow-sm active:translate-y-1">
-        <PixelBackArrow size={16} />
-      </Pressable>
+      <View className="flex-1 flex-row items-end px-5 pb-3">
+        <Pressable
+          onPress={onBack}
+          accessibilityLabel="로그인으로 돌아가기"
+          className="z-10 h-9 w-9 items-center justify-center rounded-lg border-2 border-pixel-navy bg-white shadow-sm active:translate-y-1">
+          <PixelBackArrow size={16} />
+        </Pressable>
 
-      <View className="z-10 ml-3">
-        <Text className="font-pixel text-[10px] text-teal-800">{eyebrow}</Text>
+        <View className="z-10 ml-3">
+          <Text className="font-pixel text-[10px] text-teal-800">{eyebrow}</Text>
 
-        <Text className="text-lg font-black text-pixel-navy">{title}</Text>
+          <Text className="text-lg font-black text-pixel-navy">{title}</Text>
+        </View>
       </View>
-
     </View>
   );
 }

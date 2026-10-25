@@ -3,7 +3,6 @@
  */
 import React, { useMemo, useRef } from 'react';
 import { Image, PanResponder, Pressable, ScrollView, Text, View } from 'react-native';
-import Svg, { Line } from 'react-native-svg';
 
 import { PlaceItem } from '../../../data/mockData';
 import { AnimatedLoop, PixelPressable } from '../../../components/pixel/Primitives';
@@ -26,13 +25,27 @@ interface TripsBottomSheetProps {
   isOptimizingRoute: boolean;
 }
 
+/**
+ * 장소 사이를 잇는 세로 점선.
+ * 예전에는 <Svg height="100%"> + <Line y2="100%"> 였는데, react-native-svg 는 루트 Svg 의
+ * 퍼센트 높이를 측정하려고 부모 레이아웃을 다시 요청해서 안드로이드에서 측정 루프에 빠질 수 있다.
+ * 점선 테두리 View 로 그리면 퍼센트 측정이 전혀 필요 없고 보이는 결과는 같다.
+ */
 function DashedVLine() {
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: 25, top: 0, bottom: 0, width: 2 }}>
-      <Svg width={2} height="100%">
-        <Line x1="1" y1="0" x2="1" y2="100%" stroke="rgba(45,212,191,0.8)" strokeWidth={2} strokeDasharray="4 3" />
-      </Svg>
-    </View>
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: 25,
+        top: 0,
+        bottom: 0,
+        width: 0,
+        borderLeftWidth: 2,
+        borderLeftColor: 'rgba(45,212,191,0.8)',
+        borderStyle: 'dashed',
+      }}
+    />
   );
 }
 

@@ -2,8 +2,8 @@
  * 여행 상세: 인터랙티브 지도 + 조절형 바텀시트
  * (지금은 웹 디자인과 같은 픽셀 일러스트 지도. 카카오맵 WebView 로 교체할 자리)
  */
-import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { LayoutChangeEvent, Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { MAP_PLACES, PlaceItem } from '../../../data/mockData';
@@ -29,10 +29,16 @@ function MapMarker({
   const [size, setSize] = useState({ w: 0, h: 0 });
   const x = (place.lng / 100) * width;
   const y = (place.lat / 100) * height;
+  // onLayout 으로 위치를 보정하면 뷰가 움직여서 onLayout 이 다시 불린다.
+  // 값이 실제로 달라졌을 때만 setState 해야 렌더 루프에 빠지지 않는다.
+  const handleLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width: w, height: h } = e.nativeEvent.layout;
+    setSize((prev) => (Math.abs(prev.w - w) < 0.5 && Math.abs(prev.h - h) < 0.5 ? prev : { w, h }));
+  }, []);
   return (
     <Pressable
       onPress={onPress}
-      onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+      onLayout={handleLayout}
       style={{
         position: 'absolute',
         left: x - size.w / 2,
@@ -74,6 +80,13 @@ export default function TripMapView() {
     showToast,
   } = useApp();
   const [layout, setLayout] = useState({ width: 0, height: 0 });
+  // 위와 같은 이유로 크기가 실제로 변했을 때만 반영한다.
+  const handleRootLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setLayout((prev) =>
+      Math.abs(prev.width - width) < 0.5 && Math.abs(prev.height - height) < 0.5 ? prev : { width, height },
+    );
+  }, []);
 
   const routePath =
     displayedMapPlaces.length >= 2
@@ -95,7 +108,7 @@ export default function TripMapView() {
   return (
     <View
       className="relative flex-1 overflow-hidden"
-      onLayout={(e) => setLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+      onLayout={handleRootLayout}
     >
       {/* 지도 배경 */}
       <View className="absolute inset-0 overflow-hidden bg-[#B4FAF0]/40">

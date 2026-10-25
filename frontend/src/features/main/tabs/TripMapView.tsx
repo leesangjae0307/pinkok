@@ -12,6 +12,23 @@ import { AnimatedLoop } from '../../../components/pixel/Primitives';
 import TripsBottomSheet from '../components/TripsBottomSheet';
 import { useApp } from '../AppContext';
 
+/**
+ * 임시 디버그 스위치 — 지도 화면에서 CPU 를 태우는 블록을 찾기 위한 것.
+ * 한 번에 하나만 false 로 바꿔 저장하고 CPU 를 재서, 떨어지는 순간의 블록이 범인이다.
+ * 원인을 찾으면 이 블록과 아래의 DEBUG_BLOCKS 참조는 모두 지운다.
+ * 상단 플로팅 바(뒤로가기 버튼)는 화면을 빠져나올 수 있어야 하므로 끄지 않는다.
+ */
+const DEBUG_BLOCKS = {
+  /** 지도 배경 SVG (해안선·도로·점선 경로) */
+  mapSvg: true,
+  /** 선택된 핀의 레이더 애니메이션 (ping + spin) */
+  radar: true,
+  /** 장소 마커들 */
+  pins: true,
+  /** 하단 조절형 바텀시트 */
+  sheet: true,
+};
+
 /** 좌표(%) 중심에 맞춰 자기 크기의 절반만큼 이동하는 마커 */
 function MapMarker({
   place,
@@ -112,7 +129,7 @@ export default function TripMapView() {
     >
       {/* 지도 배경 */}
       <View className="absolute inset-0 overflow-hidden bg-[#B4FAF0]/40">
-        {layout.width > 0 && (
+        {DEBUG_BLOCKS.mapSvg && layout.width > 0 && (
           <Svg width={layout.width} height={layout.height} viewBox="0 0 400 650" opacity={0.7}>
             {/* 바다 & 해안선 */}
             <Path d="M 0,0 L 400,0 L 400,100 Q 280,160 170,110 Q 60,70 0,140 Z" fill="#82F0DC" />
@@ -130,7 +147,7 @@ export default function TripMapView() {
         )}
 
         {/* 포커스된 핀 레이더 */}
-        {layout.width > 0 && (
+        {DEBUG_BLOCKS.radar && layout.width > 0 && (
           <View
             pointerEvents="none"
             style={{ position: 'absolute', left: focusX - 24, top: focusY - 24, width: 48, height: 48, zIndex: 10 }}
@@ -145,7 +162,7 @@ export default function TripMapView() {
         )}
 
         {/* 픽셀 핀 */}
-        {layout.width > 0 &&
+        {DEBUG_BLOCKS.pins && layout.width > 0 &&
           displayedMapPlaces.map((place) => (
             <MapMarker
               key={place.id}
@@ -199,7 +216,7 @@ export default function TripMapView() {
       </View>
 
       {/* 조절형 바텀시트 */}
-      <TripsBottomSheet
+      {DEBUG_BLOCKS.sheet && <TripsBottomSheet
         containerHeight={layout.height}
         sheetHeightPercent={tripsSheetHeight}
         onHeightChange={setTripsSheetHeight}
@@ -228,7 +245,7 @@ export default function TripMapView() {
         teamRecordCounts={teamRecordCounts}
         onOptimizeRoute={handleOptimizeRoute}
         isOptimizingRoute={isOptimizingRoute}
-      />
+      />}
     </View>
   );
 }

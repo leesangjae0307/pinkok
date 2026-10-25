@@ -2,7 +2,7 @@
  * 여행 상세: 인터랙티브 지도 + 조절형 바텀시트
  * (지금은 웹 디자인과 같은 픽셀 일러스트 지도. 카카오맵 WebView 로 교체할 자리)
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -28,6 +28,42 @@ const DEBUG_BLOCKS = {
   /** 하단 조절형 바텀시트 */
   sheet: true,
 };
+
+/**
+ * 임시 계측기 — 터치가 죽은 상태에서 JS 스레드가 살아 있는지 눈으로 본다.
+ * JS: 0.5초마다 오르는 숫자. 멈추면 JS 스레드가 막힌 것(렌더 루프).
+ * R: 이 뱃지가 렌더된 횟수. JS 보다 훨씬 빠르게 치솟으면 리렌더 루프.
+ * 둘 다 정상인데 터치가 안 되면 보이지 않는 네이티브 창이 터치를 삼키는 것이다.
+ * 원인을 찾으면 이 컴포넌트와 사용처를 모두 지운다.
+ */
+function DebugHeartbeat() {
+  const [tick, setTick] = useState(0);
+  const renders = useRef(0);
+  renders.current += 1;
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 500);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        right: 8,
+        top: 56,
+        zIndex: 999,
+        backgroundColor: '#000000',
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 6,
+      }}
+    >
+      <Text style={{ color: '#00FF66', fontSize: 11 }}>
+        JS {tick} / R {renders.current}
+      </Text>
+    </View>
+  );
+}
 
 /** 좌표(%) 중심에 맞춰 자기 크기의 절반만큼 이동하는 마커 */
 function MapMarker({
@@ -246,6 +282,8 @@ export default function TripMapView() {
         onOptimizeRoute={handleOptimizeRoute}
         isOptimizingRoute={isOptimizingRoute}
       />}
+
+      <DebugHeartbeat />
     </View>
   );
 }

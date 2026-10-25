@@ -1,4 +1,5 @@
 import api from './axios';
+import { fileUrl } from './fileApi';
 import { PlaceItem, TransitInfo } from '../data/mockData';
 
 /** 서버가 내려주는 장소. 좌표는 실제 위경도(WGS84) 다. */
@@ -118,7 +119,7 @@ export function toPlaceItems(items: ItineraryItem[]): PlaceItem[] {
       rating: item.rating ?? 0,
       reviewsCount: item.reviewsCount,
       address: item.place.roadAddress ?? item.place.lotAddress ?? '',
-      thumbnail: item.thumbnailUrl ?? FALLBACK_THUMBNAIL,
+      thumbnail: fileUrl(item.thumbnailUrl) ?? FALLBACK_THUMBNAIL,
       lat: point.lat,
       lng: point.lng,
       order: item.visitOrder ?? 0,

@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CURRENT_USER, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
+import { AvatarSource, CURRENT_USER, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
 import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
 
@@ -16,7 +16,7 @@ interface PlaceDetailModalProps {
   onSaveRecord: (record: PlaceRecord) => void;
   onDeleteRecord: (recordId: number) => void;
   onOpenPinLogMaker: () => void;
-  currentUserAvatarUrl: number;
+  currentUserAvatarUrl: AvatarSource;
   /** true 면 기록 편집 + 카메라 화면으로 바로 연다 (지도 바텀시트의 "바로 촬영") */
   startInCamera?: boolean;
 }
@@ -490,7 +490,7 @@ export default function PlaceDetailModal({
                         <View className="flex-row items-center gap-2">
                           <View className="h-8 w-8 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
                             {isMine ? (
-                              <Image source={currentUserAvatarUrl} resizeMode="cover" className="h-full w-full" />
+                              <Image source={toImageSource(currentUserAvatarUrl)} resizeMode="cover" className="h-full w-full" />
                             ) : isImageAvatar(record.authorAvatar) ? (
                               <Image source={toImageSource(record.authorAvatar)} resizeMode="cover" className="h-full w-full" />
                             ) : (

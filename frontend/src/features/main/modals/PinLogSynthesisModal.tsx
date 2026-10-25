@@ -12,7 +12,7 @@ import { AnimatedLoop, PixelPressable, ShadowBox } from '../../../components/pix
 interface PinLogSynthesisModalProps {
   places: PlaceItem[];
   records: PlaceRecord[];
-  currentUserAvatarUrl: number;
+  currentUserAvatarUrl: AvatarSource;
   /** 헤더에 보여줄 여행 이름 */
   tripTitle?: string;
   onClose: () => void;

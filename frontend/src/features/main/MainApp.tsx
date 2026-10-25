@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Me } from '../../api/authApi';
 import { MAP_PLACES } from '../../data/mockData';
 import { AnimatedLoop, PixelPressable } from '../../components/pixel/Primitives';
-import { AppProvider, useApp } from './AppContext';
+import { AppProvider, profileAvatarSource, useApp } from './AppContext';
 import BottomNav from './components/BottomNav';
 import NotificationScreen from './screens/NotificationScreen';
 import SettingsScreen from './screens/SettingsScreen';
@@ -67,7 +67,7 @@ function ScreenBody() {
     return (
       <CreateTripScreen
         hostName={me.nickname}
-        hostAvatar={selectedProfileAvatar.image}
+        hostAvatar={profileAvatarSource(selectedProfileAvatar)}
         invitedMembers={newTripMembers}
         onBack={closeCreateTrip}
         onOpenInvite={() => setIsCreateTripInviteOpen(true)}
@@ -151,7 +151,7 @@ function GlobalModals() {
           startInCamera={startPlaceCamera}
           onSaveRecord={handleSavePlaceRecord}
           onDeleteRecord={handleDeletePlaceRecord}
-          currentUserAvatarUrl={selectedProfileAvatar.image}
+          currentUserAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
           onOpenPinLogMaker={() => {
             setIsPlaceDetailModalOpen(false);
             setIsPinLogMakerOpen(true);
@@ -175,7 +175,7 @@ function GlobalModals() {
         <PinLogSynthesisModal
           places={MAP_PLACES}
           records={placeRecords}
-          currentUserAvatarUrl={selectedProfileAvatar.image}
+          currentUserAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
           tripTitle={pinLogTrip.title}
           onClose={() => setIsPinLogMakerOpen(false)}
           onSynthesizeComplete={handleSynthesizeComplete}
@@ -194,7 +194,7 @@ function GlobalModals() {
       {inviteTrip && (
         <TeamInviteModal
           tripTitle={inviteTrip.title}
-          currentAvatarUrl={selectedProfileAvatar.image}
+          currentAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
           currentNickname={me.nickname}
           showTeamManagement
           onClose={() => setInviteTrip(null)}
@@ -205,7 +205,7 @@ function GlobalModals() {
       {isCreateTripInviteOpen && (
         <TeamInviteModal
           tripTitle="새 여행"
-          currentAvatarUrl={selectedProfileAvatar.image}
+          currentAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
           onClose={() => setIsCreateTripInviteOpen(false)}
           onInvite={(nickname, loginId, avatar) => addNewTripMember({ nickname, loginId, avatar })}
         />

@@ -6,7 +6,13 @@ import { FadeIn } from '../../../components/pixel/Primitives';
 import { useApp } from '../AppContext';
 
 export default function NotificationScreen() {
-  const { notifications, unreadNotificationCount, setIsNotificationOpen, handleNotificationSelect } = useApp();
+  const {
+    notifications,
+    unreadNotificationCount,
+    setIsNotificationOpen,
+    handleNotificationSelect,
+    handleMarkAllNotificationsRead,
+  } = useApp();
 
   return (
     <FadeIn style={{ padding: 16, paddingBottom: 32 }}>
@@ -30,7 +36,23 @@ export default function NotificationScreen() {
         </View>
       </View>
 
+      {unreadNotificationCount > 0 && (
+        <View className="mt-3 flex-row justify-end">
+          <Pressable
+            onPress={handleMarkAllNotificationsRead}
+            className="rounded-xl border border-[#82F0DC] bg-white px-3 py-1.5 active:scale-95"
+          >
+            <Text className="text-[10px] font-black text-[#075953]">모두 읽음</Text>
+          </Pressable>
+        </View>
+      )}
+
       <View className="mt-4 gap-3">
+        {notifications.length === 0 && (
+          <View className="rounded-3xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
+            <Text className="text-center text-xs font-bold text-slate-400">새로운 알림이 없어요.</Text>
+          </View>
+        )}
         {notifications.map((n) => (
           <Pressable
             key={n.id}

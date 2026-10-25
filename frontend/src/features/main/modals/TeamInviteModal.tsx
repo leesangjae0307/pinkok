@@ -8,7 +8,7 @@ import { AvatarSource, isImageAvatar, toImageSource } from '../../../data/mockDa
 
 interface TeamInviteModalProps {
   tripTitle: string;
-  currentAvatarUrl: number;
+  currentAvatarUrl: AvatarSource;
   /** 팀원 관리 목록에 "(나)" 로 보일 내 닉네임 */
   currentNickname?: string;
   onClose: () => void;
@@ -210,7 +210,7 @@ export default function TeamInviteModal({
                       className="h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-pixel-navy bg-[#B4FAF0]"
                     >
                       {member.loginId === 'gamjieun' ? (
-                        <Image source={currentAvatarUrl} resizeMode="cover" className="h-full w-full" />
+                        <Image source={toImageSource(currentAvatarUrl)} resizeMode="cover" className="h-full w-full" />
                       ) : (
                         <Text className="text-xl">{member.avatar}</Text>
                       )}

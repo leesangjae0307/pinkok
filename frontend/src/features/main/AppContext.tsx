@@ -4,6 +4,7 @@
  */
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
 
 import avatarBookWinter from '../../assets/images/avatar-book-winter.png';
 import avatarSilverBucket from '../../assets/images/avatar-silver-bucket.png';
@@ -11,13 +12,27 @@ import avatarPinkCamera from '../../assets/images/avatar-pink-camera.png';
 import avatarMapPhone from '../../assets/images/avatar-map-phone.png';
 import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
-import { Me, logout } from '../../api/authApi';
-import { updateNickname } from '../../api/userApi';
-import { createTrip, deleteTrip, fetchTrip, fetchTrips, toTripFolder } from '../../api/tripApi';
+import { Me, fetchAvatars, logout } from '../../api/authApi';
+import { selectAvatar, updateNickname, updateProfileImage } from '../../api/userApi';
+import { fileUrl, uploadFile } from '../../api/fileApi';
+import { createTrip, deleteTrip, fetchTrip, fetchTrips, toTripFolder, updateTrip } from '../../api/tripApi';
 import { fetchItineraryDays, fetchItineraryItems, toPlaceItems } from '../../api/itineraryApi';
+import {
+  acceptInvitation,
+  fetchMyInvitations,
+  invitationDateLabel,
+  rejectInvitation,
+} from '../../api/invitationApi';
+import {
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  relativeTime,
+} from '../../api/notificationApi';
 import { errorMessage } from '../../api/axios';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
+  AvatarSource,
   CURRENT_USER,
   INITIAL_PLACE_RECORDS,
   INITIAL_TRIPS,
@@ -62,57 +77,11 @@ export interface ProfileAvatar {
   id: string;
   image: number;
   label: string;
+  /** 서버 아바타 코드. PATCH /users/me/avatar 에 보낼 id 를 GET /avatars 에서 찾을 때 쓴다. */
+  code: string;
+  /** 아바타 대신 올린 프로필 사진. 이게 있으면 image 보다 우선한다. */
+  photoUrl?: string;
 }
-
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 1,
-    type: 'TRIP_INVITED',
-    targetType: 'INVITATION',
-    targetId: 1,
-    message: "'감지은'님이 '제주도 여행'에 초대했어요 ✉️",
-    createdAt: '방금 전',
-    read: false,
-  },
-  {
-    id: 2,
-    type: 'TRIP_REMINDER',
-    targetType: 'TRIP',
-    targetId: 1,
-    message: "'제주도 여행' D-1입니다. 핀로그를 작성해 보세요! 🎬",
-    createdAt: '2시간 전',
-    read: false,
-  },
-  {
-    id: 3,
-    type: 'TRIP_PLACE_ADDED',
-    targetType: 'TRIP',
-    targetId: 2,
-    message: '도쿄 여행에 새 장소 3개가 추가되었어요.',
-    createdAt: '어제',
-    read: true,
-  },
-];
-
-const INITIAL_TRIP_INVITATIONS: TripInvitation[] = [
-  {
-    id: 1,
-    inviterName: '감지은',
-    inviterAvatar: '🎀',
-    tripTitle: '제주도 여행',
-    date: '2026.10.12 - 10.15',
-  },
-];
-
-const INVITED_JEJU_TRIP: TripFolder = {
-  id: 4,
-  title: '제주도 여행 ✈️',
-  date: '2026.10.12 - 10.15',
-  dDay: 'D-28',
-  image: 'https://images.unsplash.com/photo-1548115184-bc6544d06a58?auto=format&fit=crop&w=600&q=80',
-  placesCount: 6,
-  tag: '팀여행',
-};
 
 export const INITIAL_EXTRACTED_PLACES: ExtractedPlace[] = [
   {
@@ -166,12 +135,12 @@ export const INITIAL_EXTRACTED_PLACES: ExtractedPlace[] = [
 ];
 
 export const PROFILE_AVATARS: ProfileAvatar[] = [
-  { id: 'book-winter', image: avatarBookWinter, label: '책 읽는 겨울 여행가' },
-  { id: 'silver-bucket', image: avatarSilverBucket, label: '은발 버킷햇 여행가' },
-  { id: 'pink-camera', image: avatarPinkCamera, label: '핑크 카메라 여행가' },
-  { id: 'map-phone', image: avatarMapPhone, label: '지도 보는 도시 여행가' },
-  { id: 'headphone-wink', image: avatarHeadphoneWink, label: '윙크 헤드폰 여행가' },
-  { id: 'sunglasses', image: avatarSunglasses, label: '선글라스 로컬 여행가' },
+  { id: 'book-winter', image: avatarBookWinter, label: '책 읽는 겨울 여행가', code: 'F1' },
+  { id: 'silver-bucket', image: avatarSilverBucket, label: '은발 버킷햇 여행가', code: 'F2' },
+  { id: 'pink-camera', image: avatarPinkCamera, label: '핑크 카메라 여행가', code: 'F3' },
+  { id: 'map-phone', image: avatarMapPhone, label: '지도 보는 도시 여행가', code: 'M1' },
+  { id: 'headphone-wink', image: avatarHeadphoneWink, label: '윙크 헤드폰 여행가', code: 'M2' },
+  { id: 'sunglasses', image: avatarSunglasses, label: '선글라스 로컬 여행가', code: 'M3' },
 ];
 
 export const TRAVEL_TASTES = [
@@ -197,6 +166,25 @@ const AVATAR_IMAGE_BY_SERVER_CODE: Record<string, number | undefined> = {
   M3: avatarSunglasses,
 };
 
+/**
+ * 로그인한 사용자의 프로필 표시값. 서버는 아바타와 사진 중 하나만 들고 있다.
+ * 둘 다 없으면(아직 안 골랐으면) 첫 번째 아바타로 보여준다.
+ */
+export function profileAvatarOf(me: Me): ProfileAvatar {
+  if (me.profileImageUrl) {
+    return { ...PROFILE_AVATARS[0], photoUrl: me.profileImageUrl };
+  }
+  return PROFILE_AVATARS.find((a) => a.code === me.avatar?.code) ?? PROFILE_AVATARS[0];
+}
+
+/**
+ * 프로필을 그릴 때 쓸 값. 올린 사진이 있으면 그 주소를, 없으면 아바타 이미지를 준다.
+ * Image 에는 toImageSource() 로 넘긴다.
+ */
+export function profileAvatarSource(avatar: ProfileAvatar): AvatarSource {
+  return fileUrl(avatar.photoUrl) ?? avatar.image;
+}
+
 export function avatarImageForCode(code: string | undefined | null): number | null {
   if (!code) return null;
   return AVATAR_IMAGE_BY_SERVER_CODE[code] ?? null;
@@ -209,8 +197,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [isTripsLoading, setIsTripsLoading] = useState(true);
   const [tripsError, setTripsError] = useState<string | null>(null);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
-  const [tripInvitations, setTripInvitations] = useState<TripInvitation[]>(INITIAL_TRIP_INVITATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [tripInvitations, setTripInvitations] = useState<TripInvitation[]>([]);
   const [focusedInvitationId, setFocusedInvitationId] = useState<number | null>(null);
   const [isTripMapOpen, setIsTripMapOpen] = useState(false);
   const [activeTrip, setActiveTrip] = useState<TripFolder>(INITIAL_TRIPS[0]);
@@ -225,6 +213,10 @@ function useAppState(me: Me, onLogout: () => void) {
   const [isCreateTripInviteOpen, setIsCreateTripInviteOpen] = useState(false);
   const [newTripMembers, setNewTripMembers] = useState<InvitedTripMember[]>([]);
   const [isCreatingTrip, setIsCreatingTrip] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingProfilePhoto, setIsUploadingProfilePhoto] = useState(false);
+  /** 수락·거절 응답을 기다리는 초대. 두 번 눌리지 않게 한다. */
+  const [respondingInvitationId, setRespondingInvitationId] = useState<number | null>(null);
   const [deletingTripId, setDeletingTripId] = useState<number | null>(null);
 
   // 환경설정
@@ -268,8 +260,8 @@ function useAppState(me: Me, onLogout: () => void) {
   // 핀로그 & 프로필
   const [vlogClips, setVlogClips] = useState<VlogClip[]>(SAMPLE_VLOG_CLIPS);
   const [activeClipModal, setActiveClipModal] = useState<VlogClip | null>(null);
-  const [selectedProfileAvatar, setSelectedProfileAvatar] = useState<ProfileAvatar>(PROFILE_AVATARS[0]);
-  const [pendingProfileAvatar, setPendingProfileAvatar] = useState<ProfileAvatar>(PROFILE_AVATARS[0]);
+  const [selectedProfileAvatar, setSelectedProfileAvatar] = useState<ProfileAvatar>(() => profileAvatarOf(me));
+  const [pendingProfileAvatar, setPendingProfileAvatar] = useState<ProfileAvatar>(() => profileAvatarOf(me));
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [profileNickname, setProfileNickname] = useState(me.nickname);
   const [pendingProfileNickname, setPendingProfileNickname] = useState(me.nickname);
@@ -283,24 +275,56 @@ function useAppState(me: Me, onLogout: () => void) {
     setIsAvatarPickerOpen(true);
   };
 
-  /** 닉네임은 PATCH /users/me 로 저장한다. 아바타 선택은 아직 서버 연동 전이라 앱 안에서만 바뀐다. */
+  /**
+   * 닉네임·아바타·프로필 사진을 저장한다.
+   *
+   * 서버는 아바타와 프로필 사진을 둘 중 하나만 들고 있어서, 사진을 고르면 아바타가
+   * 해제되고 아바타를 고르면 사진이 지워진다. 그래서 둘 중 바뀐 쪽만 보낸다.
+   */
   const saveProfile = async () => {
     const nickname = pendingProfileNickname.trim();
-    if (!nickname) {
+    if (!nickname || isSavingProfile) {
       return;
     }
-    if (nickname !== profileNickname) {
-      try {
+    setIsSavingProfile(true);
+    try {
+      if (nickname !== profileNickname) {
         await updateNickname(nickname);
-      } catch {
-        showToast('닉네임을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
-        return;
       }
+      if (pendingProfileAvatar.photoUrl) {
+        if (pendingProfileAvatar.photoUrl !== selectedProfileAvatar.photoUrl) {
+          await updateProfileImage(pendingProfileAvatar.photoUrl);
+        }
+      } else if (pendingProfileAvatar.code !== selectedProfileAvatar.code || selectedProfileAvatar.photoUrl) {
+        const avatars = await fetchAvatars();
+        const match = avatars.find((a) => a.code === pendingProfileAvatar.code);
+        if (match) await selectAvatar(match.id);
+      }
+      setSelectedProfileAvatar(pendingProfileAvatar);
+      setProfileNickname(nickname);
+      setIsAvatarPickerOpen(false);
+      showToast('프로필을 변경했어요.');
+    } catch (e) {
+      showToast(errorMessage(e, '프로필을 저장하지 못했어요.'));
+    } finally {
+      setIsSavingProfile(false);
     }
-    setSelectedProfileAvatar(pendingProfileAvatar);
-    setProfileNickname(nickname);
-    setIsAvatarPickerOpen(false);
-    showToast('프로필을 변경했어요.');
+  };
+
+  /** 갤러리에서 고른 사진을 올려 프로필 사진 후보로 잡아둔다. 저장은 saveProfile 이 한다. */
+  const pickProfilePhoto = async () => {
+    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
+    const asset = res.assets?.[0];
+    if (res.didCancel || !asset?.uri) return;
+    setIsUploadingProfilePhoto(true);
+    try {
+      const uploaded = await uploadFile({ uri: asset.uri, fileName: asset.fileName, type: asset.type });
+      setPendingProfileAvatar((cur) => ({ ...cur, photoUrl: uploaded.url }));
+    } catch (e) {
+      showToast(errorMessage(e, '사진을 올리지 못했어요.'));
+    } finally {
+      setIsUploadingProfilePhoto(false);
+    }
   };
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -332,9 +356,54 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   }, []);
 
+  /**
+   * GET /notifications. 서버의 title·body 를 한 줄 메시지로 합친다.
+   * 알림은 실패해도 화면 한 구석일 뿐이라 비워 두고 넘어간다.
+   */
+  const reloadNotifications = useCallback(async () => {
+    try {
+      const list = await fetchNotifications();
+      setNotifications(
+        list.map((n) => ({
+          id: n.id,
+          type: n.type as NotificationType,
+          targetType: n.targetType as NotificationItem['targetType'],
+          targetId: n.targetId ?? 0,
+          message: n.body ? `${n.title} ${n.body}` : n.title,
+          createdAt: relativeTime(n.createdAt),
+          read: n.read,
+        })),
+      );
+    } catch {
+      setNotifications([]);
+    }
+  }, []);
+
+  /** GET /trip-invitations 중 아직 답하지 않은 것만 "받은 초대"에 띄운다. */
+  const reloadInvitations = useCallback(async () => {
+    try {
+      const list = await fetchMyInvitations();
+      setTripInvitations(
+        list
+          .filter((i) => i.status === 'PENDING')
+          .map((i) => ({
+            id: i.id,
+            inviterName: i.inviter.nickname,
+            inviterAvatar: i.inviter.avatarImageUrl ?? i.inviter.profileImageUrl ?? '🎀',
+            tripTitle: i.tripTitle,
+            date: invitationDateLabel(i.startDate, i.endDate),
+          })),
+      );
+    } catch {
+      setTripInvitations([]);
+    }
+  }, []);
+
   useEffect(() => {
     reloadTrips();
-  }, [reloadTrips]);
+    reloadNotifications();
+    reloadInvitations();
+  }, [reloadTrips, reloadNotifications, reloadInvitations]);
 
   /** 여행의 일자와 핀을 받아 지도·바텀시트에 올린다. */
   const loadItinerary = useCallback(async (tripId: number) => {
@@ -481,20 +550,29 @@ function useAppState(me: Me, onLogout: () => void) {
   /**
    * POST /trips. 초대한 사람들에게는 초대장이 갈 뿐이라 만든 직후에는 아직 나 혼자다.
    *
-   * 표지 이미지와 태그는 아직 서버에 보낼 자리가 없다(표지는 POST /files 가 필요하다).
-   * 그래서 사용자가 고른 값을 화면에만 얹어 두고, 목록을 다시 받아오면 기본값으로 돌아간다.
+   * 표지는 POST /trips 에 실을 자리가 없어서 만든 뒤 PATCH 로 붙인다. 붙이기에 실패해도
+   * 여행 자체는 만들어졌으므로 기본 표지로 두고 넘어간다.
+   *
+   * 태그는 여전히 서버에 보낼 자리가 없어 화면에만 얹어 둔다.
    */
   const handleCreateTrip = async (payload: NewTripPayload) => {
     if (isCreatingTrip) return;
     setIsCreatingTrip(true);
     try {
-      const created = await createTrip({
+      let created = await createTrip({
         title: `${payload.title} ${payload.emoji}`.trim(),
         region: payload.location || undefined,
         startDate: payload.startDate,
         endDate: payload.endDate,
         inviteeUsernames: newTripMembers.map((m) => m.loginId),
       });
+      if (payload.coverImageUrl) {
+        try {
+          created = await updateTrip(created.id, { coverImageUrl: payload.coverImageUrl });
+        } catch {
+          showToast('표지는 저장하지 못했어요. 기본 표지로 만들었어요.');
+        }
+      }
       const createdTrip = toTripFolder(created, {
         image: payload.coverImage,
         tag: payload.tags[0],
@@ -575,8 +653,21 @@ function useAppState(me: Me, onLogout: () => void) {
     showToast('여행 목록을 다시 불러왔어요.');
   };
 
+  const handleMarkAllNotificationsRead = async () => {
+    const previous = notifications;
+    setNotifications((cur) => cur.map((n) => ({ ...n, read: true })));
+    try {
+      await markAllNotificationsRead();
+    } catch (e) {
+      setNotifications(previous);
+      showToast(errorMessage(e, '읽음 처리를 하지 못했어요.'));
+    }
+  };
+
   const handleNotificationSelect = (notification: NotificationItem) => {
     setNotifications((cur) => cur.map((n) => (n.id === notification.id ? { ...n, read: true } : n)));
+    // 읽음 표시가 실패해도 화면 이동까지 막을 이유는 없다. 다음 조회 때 다시 안 읽음으로 보일 뿐이다.
+    if (!notification.read) markNotificationRead(notification.id).catch(() => {});
 
     if (notification.type === 'TRIP_INVITED' && notification.targetType === 'INVITATION') {
       setFocusedInvitationId(notification.targetId);
@@ -603,17 +694,36 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   };
 
-  const handleAcceptInvitation = (invitation: TripInvitation) => {
-    setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
-    setTrips((cur) => (cur.some((t) => t.id === INVITED_JEJU_TRIP.id) ? cur : [INVITED_JEJU_TRIP, ...cur]));
-    setFocusedInvitationId(null);
-    showToast(`'${invitation.tripTitle}' 초대를 수락했어요.`);
+  /** 수락하면 그 여행의 팀원이 되므로 목록을 다시 받아와야 새 여행이 보인다. */
+  const handleAcceptInvitation = async (invitation: TripInvitation) => {
+    if (respondingInvitationId !== null) return;
+    setRespondingInvitationId(invitation.id);
+    try {
+      await acceptInvitation(invitation.id);
+      setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
+      setFocusedInvitationId(null);
+      showToast(`'${invitation.tripTitle}' 초대를 수락했어요.`);
+      await reloadTrips();
+    } catch (e) {
+      showToast(errorMessage(e, '초대를 수락하지 못했어요.'));
+    } finally {
+      setRespondingInvitationId(null);
+    }
   };
 
-  const handleRejectInvitation = (invitation: TripInvitation) => {
-    setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
-    setFocusedInvitationId(null);
-    showToast(`'${invitation.tripTitle}' 초대를 거절했어요.`);
+  const handleRejectInvitation = async (invitation: TripInvitation) => {
+    if (respondingInvitationId !== null) return;
+    setRespondingInvitationId(invitation.id);
+    try {
+      await rejectInvitation(invitation.id);
+      setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
+      setFocusedInvitationId(null);
+      showToast(`'${invitation.tripTitle}' 초대를 거절했어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '초대를 거절하지 못했어요.'));
+    } finally {
+      setRespondingInvitationId(null);
+    }
   };
 
   const handleOptimizeRoute = () => {
@@ -669,6 +779,10 @@ function useAppState(me: Me, onLogout: () => void) {
     isCreatingTrip,
     handleDeleteTrip,
     deletingTripId,
+    respondingInvitationId,
+    reloadNotifications,
+    reloadInvitations,
+    handleMarkAllNotificationsRead,
     isNotificationOpen, setIsNotificationOpen,
     notifications,
     tripInvitations,
@@ -720,6 +834,9 @@ function useAppState(me: Me, onLogout: () => void) {
     isPinLogTripPickerOpen, setIsPinLogTripPickerOpen,
     openProfileEditor,
     saveProfile,
+    isSavingProfile,
+    pickProfilePhoto,
+    isUploadingProfilePhoto,
     profileDetailModal, setProfileDetailModal,
     // 파생값
     displayedMapPlaces,

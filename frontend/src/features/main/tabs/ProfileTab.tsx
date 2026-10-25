@@ -3,7 +3,8 @@ import { Image, Pressable, Text, View } from 'react-native';
 
 import { PixelProfileIcon } from '../../../components/pixel/PixelIcons';
 import { FadeIn, PixelPressable } from '../../../components/pixel/Primitives';
-import { TRAVEL_TASTES, avatarImageForCode, useApp } from '../AppContext';
+import { TRAVEL_TASTES, profileAvatarSource, useApp } from '../AppContext';
+import { toImageSource } from '../../../data/mockData';
 
 const GALLERY = [
   {
@@ -33,7 +34,8 @@ export default function ProfileTab() {
    * 가입할 때 고른 아바타가 서버에 있으면 그걸 쓰고, 없으면 앱에서 고른 것을
    * 쓴다. 서버가 주지 않는 값을 지어내지 않으려고 코드로만 맞춘다.
    */
-  const avatarImage = avatarImageForCode(me.avatar?.code) ?? selectedProfileAvatar.image;
+  // selectedProfileAvatar 는 로그인 사용자 값으로 시작하고 편집하면 바로 갱신되므로 이것만 보면 된다.
+  const avatarImage = profileAvatarSource(selectedProfileAvatar);
 
   return (
     <FadeIn style={{ padding: 16, paddingBottom: 80, gap: 16 }}>
@@ -63,7 +65,7 @@ export default function ProfileTab() {
           onPress={openProfileEditor}
           className="relative h-20 w-20 overflow-hidden rounded-2xl border-2 border-[#075953] bg-[#B4FAF0]"
         >
-          <Image source={avatarImage} resizeMode="cover" className="h-full w-full" />
+          <Image source={toImageSource(avatarImage)} resizeMode="cover" className="h-full w-full" />
           <View className="absolute bottom-1 left-2 right-2 rounded-lg border border-[#075953] bg-white/90 px-2 py-0.5">
             <Text className="text-center text-[8px] font-black text-[#075953]">변경</Text>
           </View>

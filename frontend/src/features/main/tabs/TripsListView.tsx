@@ -11,7 +11,7 @@ import {
 } from '../../../components/pixel/Primitives';
 import { TRAVEL_STYLES } from '../../../constants';
 import { toImageSource } from '../../../data/mockData';
-import { avatarSilverBucket, useApp } from '../AppContext';
+import { avatarSilverBucket, profileAvatarSource, useApp } from '../AppContext';
 
 /** 목업 date 문자열('2026.10.12 - 10.15')에서 일수를 계산한다. 서버 연동 시 startDate/endDate 로 대체. */
 function tripDayCount(date: string): number {
@@ -220,7 +220,7 @@ export default function TripsListView() {
                       className="flex-row items-center gap-1.5 rounded-lg border border-[#075953] bg-[#56EADD] px-2 py-1 active:scale-95"
                     >
                       <View className="flex-row items-center">
-                        <Image source={selectedProfileAvatar.image} className="h-4 w-4 rounded border border-white" />
+                        <Image source={toImageSource(profileAvatarSource(selectedProfileAvatar))} className="h-4 w-4 rounded border border-white" />
                         <Image source={avatarSilverBucket} className="-ml-1 h-4 w-4 rounded border border-white" />
                       </View>
                       <Text className="text-[8px] font-black text-[#075953]">팀원 추가·수정</Text>

@@ -10,6 +10,8 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ImagePickerResponse, launchCamera, launchImageLibrary } from 'react-native-image-picker';
+
+import { uploadFile } from '../../../api/fileApi';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DEFAULT_COVERS } from '../../../assets/images/covers';
@@ -33,6 +35,8 @@ export interface NewTripPayload {
   startDate: string;
   endDate: string;
   coverImage: AvatarSource;
+  /** 직접 올린 표지의 서버 주소. 기본 픽셀 표지를 고르면 없다. */
+  coverImageUrl?: string;
   tags: string[];
 }
 
@@ -83,6 +87,9 @@ export default function CreateTripScreen({
   const [emojis, setEmojis] = useState(BASE_EMOJIS);
   const [coverImage, setCoverImage] = useState<AvatarSource>(DEFAULT_COVERS[0].src);
   const [coverTab, setCoverTab] = useState<'default' | 'upload'>('default');
+  /** POST /files 가 돌려준 주소. 기본 픽셀 표지를 쓰면 비어 있다. */
+  const [coverImageUrl, setCoverImageUrl] = useState<string | undefined>(undefined);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
   // 기본값: 일주일 뒤 출발 3박 4일
   const [startDate, setStartDate] = useState(() => addDays(toYmd(new Date()), 7));
   const [endDate, setEndDate] = useState(() => addDays(toYmd(new Date()), 10));
@@ -120,18 +127,31 @@ export default function CreateTripScreen({
     setCustomTag('');
   };
 
-  const applyPickedCover = (res: ImagePickerResponse) => {
+  /**
+   * 고른 사진을 바로 올려 둔다. 생성 버튼을 누를 때 한꺼번에 올리면 그만큼 기다려야 하고,
+   * 업로드가 실패했을 때 이미 만들어진 여행만 남는 어정쩡한 상태가 된다.
+   */
+  const applyPickedCover = async (res: ImagePickerResponse) => {
     if (res.didCancel) {
       return;
     }
-    const uri = res.assets?.[0]?.uri;
-    if (res.errorCode || !uri) {
+    const asset = res.assets?.[0];
+    if (res.errorCode || !asset?.uri) {
       Alert.alert('PINKOK', res.errorMessage ?? '사진을 불러오지 못했어요.');
       return;
     }
-    // TODO(서버 연동): POST /files 로 올리고 받은 URL 을 coverImage 로 쓴다.
     setCoverTab('upload');
-    setCoverImage(uri);
+    setCoverImage(asset.uri);
+    setIsUploadingCover(true);
+    try {
+      const uploaded = await uploadFile({ uri: asset.uri, fileName: asset.fileName, type: asset.type });
+      setCoverImageUrl(uploaded.url);
+    } catch {
+      setCoverImageUrl(undefined);
+      Alert.alert('PINKOK', '사진을 올리지 못했어요. 기본 표지로 만들어집니다.');
+    } finally {
+      setIsUploadingCover(false);
+    }
   };
 
   const handleCreate = () =>
@@ -142,6 +162,7 @@ export default function CreateTripScreen({
       startDate,
       endDate,
       coverImage,
+      coverImageUrl: coverTab === 'upload' ? coverImageUrl : undefined,
       tags: selectedTags,
     });
 
@@ -166,7 +187,7 @@ export default function CreateTripScreen({
             shadowColor="#075953"
             offset={2}
             radius={12}
-            disabled={!canCreate || isCreating}
+            disabled={!canCreate || isCreating || isUploadingCover}
             accessibilityLabel="여행 생성"
             className="h-9 items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD]"
             disabledClassName="h-9 items-center justify-center rounded-xl border-2 border-slate-300 bg-slate-200"

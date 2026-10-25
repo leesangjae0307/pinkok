@@ -1,4 +1,5 @@
 import api from './axios';
+import { fileUrl } from './fileApi';
 import { DEFAULT_COVERS } from '../assets/images/covers';
 import { daysBetween, toYmd } from '../components/pixel/PixelCalendar';
 import { AvatarSource, TripFolder } from '../data/mockData';
@@ -54,6 +55,24 @@ export async function createTrip(payload: TripCreatePayload): Promise<Trip> {
   return data;
 }
 
+export interface TripUpdatePayload {
+  title?: string;
+  region?: string;
+  startDate?: string;
+  endDate?: string;
+  companionType?: string;
+  /** PLANNING / ONGOING / COMPLETED */
+  status?: string;
+  coverImageUrl?: string;
+  isPublic?: boolean;
+}
+
+/** 부분 수정. 보내지 않은 필드는 그대로 둔다. OWNER 만 가능하다. */
+export async function updateTrip(tripId: number, payload: TripUpdatePayload): Promise<Trip> {
+  const { data } = await api.patch<Trip>(`/trips/${tripId}`, payload);
+  return data;
+}
+
 /** 소프트 삭제. OWNER 가 아니면 403 이다. */
 export async function deleteTrip(tripId: number): Promise<void> {
   await api.delete(`/trips/${tripId}`);
@@ -97,7 +116,8 @@ export function toTripFolder(
     title: trip.title,
     date: dateLabel(trip.startDate, trip.endDate),
     dDay: dDayLabel(trip.startDate),
-    image: trip.coverImageUrl ?? local?.image ?? DEFAULT_COVERS[0].src,
+    // 서버 주소는 `/files/...` 상대 경로라 그대로 주면 Image 가 못 불러온다.
+    image: fileUrl(trip.coverImageUrl) ?? local?.image ?? DEFAULT_COVERS[0].src,
     placesCount: trip.placesCount,
     tag: local?.tag ?? COMPANION_TAGS[trip.companionType ?? ''] ?? '여행',
     isOwner: trip.myRole === 'OWNER',

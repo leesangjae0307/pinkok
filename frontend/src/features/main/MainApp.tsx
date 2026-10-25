@@ -59,6 +59,7 @@ function ScreenBody() {
     setIsCreateTripInviteOpen,
     removeNewTripMember,
     handleCreateTrip,
+    isCreatingTrip,
   } = useApp();
 
   // 새 여행 만들기는 탭 위를 덮는 전체 화면 (웹과 같이 하단 탭바도 숨김)
@@ -72,6 +73,7 @@ function ScreenBody() {
         onOpenInvite={() => setIsCreateTripInviteOpen(true)}
         onRemoveMember={removeNewTripMember}
         onCreate={handleCreateTrip}
+        isCreating={isCreatingTrip}
       />
     );
   }

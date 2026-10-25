@@ -8,7 +8,7 @@
  * - "N박 M일" 을 고정 문구 대신 선택한 날짜로 계산
  */
 import React, { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ImagePickerResponse, launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -63,6 +63,7 @@ export default function CreateTripScreen({
   onOpenInvite,
   onRemoveMember,
   onCreate,
+  isCreating = false,
 }: {
   hostName: string;
   hostAvatar: AvatarSource;
@@ -71,6 +72,8 @@ export default function CreateTripScreen({
   onOpenInvite: () => void;
   onRemoveMember: (loginId: string) => void;
   onCreate: (payload: NewTripPayload) => void;
+  /** 서버에 만드는 중. 버튼을 잠가 두 번 눌리지 않게 한다. */
+  isCreating?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const [title, setTitle] = useState('');
@@ -163,13 +166,17 @@ export default function CreateTripScreen({
             shadowColor="#075953"
             offset={2}
             radius={12}
-            disabled={!canCreate}
+            disabled={!canCreate || isCreating}
             accessibilityLabel="여행 생성"
             className="h-9 items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD]"
             disabledClassName="h-9 items-center justify-center rounded-xl border-2 border-slate-300 bg-slate-200"
             onPress={handleCreate}
           >
-            <Text className={`text-[10px] font-black ${canCreate ? 'text-pixel-navy' : 'text-slate-400'}`}>생성</Text>
+            {isCreating ? (
+              <ActivityIndicator size="small" color="#075953" />
+            ) : (
+              <Text className={`text-[10px] font-black ${canCreate ? 'text-pixel-navy' : 'text-slate-400'}`}>생성</Text>
+            )}
           </PixelPressable>
         </View>
       </View>

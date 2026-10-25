@@ -2,7 +2,8 @@
  * 메인 앱 전역 상태 (웹 App.tsx 의 useState / 핸들러를 그대로 옮긴 것)
  * 화면(탭)들이 props 대신 useApp() 으로 꺼내 써요.
  */
-import React, { createContext, useContext, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 
 import avatarBookWinter from '../../assets/images/avatar-book-winter.png';
 import avatarSilverBucket from '../../assets/images/avatar-silver-bucket.png';
@@ -12,6 +13,7 @@ import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 import { Me, logout } from '../../api/authApi';
 import { updateNickname } from '../../api/userApi';
+import { createTrip, deleteTrip, fetchTrip, fetchTrips, toTripFolder } from '../../api/tripApi';
 import { errorMessage } from '../../api/axios';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
@@ -29,7 +31,6 @@ import {
 import type { SynthesizedVlog } from './modals/PinLogSynthesisModal';
 import type { QuickClip } from './modals/QuickPinLogCameraModal';
 import type { InvitedTripMember, NewTripPayload } from './screens/CreateTripScreen';
-import { daysBetween, toYmd } from '../../components/pixel/PixelCalendar';
 
 export type NotificationType = 'TRIP_INVITED' | 'TRIP_REMINDER' | 'TRIP_PLACE_ADDED';
 
@@ -203,7 +204,9 @@ export function avatarImageForCode(code: string | undefined | null): number | nu
 function useAppState(me: Me, onLogout: () => void) {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [trips, setTrips] = useState<TripFolder[]>(INITIAL_TRIPS);
+  const [trips, setTrips] = useState<TripFolder[]>([]);
+  const [isTripsLoading, setIsTripsLoading] = useState(true);
+  const [tripsError, setTripsError] = useState<string | null>(null);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [tripInvitations, setTripInvitations] = useState<TripInvitation[]>(INITIAL_TRIP_INVITATIONS);
@@ -220,6 +223,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [isCreateTripInviteOpen, setIsCreateTripInviteOpen] = useState(false);
   const [newTripMembers, setNewTripMembers] = useState<InvitedTripMember[]>([]);
+  const [isCreatingTrip, setIsCreatingTrip] = useState(false);
+  const [deletingTripId, setDeletingTripId] = useState<number | null>(null);
 
   // 환경설정
   const [pushNotification, setPushNotification] = useState(true);
@@ -308,6 +313,69 @@ function useAppState(me: Me, onLogout: () => void) {
     toastTimer.current = setTimeout(() => setToastMessage(null), 2800);
   };
 
+  /** GET /trips. 실패하면 목록 자리에 다시 시도할 수 있는 안내를 띄운다. */
+  const reloadTrips = useCallback(async () => {
+    setIsTripsLoading(true);
+    setTripsError(null);
+    try {
+      const list = await fetchTrips();
+      setTrips(list.map((trip) => toTripFolder(trip)));
+    } catch (e) {
+      setTripsError(errorMessage(e, '여행 목록을 불러오지 못했어요.'));
+    } finally {
+      setIsTripsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadTrips();
+  }, [reloadTrips]);
+
+  /**
+   * 목록의 여행을 연다. 카드가 들고 있는 값으로 먼저 열어 두고,
+   * GET /trips/{id} 로 받은 최신 값(장소 개수 등)으로 덮어쓴다.
+   */
+  const openTrip = async (trip: TripFolder) => {
+    setActiveTrip(trip);
+    setIsTripMapOpen(true);
+    try {
+      const detail = await fetchTrip(trip.id);
+      const fresh = toTripFolder(detail, { image: trip.image, tag: trip.tag });
+      setActiveTrip(fresh);
+      setTrips((cur) => cur.map((t) => (t.id === fresh.id ? fresh : t)));
+    } catch {
+      // 상세를 못 받아와도 목록에서 온 값으로 화면은 그대로 쓸 수 있다.
+    }
+  };
+
+  /**
+   * DELETE /trips/{id}. 되돌릴 수 없으므로 먼저 확인을 받는다.
+   * 주인만 지울 수 있어서 카드에서도 OWNER 에게만 버튼을 보여준다.
+   */
+  const handleDeleteTrip = (trip: TripFolder) => {
+    Alert.alert('여행 삭제', `'${trip.title}' 여행을 삭제할까요?\n되돌릴 수 없어요.`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingTripId(trip.id);
+          try {
+            await deleteTrip(trip.id);
+            setTrips((cur) => cur.filter((t) => t.id !== trip.id));
+            // 지운 여행의 지도를 보고 있었다면 목록으로 돌려보낸다.
+            if (activeTrip?.id === trip.id) setIsTripMapOpen(false);
+            showToast('여행을 삭제했어요.');
+          } catch (e) {
+            showToast(errorMessage(e, '여행을 삭제하지 못했어요.'));
+          } finally {
+            setDeletingTripId(null);
+          }
+        },
+      },
+    ]);
+  };
+
   // 서버 호출이 실패해도 토큰은 지워져 있으므로 로그인 화면으로 보낸다.
   const handleLogout = async () => {
     try {
@@ -379,23 +447,36 @@ function useAppState(me: Me, onLogout: () => void) {
   const removeNewTripMember = (loginId: string) =>
     setNewTripMembers((cur) => cur.filter((m) => m.loginId !== loginId));
 
-  // TODO(서버 연동): POST /trips 로 만들고, newTripMembers 에게 초대를 보낸 뒤 응답의 여행을 목록에 넣는다.
-  const handleCreateTrip = (payload: NewTripPayload) => {
-    const dDay = daysBetween(toYmd(new Date()), payload.startDate);
-    const createdTrip: TripFolder = {
-      id: Date.now(),
-      title: `${payload.title} ${payload.emoji}`,
-      // 목업 형식 그대로: '2026.10.25 - 10.28'
-      date: `${payload.startDate.replace(/-/g, '.')} - ${payload.endDate.slice(5).replace('-', '.')}`,
-      dDay: dDay > 0 ? `D-${dDay}` : dDay === 0 ? 'D-DAY' : `D+${-dDay}`,
-      image: payload.coverImage,
-      placesCount: 0,
-      tag: payload.tags[0] ?? '여행',
-    };
-    setTrips((cur) => [createdTrip, ...cur]);
-    setActiveTrip(createdTrip);
-    closeCreateTrip();
-    showToast(`'${payload.title}' 여행을 만들었어요.`);
+  /**
+   * POST /trips. 초대한 사람들에게는 초대장이 갈 뿐이라 만든 직후에는 아직 나 혼자다.
+   *
+   * 표지 이미지와 태그는 아직 서버에 보낼 자리가 없다(표지는 POST /files 가 필요하다).
+   * 그래서 사용자가 고른 값을 화면에만 얹어 두고, 목록을 다시 받아오면 기본값으로 돌아간다.
+   */
+  const handleCreateTrip = async (payload: NewTripPayload) => {
+    if (isCreatingTrip) return;
+    setIsCreatingTrip(true);
+    try {
+      const created = await createTrip({
+        title: `${payload.title} ${payload.emoji}`.trim(),
+        region: payload.location || undefined,
+        startDate: payload.startDate,
+        endDate: payload.endDate,
+        inviteeUsernames: newTripMembers.map((m) => m.loginId),
+      });
+      const createdTrip = toTripFolder(created, {
+        image: payload.coverImage,
+        tag: payload.tags[0],
+      });
+      setTrips((cur) => [createdTrip, ...cur]);
+      setActiveTrip(createdTrip);
+      closeCreateTrip();
+      showToast(`'${payload.title}' 여행을 만들었어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '여행을 만들지 못했어요.'));
+    } finally {
+      setIsCreatingTrip(false);
+    }
   };
 
   const handleDeletePlaceRecord = (recordId: number) => {
@@ -457,9 +538,10 @@ function useAppState(me: Me, onLogout: () => void) {
     showToast('여행 목록이 모두 지워졌습니다. 첫 여행을 생성해보세요!');
   };
 
-  const handleResetTrips = () => {
-    setTrips(INITIAL_TRIPS);
-    showToast('기본 샘플 여행 목록이 복원되었습니다 🎉');
+  // 목록은 이제 서버가 갖고 있으므로 샘플을 되돌리는 대신 다시 받아온다.
+  const handleResetTrips = async () => {
+    await reloadTrips();
+    showToast('여행 목록을 다시 불러왔어요.');
   };
 
   const handleNotificationSelect = (notification: NotificationItem) => {
@@ -549,6 +631,13 @@ function useAppState(me: Me, onLogout: () => void) {
     activeTab, setActiveTab,
     isSettingsOpen, setIsSettingsOpen,
     trips, setTrips,
+    isTripsLoading,
+    tripsError,
+    reloadTrips,
+    openTrip,
+    isCreatingTrip,
+    handleDeleteTrip,
+    deletingTripId,
     isNotificationOpen, setIsNotificationOpen,
     notifications,
     tripInvitations,

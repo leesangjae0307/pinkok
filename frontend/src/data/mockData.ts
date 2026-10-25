@@ -25,6 +25,8 @@ export interface TripFolder {
   image: AvatarSource;
   placesCount: number;
   tag: string;
+  /** 내가 이 여행의 주인인지. 삭제처럼 OWNER 만 되는 동작을 가릴 때 쓴다. */
+  isOwner?: boolean;
 }
 
 export interface TransitInfo {

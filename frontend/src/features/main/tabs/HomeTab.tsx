@@ -11,9 +11,8 @@ export default function HomeTab() {
     trips,
     unreadNotificationCount,
     setIsNotificationOpen,
-    setActiveTrip,
+    openTrip,
     setActiveTab,
-    setIsTripMapOpen,
     openQuickPinLogCamera,
   } = useApp();
   const firstTrip = trips[0];
@@ -62,9 +61,8 @@ export default function HomeTab() {
           wrapperClassName="w-full"
           className="w-full overflow-hidden rounded-[30px] border-3 border-pixel-navy bg-slate-900"
           onPress={() => {
-            setActiveTrip(firstTrip);
             setActiveTab('trips');
-            setIsTripMapOpen(true);
+            openTrip(firstTrip);
           }}
         >
           <Image source={toImageSource(firstTrip.image)} resizeMode="cover" className="h-52 w-full" />

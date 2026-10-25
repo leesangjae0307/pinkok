@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import { MAP_PLACES, PlaceItem } from '../../../data/mockData';
+import { PlaceItem } from '../../../data/mockData';
 import { PixelBackArrow, PixelPin, PixelTripsIcon } from '../../../components/pixel/PixelIcons';
 import { AnimatedLoop } from '../../../components/pixel/Primitives';
 import TripsBottomSheet from '../components/TripsBottomSheet';
@@ -45,7 +45,7 @@ function MapMarker({
       <PixelPin
         size={focused ? 32 : 26}
         color={focused ? '#FF5A87' : '#075953'}
-        label={`${place.order}. ${place.name.split(' ')[1] || place.name.slice(0, 5)}`}
+        label={`${place.order}. ${place.name.replace(/^\d+\.\s*/, '')}`}
         active={focused}
       />
     </Pressable>
@@ -59,6 +59,11 @@ export default function TripMapView() {
     selectedDayFilter,
     setSelectedDayFilter,
     displayedMapPlaces,
+    mapPlaces,
+    isMapPlacesLoading,
+    mapPlacesError,
+    tripDayNumbers,
+    reloadItinerary,
     selectedMapPin,
     setSelectedMapPin,
     setIsTripMapOpen,
@@ -116,8 +121,8 @@ export default function TripMapView() {
           </Svg>
         )}
 
-        {/* 포커스된 핀 레이더 */}
-        {layout.width > 0 && (
+        {/* 포커스된 핀 레이더. 고른 핀이 지금 지도에 없으면(빈 일정 등) 그리지 않는다. */}
+        {layout.width > 0 && displayedMapPlaces.some((p) => p.id === selectedMapPin.id) && (
           <View
             pointerEvents="none"
             style={{ position: 'absolute', left: focusX - 24, top: focusY - 24, width: 48, height: 48, zIndex: 10 }}
@@ -193,10 +198,14 @@ export default function TripMapView() {
         selectedDay={selectedDayFilter}
         onSelectDay={(day) => {
           setSelectedDayFilter(day);
-          const matching = day === 'all' ? MAP_PLACES : MAP_PLACES.filter((p) => p.day === day);
+          const matching = day === 'all' ? mapPlaces : mapPlaces.filter((p) => p.day === day);
           if (matching.length > 0) setSelectedMapPin(matching[0]);
         }}
         places={displayedMapPlaces}
+        dayNumbers={tripDayNumbers}
+        isLoading={isMapPlacesLoading}
+        loadError={mapPlacesError}
+        onRetry={reloadItinerary}
         selectedPlaceId={selectedMapPin.id}
         onSelectPlace={(place) => {
           setSelectedMapPin(place);

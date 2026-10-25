@@ -14,6 +14,7 @@ import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 import { Me, logout } from '../../api/authApi';
 import { updateNickname } from '../../api/userApi';
 import { createTrip, deleteTrip, fetchTrip, fetchTrips, toTripFolder } from '../../api/tripApi';
+import { fetchItineraryDays, fetchItineraryItems, toPlaceItems } from '../../api/itineraryApi';
 import { errorMessage } from '../../api/axios';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
@@ -253,7 +254,11 @@ function useAppState(me: Me, onLogout: () => void) {
   // 홈 빠른 촬영: 촬영 대상 여행과 열림 여부
   const [pinLogTrip, setPinLogTrip] = useState<TripFolder>(INITIAL_TRIPS[0]);
   const [isQuickPinLogCameraOpen, setIsQuickPinLogCameraOpen] = useState(false);
-  const [mapPlaces, setMapPlaces] = useState<PlaceItem[]>(MAP_PLACES);
+  const [mapPlaces, setMapPlaces] = useState<PlaceItem[]>([]);
+  const [isMapPlacesLoading, setIsMapPlacesLoading] = useState(false);
+  const [mapPlacesError, setMapPlacesError] = useState<string | null>(null);
+  /** 이 여행에 실제로 있는 일자 번호 (1day, 2day ... 칩). */
+  const [tripDayNumbers, setTripDayNumbers] = useState<number[]>([]);
   const [isOptimizingRoute, setIsOptimizingRoute] = useState(false);
 
   // 바텀시트
@@ -331,13 +336,39 @@ function useAppState(me: Me, onLogout: () => void) {
     reloadTrips();
   }, [reloadTrips]);
 
+  /** 여행의 일자와 핀을 받아 지도·바텀시트에 올린다. */
+  const loadItinerary = useCallback(async (tripId: number) => {
+    setIsMapPlacesLoading(true);
+    setMapPlacesError(null);
+    try {
+      const [days, items] = await Promise.all([
+        fetchItineraryDays(tripId),
+        fetchItineraryItems(tripId),
+      ]);
+      const places = toPlaceItems(items);
+      setMapPlaces(places);
+      setTripDayNumbers(days.map((d) => d.dayNumber).sort((a, b) => a - b));
+      // 핀을 고르기 전에도 상세 카드가 하나는 떠 있어야 해서 첫 핀을 잡아둔다.
+      if (places.length > 0) setSelectedMapPin(places[0]);
+    } catch (e) {
+      setMapPlaces([]);
+      setTripDayNumbers([]);
+      setMapPlacesError(errorMessage(e, '일정을 불러오지 못했어요.'));
+    } finally {
+      setIsMapPlacesLoading(false);
+    }
+  }, []);
+
   /**
    * 목록의 여행을 연다. 카드가 들고 있는 값으로 먼저 열어 두고,
    * GET /trips/{id} 로 받은 최신 값(장소 개수 등)으로 덮어쓴다.
+   * 지도에 띄울 일정은 여행마다 다르므로 열 때마다 새로 받는다.
    */
   const openTrip = async (trip: TripFolder) => {
     setActiveTrip(trip);
     setIsTripMapOpen(true);
+    setSelectedDayFilter('all');
+    loadItinerary(trip.id);
     try {
       const detail = await fetchTrip(trip.id);
       const fresh = toTripFolder(detail, { image: trip.image, tag: trip.tag });
@@ -671,6 +702,10 @@ function useAppState(me: Me, onLogout: () => void) {
     pinLogTrip, setPinLogTrip,
     isQuickPinLogCameraOpen, setIsQuickPinLogCameraOpen,
     mapPlaces,
+    isMapPlacesLoading,
+    mapPlacesError,
+    tripDayNumbers,
+    reloadItinerary: () => activeTrip && loadItinerary(activeTrip.id),
     isOptimizingRoute,
     tripsSheetHeight, setTripsSheetHeight,
     selectedDayFilter, setSelectedDayFilter,

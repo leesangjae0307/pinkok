@@ -33,10 +33,12 @@ const DEBUG_BLOCKS = {
  * 임시 계측기 — 터치가 죽은 상태에서 JS 스레드가 살아 있는지 눈으로 본다.
  * JS: 0.5초마다 오르는 숫자. 멈추면 JS 스레드가 막힌 것(렌더 루프).
  * R: 이 뱃지가 렌더된 횟수. JS 보다 훨씬 빠르게 치솟으면 리렌더 루프.
- * 둘 다 정상인데 터치가 안 되면 보이지 않는 네이티브 창이 터치를 삼키는 것이다.
+ * T: 화면 어디든 손이 닿아 JS 까지 도달한 횟수.
+ *    T 가 안 오르면 네이티브 창이 터치를 가로채는 것이고,
+ *    T 는 오르는데 버튼만 안 먹으면 JS 안쪽의 히트테스트 문제다.
  * 원인을 찾으면 이 컴포넌트와 사용처를 모두 지운다.
  */
-function DebugHeartbeat() {
+function DebugHeartbeat({ touches }: { touches: number }) {
   const [tick, setTick] = useState(0);
   const renders = useRef(0);
   renders.current += 1;
@@ -59,7 +61,7 @@ function DebugHeartbeat() {
       }}
     >
       <Text style={{ color: '#00FF66', fontSize: 11 }}>
-        JS {tick} / R {renders.current}
+        JS {tick} / R {renders.current} / T {touches}
       </Text>
     </View>
   );
@@ -133,6 +135,8 @@ export default function TripMapView() {
     showToast,
   } = useApp();
   const [layout, setLayout] = useState({ width: 0, height: 0 });
+  // 계측용: 손이 닿은 횟수. capture 단계라 자식 Pressable 동작을 막지 않는다.
+  const [touches, setTouches] = useState(0);
   // 위와 같은 이유로 크기가 실제로 변했을 때만 반영한다.
   const handleRootLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -162,6 +166,7 @@ export default function TripMapView() {
     <View
       className="relative flex-1 overflow-hidden"
       onLayout={handleRootLayout}
+      onTouchStart={() => setTouches((n) => n + 1)}
     >
       {/* 지도 배경 */}
       <View className="absolute inset-0 overflow-hidden bg-[#B4FAF0]/40">
@@ -283,7 +288,7 @@ export default function TripMapView() {
         isOptimizingRoute={isOptimizingRoute}
       />}
 
-      <DebugHeartbeat />
+      <DebugHeartbeat touches={touches} />
     </View>
   );
 }

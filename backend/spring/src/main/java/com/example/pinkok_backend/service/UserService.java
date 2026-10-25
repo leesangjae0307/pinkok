@@ -21,7 +21,14 @@ public class UserService {
             throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
         }
 
-        user.setCreatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        user.setCreatedAt(now);
+        user.setUpdatedAt(now);
+
+        // users.provider 컬럼이 NOT NULL 이므로 일반 회원가입은 LOCAL 로 지정
+        if (user.getProvider() == null) {
+            user.setProvider("LOCAL");
+        }
 
         return userRepository.save(user);
     }

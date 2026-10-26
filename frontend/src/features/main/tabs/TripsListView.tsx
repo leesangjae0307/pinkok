@@ -48,6 +48,9 @@ export default function TripsListView() {
     recommendationRegion,
     setRecommendationRegion,
     handleAiTripRecommendation,
+    recommendations,
+    handleAcceptRecommendation,
+    handleRejectRecommendation,
   } = useApp();
   const [searchFocused, setSearchFocused] = React.useState(false);
 
@@ -310,6 +313,39 @@ export default function TripsListView() {
           >
             <Text className="text-xs font-black text-[#56EADD]">AI 추천 장소 추출하기</Text>
           </Pressable>
+
+          {/* 추천 결과. 수락하면 지금 보고 있는 여행의 일정에 핀으로 들어간다. */}
+          {recommendations.length > 0 && (
+            <View className="mt-3 gap-2">
+              {recommendations.map((rec) => (
+                <View key={rec.id} className="rounded-2xl border-2 border-[#075953] bg-white p-3">
+                  <Text className="text-xs font-black text-slate-900">{rec.name}</Text>
+                  {rec.address ? (
+                    <Text numberOfLines={1} className="mt-0.5 text-[9px] font-bold text-slate-500">
+                      📍 {rec.address}
+                    </Text>
+                  ) : null}
+                  {rec.reason ? (
+                    <Text className="mt-1 text-[10px] font-semibold leading-4 text-slate-600">{rec.reason}</Text>
+                  ) : null}
+                  <View className="mt-2 flex-row justify-end gap-1.5">
+                    <Pressable
+                      onPress={() => handleRejectRecommendation(rec.id)}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 active:scale-95"
+                    >
+                      <Text className="text-[9px] font-black text-slate-500">거절</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleAcceptRecommendation(rec.id)}
+                      className="rounded-lg border border-[#075953] bg-[#56EADD] px-2.5 py-1.5 active:scale-95"
+                    >
+                      <Text className="text-[9px] font-black text-[#075953]">일정에 추가</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
         </LinearGradient>
       </ShadowBox>
     </FadeIn>

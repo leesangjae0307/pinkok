@@ -14,7 +14,7 @@ import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 import { Me, fetchAvatars, logout } from '../../api/authApi';
 import { selectAvatar, updateNickname, updateProfileImage } from '../../api/userApi';
-import { fileUrl, uploadFile, uploadFiles } from '../../api/fileApi';
+import { fileUrl, uploadFile, uploadFiles, type PickedFile } from '../../api/fileApi';
 import {
   createDiary,
   deleteDiary,
@@ -36,6 +36,25 @@ import {
 } from '../../api/tripApi';
 import { fetchItineraryDays, fetchItineraryItems, toPlaceItems } from '../../api/itineraryApi';
 import { fetchTripStyles, replaceTripStyles } from '../../api/travelStyleApi';
+import {
+  addCandidatesToTrip,
+  createAiRequest,
+  fetchPlaceCandidates,
+  waitForAiRequest,
+  type PlaceCandidate,
+} from '../../api/aiRequestApi';
+import {
+  acceptRecommendation,
+  createRecommendation,
+  fetchRecommendations,
+  rejectRecommendation,
+  type Recommendation,
+} from '../../api/recommendationApi';
+import {
+  applyRouteOptimization,
+  createRouteOptimization,
+  savedDistanceM,
+} from '../../api/routeOptimizationApi';
 import {
   acceptInvitation,
   fetchMyInvitations,
@@ -203,6 +222,33 @@ export function profileAvatarSource(avatar: ProfileAvatar): AvatarSource {
   return fileUrl(avatar.photoUrl) ?? avatar.image;
 }
 
+/**
+ * AI 후보를 추출 탭이 쓰는 ExtractedPlace 로 바꾼다.
+ *
+ * 여기 lat/lng 는 목록에만 쓰이고 지도에 찍히지 않아서 가운데 값으로 둔다. 지도에
+ * 올라가는 건 여행에 추가한 뒤 GET /itinerary-items 로 다시 받은 핀이고, 그때
+ * 좌표가 제대로 투영된다.
+ */
+export function toExtractedPlace(candidate: PlaceCandidate): ExtractedPlace {
+  return {
+    id: candidate.id,
+    name: candidate.place?.name ?? candidate.rawName,
+    category: candidate.categoryText ?? candidate.place?.categoryName ?? '장소',
+    rating: 0,
+    reviewsCount: 0,
+    address: candidate.place?.roadAddress ?? candidate.rawAddress ?? '',
+    thumbnail: '',
+    lat: 50,
+    lng: 50,
+    order: candidate.displayOrder ?? 0,
+    day: 0,
+    note: candidate.description ?? undefined,
+    // 좌표를 못 찾았거나 이름이 흐릿하면 사용자가 한 번 봐야 한다.
+    extractionStatus: candidate.mapped && !candidate.needsReview ? 'success' : 'review',
+    confidence: Math.round((candidate.confidence ?? 0) * 100),
+  };
+}
+
 export function avatarImageForCode(code: string | undefined | null): number | null {
   if (!code) return null;
   return AVATAR_IMAGE_BY_SERVER_CODE[code] ?? null;
@@ -247,15 +293,19 @@ function useAppState(me: Me, onLogout: () => void) {
   // 추출 탭
   const [inputUrl, setInputUrl] = useState('https://instagram.com/p/C_jeju_cafe_art');
   const [isExtracting, setIsExtracting] = useState(false);
-  const [extractedPlaces, setExtractedPlaces] = useState<ExtractedPlace[]>(INITIAL_EXTRACTED_PLACES);
+  const [extractedPlaces, setExtractedPlaces] = useState<ExtractedPlace[]>([]);
+  /** 맞춤 추천 결과. 아직 수락·거절하지 않은 것만 담는다. */
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [selectedExtractedPlaceIds, setSelectedExtractedPlaceIds] = useState<number[]>(
-    INITIAL_EXTRACTED_PLACES.map((p) => p.id),
+    [],
   );
   const [isTripPickerOpen, setIsTripPickerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedTripForExtract, setSelectedTripForExtract] = useState(1);
   // 첨부한 스크린샷 파일명 (최대 10장). TODO(서버 연동): POST /files 로 올린 뒤 받은 id 로 교체.
   const [extractImageNames, setExtractImageNames] = useState<string[]>([]);
+  /** 고른 스크린샷 원본. 이름만으로는 업로드할 수 없어 따로 들고 있는다. */
+  const [extractImages, setExtractImages] = useState<PickedFile[]>([]);
 
   // 여행 지도 & 팀 기록
   const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem>(MAP_PLACES[0]);
@@ -727,19 +777,47 @@ function useAppState(me: Me, onLogout: () => void) {
   };
 
   // AI 추출 시뮬레이션
-  const handleExtractSubmit = () => {
-    if (!inputUrl && extractImageNames.length === 0) {
-      return;
-    }
+  /**
+   * AI 장소 추출. 스크린샷이 있으면 먼저 올리고 그 주소로, 없으면 링크로 요청한다.
+   *
+   * Gemini 호출이라 바로 끝나지 않는다. 요청은 202 로 끝나고 상태를 폴링해서
+   * SUCCESS 가 되면 후보 목록을 읽는다. 좌표를 못 찾은 후보(mapped=false)는 핀으로
+   * 추가할 수 없어서 기본 선택에서 빼둔다.
+   */
+  const handleExtractSubmit = async () => {
+    if (isExtracting) return;
+    if (!inputUrl.trim() && extractImages.length === 0) return;
     setIsExtracting(true);
-    setTimeout(() => {
-      setIsExtracting(false);
-      const refreshed = INITIAL_EXTRACTED_PLACES.map((p) => ({ ...p, id: Date.now() + p.id }));
-      setExtractedPlaces(refreshed);
-      setSelectedExtractedPlaceIds(refreshed.map((p) => p.id));
+    try {
+      const request =
+        extractImages.length > 0
+          ? await createAiRequest({
+              inputType: 'IMAGE',
+              imageUrls: (await uploadFiles(extractImages)).map((f) => f.url),
+            })
+          : await createAiRequest({ inputType: 'LINK', sourceUrl: inputUrl.trim() });
+
+      const finished = await waitForAiRequest(request.id);
+      if (finished.status !== 'SUCCESS') {
+        showToast(
+          finished.status === 'FAILED'
+            ? `추출에 실패했어요. (${finished.errorCode ?? '알 수 없는 오류'})`
+            : '추출이 아직 끝나지 않았어요. 잠시 후 다시 확인해 주세요.',
+        );
+        return;
+      }
+
+      const candidates = await fetchPlaceCandidates(finished.id);
+      const places = candidates.map(toExtractedPlace);
+      setExtractedPlaces(places);
+      setSelectedExtractedPlaceIds(candidates.filter((c) => c.mapped).map((c) => c.id));
       setIsTripPickerOpen(false);
-      showToast(`AI가 장소 ${refreshed.length}곳을 추출했습니다!`);
-    }, 2000);
+      showToast(`AI가 장소 ${places.length}곳을 추출했습니다!`);
+    } catch (e) {
+      showToast(errorMessage(e, '추출 요청을 보내지 못했어요.'));
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const handleToggleExtractedPlace = (placeId: number) => {
@@ -748,14 +826,25 @@ function useAppState(me: Me, onLogout: () => void) {
     );
   };
 
-  const handleAddPlaceToTrip = (tripId: number) => {
+  /** 체크한 후보를 여행에 핀으로 추가한다. 좌표를 못 찾은 것은 서버가 건너뛴다. */
+  const handleAddPlaceToTrip = async (tripId: number) => {
     const targetTrip = trips.find((t) => t.id === tripId);
-    const count = selectedExtractedPlaceIds.length;
-    if (!count) return;
-    setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, placesCount: t.placesCount + count } : t)));
-    setSelectedTripForExtract(tripId);
-    setIsTripPickerOpen(false);
-    showToast(`선택한 ${count}개 장소를 '${targetTrip?.title}'에 추가했어요.`);
+    if (selectedExtractedPlaceIds.length === 0) return;
+    try {
+      const { addedCount, skippedCount } = await addCandidatesToTrip(tripId, selectedExtractedPlaceIds);
+      setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, placesCount: t.placesCount + addedCount } : t)));
+      setSelectedTripForExtract(tripId);
+      setIsTripPickerOpen(false);
+      showToast(
+        skippedCount > 0
+          ? `${addedCount}개를 '${targetTrip?.title}'에 추가했어요. ${skippedCount}개는 지도에서 찾지 못했어요.`
+          : `선택한 ${addedCount}개 장소를 '${targetTrip?.title}'에 추가했어요.`,
+      );
+      // 지금 보고 있는 여행이면 지도에도 바로 반영한다.
+      if (activeTrip?.id === tripId) loadItinerary(tripId);
+    } catch (e) {
+      showToast(errorMessage(e, '장소를 추가하지 못했어요.'));
+    }
   };
 
   const handleClearCache = () => {
@@ -847,43 +936,98 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   };
 
-  const handleOptimizeRoute = () => {
-    if (isOptimizingRoute) return;
+  /**
+   * 동선 최적화. 서버가 제안을 만들고(일정은 아직 그대로) 반영은 따로 요청해야 한다.
+   *
+   * 화면에는 "최적화" 버튼 하나뿐이라 둘을 이어서 부른다. 다만 제안만 만들고 끝나면
+   * 사용자 눈에는 아무 일도 안 일어난 것으로 보이기 때문이다. 반영까지 끝나면 일정을
+   * 다시 받아 바뀐 순서를 보여준다.
+   */
+  const handleOptimizeRoute = async () => {
+    if (isOptimizingRoute || !activeTrip) return;
+    if (mapPlaces.length < 2) {
+      showToast('최적화하려면 장소가 두 곳 이상 필요해요.');
+      return;
+    }
     setIsOptimizingRoute(true);
     showToast('AI가 이동 거리와 방문 시간을 계산하고 있어요.');
-
-    setTimeout(() => {
-      setMapPlaces((current) => {
-        if (current.length < 2) return current;
-        const remaining = [...current];
-        const optimized = [remaining.shift()!];
-        while (remaining.length > 0) {
-          const last = optimized[optimized.length - 1];
-          let nearestIndex = 0;
-          let nearestDistance = Number.POSITIVE_INFINITY;
-          remaining.forEach((candidate, index) => {
-            const distance =
-              Math.hypot(candidate.lat - last.lat, candidate.lng - last.lng) + Math.abs(candidate.day - last.day) * 30;
-            if (distance < nearestDistance) {
-              nearestDistance = distance;
-              nearestIndex = index;
-            }
-          });
-          optimized.push(remaining.splice(nearestIndex, 1)[0]);
-        }
-        return optimized.map((place, index) => ({ ...place, order: index + 1 }));
-      });
+    try {
+      const proposal = await createRouteOptimization(activeTrip.id);
+      await applyRouteOptimization(proposal.id);
+      await loadItinerary(activeTrip.id);
+      const saved = savedDistanceM(proposal);
+      showToast(
+        saved > 0
+          ? `동선을 정리했어요. 약 ${(saved / 1000).toFixed(1)}km 짧아졌어요.`
+          : '가장 효율적인 동선으로 장소 순서를 정리했어요.',
+      );
+    } catch (e) {
+      showToast(errorMessage(e, '동선을 최적화하지 못했어요.'));
+    } finally {
       setIsOptimizingRoute(false);
-      showToast('가장 효율적인 동선으로 장소 순서를 정리했어요.');
-    }, 1400);
+    }
   };
 
-  const handleAiTripRecommendation = () => {
+  /**
+   * 맞춤 추천. 고른 조건으로 요청하고, 완성되면 추출 탭의 후보 목록으로 보여준다.
+   *
+   * 추천은 AI 요청과 같은 파이프라인이라 상태를 똑같이 폴링한다. 다만 결과는
+   * place-candidates 가 아니라 /recommendations 에서 읽는다.
+   */
+  const handleAiTripRecommendation = async () => {
+    if (isExtracting) return;
+    const trip = activeTrip ?? trips[0];
+    if (!trip) {
+      showToast('먼저 여행을 만들어 주세요.');
+      return;
+    }
+    setIsExtracting(true);
+    setActiveTab('extract');
     setInputUrl(
       `${recommendationPeople}명 · ${recommendationRegion} · ${travelStyleLabel(recommendationStyle)} 여행 추천`,
     );
-    setActiveTab('extract');
-    showToast('선택한 조건으로 AI 추천 장소를 준비했어요.');
+    try {
+      const request = await createRecommendation({
+        tripId: trip.id,
+        styleCodes: [recommendationStyle],
+      });
+      const finished = await waitForAiRequest(request.id);
+      if (finished.status !== 'SUCCESS') {
+        showToast(`추천을 받지 못했어요. (${finished.errorCode ?? '잠시 후 다시 시도해 주세요'})`);
+        return;
+      }
+      const list = await fetchRecommendations(trip.id);
+      const suggested = list.filter((r) => r.status === 'SUGGESTED');
+      setRecommendations(suggested);
+      showToast(`조건에 맞는 장소 ${suggested.length}곳을 추천했어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '추천을 받지 못했어요.'));
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  /** 추천 수락 — 서버가 좌표를 찾아 일정에 핀으로 넣는다. 못 찾으면 422 다. */
+  const handleAcceptRecommendation = async (recommendationId: number) => {
+    try {
+      await acceptRecommendation(recommendationId);
+      setRecommendations((cur) => cur.filter((r) => r.id !== recommendationId));
+      showToast('추천 장소를 일정에 추가했어요.');
+      if (activeTrip) loadItinerary(activeTrip.id);
+    } catch (e) {
+      showToast(errorMessage(e, '추천 장소를 추가하지 못했어요.'));
+    }
+  };
+
+  const handleRejectRecommendation = async (recommendationId: number) => {
+    const previous = recommendations;
+    setRecommendations((cur) => cur.filter((r) => r.id !== recommendationId));
+    try {
+      await rejectRecommendation(recommendationId);
+    } catch (e) {
+      setRecommendations(previous);
+      showToast(errorMessage(e, '추천을 거절하지 못했어요.'));
+    }
   };
 
   return {
@@ -932,6 +1076,10 @@ function useAppState(me: Me, onLogout: () => void) {
     toastMessage,
     selectedTripForExtract, setSelectedTripForExtract,
     extractImageNames, setExtractImageNames,
+    extractImages, setExtractImages,
+    recommendations,
+    handleAcceptRecommendation,
+    handleRejectRecommendation,
     selectedMapPin, setSelectedMapPin,
     isPlaceDetailModalOpen, setIsPlaceDetailModalOpen,
     startPlaceCamera, setStartPlaceCamera,

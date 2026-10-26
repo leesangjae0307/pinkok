@@ -7,11 +7,13 @@
  * - 표지: 📷 촬영 / 🖼️ 갤러리가 실제 카메라·사진첩을 연다 (react-native-image-picker)
  * - "N박 M일" 을 고정 문구 대신 선택한 날짜로 계산
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ImagePickerResponse, launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
 import { uploadFile } from '../../../api/fileApi';
+import { fetchTravelStyles } from '../../../api/travelStyleApi';
+import { TRAVEL_STYLES } from '../../../constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DEFAULT_COVERS } from '../../../assets/images/covers';
@@ -37,11 +39,12 @@ export interface NewTripPayload {
   coverImage: AvatarSource;
   /** 직접 올린 표지의 서버 주소. 기본 픽셀 표지를 고르면 없다. */
   coverImageUrl?: string;
-  tags: string[];
+  /** 서버 travel_styles 코드. GET /travel-styles 의 code 목록이다. */
+  styleCodes: string[];
 }
 
 const BASE_EMOJIS = ['🌴', '🌊', '🗼', '✈️', '🍜', '☕', '🌲', '📷'];
-const BASE_TAGS = ['힐링', '맛집탐방', '카페투어', '자연', '쇼핑', '액티비티'];
+
 const TITLE_MAX = 20;
 
 const formatDate = (date: string) => date.replace(/-/g, '.');
@@ -94,9 +97,25 @@ export default function CreateTripScreen({
   const [startDate, setStartDate] = useState(() => addDays(toYmd(new Date()), 7));
   const [endDate, setEndDate] = useState(() => addDays(toYmd(new Date()), 10));
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [tags, setTags] = useState(BASE_TAGS);
-  const [selectedTags, setSelectedTags] = useState<string[]>([BASE_TAGS[0]]);
-  const [customTag, setCustomTag] = useState('');
+  /**
+   * 선택지는 서버가 정한 다섯 개뿐이다. 목록에 없는 코드를 보내면 서버가 400 을 주고
+   * 아무것도 저장하지 않아서, 예전처럼 사용자가 해시태그를 직접 만들 수는 없다.
+   * 서버 목록을 받아오되 실패하면 앱이 들고 있는 상수로 그린다.
+   */
+  const [styleOptions, setStyleOptions] = useState<{ code: string; label: string }[]>(
+    TRAVEL_STYLES.map((s) => ({ code: s.code, label: s.label })),
+  );
+  const [selectedStyleCodes, setSelectedStyleCodes] = useState<string[]>([TRAVEL_STYLES[0].code]);
+
+  useEffect(() => {
+    fetchTravelStyles()
+      .then((styles) => {
+        if (styles.length > 0) setStyleOptions(styles.map((s) => ({ code: s.code, label: s.name })));
+      })
+      .catch(() => {
+        // 상수로 그려도 코드가 같으므로 저장에는 문제가 없다.
+      });
+  }, []);
   const [focused, setFocused] = useState<'title' | 'location' | 'emoji' | 'tag' | null>(null);
 
   const canCreate = title.trim().length > 0 && location.trim().length > 0;
@@ -113,19 +132,6 @@ export default function CreateTripScreen({
     setCustomEmoji('');
   };
 
-  const addCustomTag = () => {
-    const value = customTag.trim().replace(/^#/, '');
-    if (!value) {
-      return;
-    }
-    if (!tags.includes(value)) {
-      setTags((current) => [...current, value]);
-    }
-    if (!selectedTags.includes(value)) {
-      setSelectedTags((current) => [...current, value]);
-    }
-    setCustomTag('');
-  };
 
   /**
    * 고른 사진을 바로 올려 둔다. 생성 버튼을 누를 때 한꺼번에 올리면 그만큼 기다려야 하고,
@@ -163,7 +169,7 @@ export default function CreateTripScreen({
       endDate,
       coverImage,
       coverImageUrl: coverTab === 'upload' ? coverImageUrl : undefined,
-      tags: selectedTags,
+      styleCodes: selectedStyleCodes,
     });
 
   const inputBorder = (key: typeof focused) => (focused === key ? 'border-[#56EADD]' : 'border-slate-200');
@@ -436,40 +442,24 @@ export default function CreateTripScreen({
             선택한 태그는 AI 장소 추천과 동선 최적화에 반영돼요.
           </Text>
           <View className="mt-3 flex-row flex-wrap gap-2">
-            {tags.map((tag) => {
-              const selected = selectedTags.includes(tag);
+            {styleOptions.map((style) => {
+              const selected = selectedStyleCodes.includes(style.code);
               return (
                 <Pressable
-                  key={tag}
+                  key={style.code}
                   onPress={() =>
-                    setSelectedTags((current) => (selected ? current.filter((t) => t !== tag) : [...current, tag]))
+                    setSelectedStyleCodes((current) =>
+                      selected ? current.filter((c) => c !== style.code) : [...current, style.code],
+                    )
                   }
                   className={`rounded-xl border-2 px-2.5 py-1.5 ${chipClass(selected)}`}
                 >
-                  <Text className={`text-[10px] font-black ${selected ? 'text-[#075953]' : 'text-slate-500'}`}>#{tag}</Text>
+                  <Text className={`text-[10px] font-black ${selected ? 'text-[#075953]' : 'text-slate-500'}`}>
+                    #{style.label}
+                  </Text>
                 </Pressable>
               );
             })}
-          </View>
-          <View className="mt-3 flex-row gap-2">
-            <TextInput
-              value={customTag}
-              maxLength={12}
-              onChangeText={setCustomTag}
-              onSubmitEditing={addCustomTag}
-              onFocus={() => setFocused('tag')}
-              onBlur={() => setFocused(null)}
-              returnKeyType="done"
-              placeholder="#나만의 해시태그"
-              placeholderTextColor="#94A3B8"
-              className={`h-10 flex-1 rounded-xl border-2 px-3 text-xs font-bold text-slate-900 ${inputBorder('tag')}`}
-            />
-            <Pressable
-              onPress={addCustomTag}
-              className="items-center justify-center rounded-xl border-2 border-[#075953] bg-[#B4FAF0] px-3 active:opacity-70"
-            >
-              <Text className="text-[10px] font-black text-[#075953]">추가</Text>
-            </Pressable>
           </View>
         </View>
       </ScrollView>

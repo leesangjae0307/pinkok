@@ -23,8 +23,19 @@ import {
   updateDiary,
   type DiaryMediaPayload,
 } from '../../api/diaryApi';
-import { createTrip, deleteTrip, fetchTrip, fetchTrips, toTripFolder, updateTrip } from '../../api/tripApi';
+import {
+  createTrip,
+  deleteTrip,
+  fetchTrip,
+  fetchTrips,
+  toTripFolder,
+  tripDDayLabel,
+  tripDateLabel,
+  updateTrip,
+  type TripUpdatePayload,
+} from '../../api/tripApi';
 import { fetchItineraryDays, fetchItineraryItems, toPlaceItems } from '../../api/itineraryApi';
+import { fetchTripStyles, replaceTripStyles } from '../../api/travelStyleApi';
 import {
   acceptInvitation,
   fetchMyInvitations,
@@ -214,6 +225,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [recommendationStyle, setRecommendationStyle] = useState<string>(TRAVEL_STYLES[0].code);
   const [recommendationRegion, setRecommendationRegion] = useState('제주');
   const [inviteTrip, setInviteTrip] = useState<TripFolder | null>(null);
+  /** 수정 모달을 띄울 여행. null 이면 닫혀 있다. */
+  const [editingTrip, setEditingTrip] = useState<TripFolder | null>(null);
 
   // 새 여행 만들기
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
@@ -451,13 +464,41 @@ function useAppState(me: Me, onLogout: () => void) {
     setSelectedDayFilter('all');
     loadItinerary(trip.id);
     try {
-      const detail = await fetchTrip(trip.id);
-      const fresh = toTripFolder(detail, { image: trip.image, tag: trip.tag });
+      // 목록(GET /trips)에는 테마가 없어서 여행을 열 때 따로 받아 카드에 반영한다.
+      const [detail, styles] = await Promise.all([
+        fetchTrip(trip.id),
+        fetchTripStyles(trip.id).catch(() => []),
+      ]);
+      const fresh = toTripFolder(detail, {
+        image: trip.image,
+        tag: styles[0] ? travelStyleLabel(styles[0].code) : trip.tag,
+      });
       setActiveTrip(fresh);
       setTrips((cur) => cur.map((t) => (t.id === fresh.id ? fresh : t)));
     } catch {
       // 상세를 못 받아와도 목록에서 온 값으로 화면은 그대로 쓸 수 있다.
     }
+  };
+
+  /**
+   * 수정이 끝난 뒤 목록·지도에 반영한다.
+   *
+   * 서버를 다시 부르지 않고 바꾼 값만 덮어쓴다. 제목·날짜만 고쳤는데 장소 개수나
+   * 표지까지 서버 기준으로 되돌아가면 사용자에겐 엉뚱한 변화로 보인다.
+   */
+  const handleTripUpdated = (tripId: number, payload: TripUpdatePayload) => {
+    const apply = (t: TripFolder): TripFolder =>
+      t.id === tripId
+        ? {
+            ...t,
+            title: payload.title ?? t.title,
+            date: tripDateLabel(payload.startDate ?? null, payload.endDate ?? null),
+            dDay: tripDDayLabel(payload.startDate ?? null),
+          }
+        : t;
+    setTrips((cur) => cur.map(apply));
+    setActiveTrip((cur) => apply(cur));
+    showToast('여행 정보를 수정했어요.');
   };
 
   /**
@@ -638,9 +679,16 @@ function useAppState(me: Me, onLogout: () => void) {
           showToast('표지는 저장하지 못했어요. 기본 표지로 만들었어요.');
         }
       }
+      if (payload.styleCodes.length > 0) {
+        try {
+          await replaceTripStyles(created.id, payload.styleCodes);
+        } catch {
+          showToast('테마는 저장하지 못했어요. 나중에 다시 골라 주세요.');
+        }
+      }
       const createdTrip = toTripFolder(created, {
         image: payload.coverImage,
-        tag: payload.tags[0],
+        tag: travelStyleLabel(payload.styleCodes[0] ?? ''),
       });
       setTrips((cur) => [createdTrip, ...cur]);
       setActiveTrip(createdTrip);
@@ -852,6 +900,9 @@ function useAppState(me: Me, onLogout: () => void) {
     isCreatingTrip,
     handleDeleteTrip,
     deletingTripId,
+    editingTrip,
+    setEditingTrip,
+    handleTripUpdated,
     respondingInvitationId,
     reloadNotifications,
     reloadInvitations,

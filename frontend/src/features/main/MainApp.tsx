@@ -21,6 +21,7 @@ import ProfileTab from './tabs/ProfileTab';
 import PlaceDetailModal from './modals/PlaceDetailModal';
 import PinLogSynthesisModal from './modals/PinLogSynthesisModal';
 import TeamInviteModal from './modals/TeamInviteModal';
+import EditTripModal from './modals/EditTripModal';
 import QuickPinLogCameraModal from './modals/QuickPinLogCameraModal';
 import CreateTripScreen from './screens/CreateTripScreen';
 import PinLogTripPickerModal from './modals/PinLogTripPickerModal';
@@ -124,6 +125,9 @@ function GlobalModals() {
     trips,
     handleSynthesizeComplete,
     inviteTrip,
+    editingTrip,
+    setEditingTrip,
+    handleTripUpdated,
     setInviteTrip,
     showToast,
     isQuickPinLogCameraOpen,
@@ -188,6 +192,14 @@ function GlobalModals() {
           places={mapPlaces}
           onClose={() => setIsQuickPinLogCameraOpen(false)}
           onUpload={handleQuickPinLogUpload}
+        />
+      )}
+
+      {editingTrip && (
+        <EditTripModal
+          trip={editingTrip}
+          onClose={() => setEditingTrip(null)}
+          onSaved={(payload) => handleTripUpdated(editingTrip.id, payload)}
         />
       )}
 

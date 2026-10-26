@@ -35,6 +35,7 @@ export default function TripsListView() {
     openTrip,
     handleDeleteTrip,
     deletingTripId,
+    setEditingTrip,
     isTripsLoading,
     tripsError,
     reloadTrips,
@@ -200,6 +201,15 @@ export default function TripsListView() {
                   </View>
 
                   <View className="mt-1.5 flex-row items-center justify-end gap-1.5">
+                    {trip.isOwner && (
+                      <Pressable
+                        onPress={() => setEditingTrip(trip)}
+                        accessibilityLabel={`${trip.title} 수정`}
+                        className="h-[26px] w-[26px] items-center justify-center rounded-lg border border-[#82F0DC] bg-white active:scale-95"
+                      >
+                        <Text className="text-[11px]">✏️</Text>
+                      </Pressable>
+                    )}
                     {trip.isOwner && (
                       <Pressable
                         onPress={() => handleDeleteTrip(trip)}

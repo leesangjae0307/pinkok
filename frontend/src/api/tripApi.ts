@@ -86,14 +86,14 @@ const COMPANION_TAGS: Record<string, string> = {
 };
 
 /** 목업과 같은 '2026.10.12 - 10.15'. 끝 날짜는 연도를 빼고 월·일만 붙인다. */
-function dateLabel(startDate: string | null, endDate: string | null): string {
+export function tripDateLabel(startDate: string | null, endDate: string | null): string {
   if (!startDate) return '날짜 미정';
   const start = startDate.replace(/-/g, '.');
   if (!endDate) return start;
   return `${start} - ${endDate.slice(5).replace('-', '.')}`;
 }
 
-function dDayLabel(startDate: string | null): string {
+export function tripDDayLabel(startDate: string | null): string {
   if (!startDate) return 'D-?';
   const days = daysBetween(toYmd(new Date()), startDate);
   if (days > 0) return `D-${days}`;
@@ -114,8 +114,8 @@ export function toTripFolder(
   return {
     id: trip.id,
     title: trip.title,
-    date: dateLabel(trip.startDate, trip.endDate),
-    dDay: dDayLabel(trip.startDate),
+    date: tripDateLabel(trip.startDate, trip.endDate),
+    dDay: tripDDayLabel(trip.startDate),
     // 서버 주소는 `/files/...` 상대 경로라 그대로 주면 Image 가 못 불러온다.
     image: fileUrl(trip.coverImageUrl) ?? local?.image ?? DEFAULT_COVERS[0].src,
     placesCount: trip.placesCount,

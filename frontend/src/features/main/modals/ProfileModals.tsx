@@ -16,9 +16,8 @@ import {
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MAP_PLACES } from '../../../data/mockData';
 import { FadeIn, ModalBackdrop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
-import { INITIAL_EXTRACTED_PLACES, PROFILE_AVATARS, useApp } from '../AppContext';
+import { PROFILE_AVATARS, useApp } from '../AppContext';
 import { fileUrl } from '../../../api/fileApi';
 
 function SheetHeader({
@@ -174,12 +173,17 @@ const REGIONS = ['제주', '부산', '서울', '강릉', '도쿄', '오사카', 
 
 export function ProfileDetailModal() {
   const insets = useSafeAreaInsets();
-  const { profileDetailModal, setProfileDetailModal } = useApp();
+  const { profileDetailModal, setProfileDetailModal, mapPlaces, placeRecords, me } = useApp();
   if (!profileDetailModal) return null;
 
   const title =
     profileDetailModal === 'visited' ? '방문한 장소' : profileDetailModal === 'saved' ? '저장한 장소' : '다녀온 지역';
-  const list = profileDetailModal === 'visited' ? MAP_PLACES.slice(0, 4) : INITIAL_EXTRACTED_PLACES;
+  /**
+   * 방문·저장 장소를 따로 주는 API 가 없어서 지금 열어 둔 여행의 자료로 보여준다.
+   * 방문한 곳은 내가 기록을 남긴 핀이고, 저장한 곳은 일정에 담아 둔 핀이다.
+   */
+  const visitedPinIds = new Set(placeRecords.filter((r) => r.userId === me.id).map((r) => r.pinId));
+  const list = profileDetailModal === 'visited' ? mapPlaces.filter((p) => visitedPinIds.has(p.id)) : mapPlaces;
 
   return (
     <ModalBackdrop onRequestClose={() => setProfileDetailModal(null)}>

@@ -94,8 +94,8 @@ export default function TripMapView() {
     return acc;
   }, {} as { [key: number]: number });
 
-  const focusX = (selectedMapPin.lng / 100) * layout.width;
-  const focusY = (selectedMapPin.lat / 100) * layout.height;
+  const focusX = ((selectedMapPin?.lng ?? 50) / 100) * layout.width;
+  const focusY = ((selectedMapPin?.lat ?? 50) / 100) * layout.height;
 
   return (
     <View
@@ -122,7 +122,7 @@ export default function TripMapView() {
         )}
 
         {/* 포커스된 핀 레이더. 고른 핀이 지금 지도에 없으면(빈 일정 등) 그리지 않는다. */}
-        {layout.width > 0 && displayedMapPlaces.some((p) => p.id === selectedMapPin.id) && (
+        {layout.width > 0 && displayedMapPlaces.some((p) => p.id === selectedMapPin?.id) && (
           <View
             pointerEvents="none"
             style={{ position: 'absolute', left: focusX - 24, top: focusY - 24, width: 48, height: 48, zIndex: 10 }}
@@ -142,7 +142,7 @@ export default function TripMapView() {
             <MapMarker
               key={place.id}
               place={place}
-              focused={selectedMapPin.id === place.id}
+              focused={selectedMapPin?.id === place.id}
               width={layout.width}
               height={layout.height}
               onPress={() => {
@@ -165,7 +165,7 @@ export default function TripMapView() {
             <View className="min-w-0 flex-1 flex-row items-center gap-2">
               <PixelTripsIcon size={20} active />
               <Text numberOfLines={1} className="flex-1 text-xs font-bold text-slate-800">
-                {activeTrip.title}
+                {activeTrip?.title ?? "여행"}
               </Text>
             </View>
             <View className="rounded border border-[#50E6DC] bg-[#56EADD] px-1.5 py-0.5">
@@ -206,7 +206,7 @@ export default function TripMapView() {
         isLoading={isMapPlacesLoading}
         loadError={mapPlacesError}
         onRetry={reloadItinerary}
-        selectedPlaceId={selectedMapPin.id}
+        selectedPlaceId={selectedMapPin?.id ?? -1}
         onSelectPlace={(place) => {
           setSelectedMapPin(place);
           showToast(`📍 [${place.name}] 핀으로 카메라가 이동했습니다.`);

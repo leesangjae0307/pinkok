@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Text, View } from 'react-native';
 
 import { VlogClip } from '../../../data/mockData';
 import { PixelPinLogIcon } from '../../../components/pixel/PixelIcons';
@@ -46,7 +46,7 @@ function ClipCard({ clip, onPress, showDots }: { clip: VlogClip; onPress: () => 
 }
 
 export default function PinLogTab() {
-  const { vlogClips, setActiveClipModal, setIsPinLogTripPickerOpen } = useApp();
+  const { vlogClips, isVlogClipsLoading, pinLogTrip, setActiveClipModal, setIsPinLogTripPickerOpen } = useApp();
 
   return (
     <FadeIn style={{ padding: 16, paddingBottom: 80, gap: 16 }}>
@@ -74,34 +74,31 @@ export default function PinLogTab() {
         <Text className="text-xs font-black text-pixel-navy">새 PinLog 만들기</Text>
       </PixelPressable>
 
-      <View className="gap-4">
-        <View className="gap-3">
-          <View className="flex-row items-center justify-between px-1">
-            <Text className="text-xs font-bold text-slate-800">
-              📅 2026년 10월 12일 <Text className="font-normal text-[#075953]">(제주)</Text>
-            </Text>
-            <Text className="font-pixel text-[10px] text-[#075953]">4 CLIPS</Text>
+      <View className="gap-3">
+        <View className="flex-row items-center justify-between px-1">
+          <Text numberOfLines={1} className="flex-1 pr-2 text-xs font-bold text-slate-800">
+            🎬 {pinLogTrip?.title ?? '여행을 먼저 골라 주세요'}
+          </Text>
+          <Text className="font-pixel text-[10px] text-[#075953]">{vlogClips.length} CLIPS</Text>
+        </View>
+
+        {isVlogClipsLoading ? (
+          <View className="items-center rounded-3xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
+            <ActivityIndicator color="#075953" />
           </View>
+        ) : vlogClips.length === 0 ? (
+          <View className="rounded-3xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
+            <Text className="text-center text-xs font-bold text-slate-400">
+              아직 만든 PinLog 가 없어요. 기록한 영상으로 만들어 보세요.
+            </Text>
+          </View>
+        ) : (
           <View className="gap-3">
-            {vlogClips.slice(0, 4).map((clip) => (
+            {vlogClips.map((clip) => (
               <ClipCard key={clip.id} clip={clip} onPress={() => setActiveClipModal(clip)} showDots />
             ))}
           </View>
-        </View>
-
-        <View className="gap-3 pt-2">
-          <View className="flex-row items-center justify-between px-1">
-            <Text className="text-xs font-bold text-slate-800">
-              📅 2026년 8월 15일 <Text className="font-normal text-[#075953]">(도쿄)</Text>
-            </Text>
-            <Text className="font-pixel text-[10px] text-[#075953]">2 CLIPS</Text>
-          </View>
-          <View className="gap-3">
-            {vlogClips.slice(4, 6).map((clip) => (
-              <ClipCard key={clip.id} clip={clip} onPress={() => setActiveClipModal(clip)} showDots={false} />
-            ))}
-          </View>
-        </View>
+        )}
       </View>
     </FadeIn>
   );

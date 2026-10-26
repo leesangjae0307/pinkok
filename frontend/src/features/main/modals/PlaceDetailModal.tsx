@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AvatarSource, CURRENT_USER, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
+import { AvatarSource, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
 import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
 
@@ -17,6 +17,9 @@ interface PlaceDetailModalProps {
   onDeleteRecord: (recordId: number) => void;
   onOpenPinLogMaker: () => void;
   currentUserAvatarUrl: AvatarSource;
+  /** 로그인한 사용자. 내 기록인지 가릴 때 쓴다. */
+  currentUserId: number;
+  currentUserName: string;
   /** true 면 기록 편집 + 카메라 화면으로 바로 연다 (지도 바텀시트의 "바로 촬영") */
   startInCamera?: boolean;
 }
@@ -36,10 +39,12 @@ export default function PlaceDetailModal({
   onDeleteRecord,
   onOpenPinLogMaker,
   currentUserAvatarUrl,
+  currentUserId,
+  currentUserName,
   startInCamera = false,
 }: PlaceDetailModalProps) {
   const insets = useSafeAreaInsets();
-  const myExistingRecord = records.find((r) => r.pinId === place.id && r.userId === CURRENT_USER.id);
+  const myExistingRecord = records.find((r) => r.pinId === place.id && r.userId === currentUserId);
 
   const [isEditing, setIsEditing] = useState(startInCamera);
   const [rating, setRating] = useState(myExistingRecord?.rating || 5);
@@ -125,8 +130,8 @@ export default function PlaceDetailModal({
     const record: PlaceRecord = {
       id: myExistingRecord ? myExistingRecord.id : Date.now(),
       pinId: place.id,
-      userId: CURRENT_USER.id,
-      authorName: CURRENT_USER.name,
+      userId: currentUserId,
+      authorName: currentUserName,
       authorAvatar: currentUserAvatarUrl,
       createdAt: '15:20',
       rating,
@@ -478,7 +483,7 @@ export default function PlaceDetailModal({
                 </View>
               ) : (
                 placeRecords.map((record) => {
-                  const isMine = record.userId === CURRENT_USER.id;
+                  const isMine = record.userId === currentUserId;
                   return (
                     <View
                       key={record.id}

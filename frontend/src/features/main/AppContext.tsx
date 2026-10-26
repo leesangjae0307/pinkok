@@ -36,6 +36,7 @@ import {
 } from '../../api/tripApi';
 import { fetchItineraryDays, fetchItineraryItems, toPlaceItems } from '../../api/itineraryApi';
 import { fetchTripStyles, replaceTripStyles } from '../../api/travelStyleApi';
+import { fetchPinlogs, pinlogThumbnailUrl, pinlogVideoUrl } from '../../api/pinlogApi';
 import {
   addCandidatesToTrip,
   createAiRequest,
@@ -71,12 +72,8 @@ import { BASE_URL, errorMessage } from '../../api/axios';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
   AvatarSource,
-  CURRENT_USER,
-  INITIAL_TRIPS,
-  MAP_PLACES,
   PlaceItem,
   PlaceRecord,
-  SAMPLE_VLOG_CLIPS,
   TabType,
   TripFolder,
   VlogClip,
@@ -120,56 +117,6 @@ export interface ProfileAvatar {
   photoUrl?: string;
 }
 
-export const INITIAL_EXTRACTED_PLACES: ExtractedPlace[] = [
-  {
-    id: 101,
-    name: '앤트러사이트 한림점',
-    category: '제주 / 감성 베이커리 카페',
-    rating: 4.9,
-    reviewsCount: 512,
-    address: '제주특별자치도 제주시 한림읍 한림로 564',
-    thumbnail: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=500&q=80',
-    lat: 55,
-    lng: 40,
-    order: 1,
-    day: 1,
-    note: '영상 속 간판과 위치 태그가 일치해 정확도가 높아요.',
-    extractionStatus: 'success',
-    confidence: 98,
-  },
-  {
-    id: 102,
-    name: '협재해수욕장',
-    category: '제주 / 해변 · 자연 명소',
-    rating: 4.8,
-    reviewsCount: 1420,
-    address: '제주특별자치도 제주시 한림읍 협재리 2497-1',
-    thumbnail: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=500&q=80',
-    lat: 30,
-    lng: 26,
-    order: 2,
-    day: 1,
-    note: '바다 풍경과 자막의 장소명이 함께 확인됐어요.',
-    extractionStatus: 'success',
-    confidence: 95,
-  },
-  {
-    id: 103,
-    name: '비양도 석양 포인트',
-    category: '제주 / 전망대 후보',
-    rating: 4.6,
-    reviewsCount: 87,
-    address: '제주특별자치도 제주시 한림읍 협재리 일대',
-    thumbnail: 'https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=500&q=80',
-    lat: 65,
-    lng: 35,
-    order: 3,
-    day: 1,
-    note: '정확한 촬영 지점이 여러 곳으로 분석됐어요. 주소를 확인해 주세요.',
-    extractionStatus: 'review',
-    confidence: 72,
-  },
-];
 
 export const PROFILE_AVATARS: ProfileAvatar[] = [
   { id: 'book-winter', image: avatarBookWinter, label: '책 읽는 겨울 여행가', code: 'F1' },
@@ -265,7 +212,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [tripInvitations, setTripInvitations] = useState<TripInvitation[]>([]);
   const [focusedInvitationId, setFocusedInvitationId] = useState<number | null>(null);
   const [isTripMapOpen, setIsTripMapOpen] = useState(false);
-  const [activeTrip, setActiveTrip] = useState<TripFolder>(INITIAL_TRIPS[0]);
+  /** 지도를 보고 있는 여행. 아직 아무것도 열지 않았으면 null 이다. */
+  const [activeTrip, setActiveTrip] = useState<TripFolder | null>(null);
   const [tripSearchQuery, setTripSearchQuery] = useState('');
   const [recommendationPeople, setRecommendationPeople] = useState('2');
   const [recommendationStyle, setRecommendationStyle] = useState<string>(TRAVEL_STYLES[0].code);
@@ -308,14 +256,14 @@ function useAppState(me: Me, onLogout: () => void) {
   const [extractImages, setExtractImages] = useState<PickedFile[]>([]);
 
   // 여행 지도 & 팀 기록
-  const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem>(MAP_PLACES[0]);
+  const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem | null>(null);
   const [isPlaceDetailModalOpen, setIsPlaceDetailModalOpen] = useState(false);
   const [startPlaceCamera, setStartPlaceCamera] = useState(false);
   const [placeRecords, setPlaceRecords] = useState<PlaceRecord[]>([]);
   const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [isPinLogMakerOpen, setIsPinLogMakerOpen] = useState(false);
   // 홈 빠른 촬영: 촬영 대상 여행과 열림 여부
-  const [pinLogTrip, setPinLogTrip] = useState<TripFolder>(INITIAL_TRIPS[0]);
+  const [pinLogTrip, setPinLogTrip] = useState<TripFolder | null>(null);
   const [isQuickPinLogCameraOpen, setIsQuickPinLogCameraOpen] = useState(false);
   const [mapPlaces, setMapPlaces] = useState<PlaceItem[]>([]);
   const [isMapPlacesLoading, setIsMapPlacesLoading] = useState(false);
@@ -329,7 +277,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [selectedDayFilter, setSelectedDayFilter] = useState<number | 'all'>('all');
 
   // 핀로그 & 프로필
-  const [vlogClips, setVlogClips] = useState<VlogClip[]>(SAMPLE_VLOG_CLIPS);
+  const [vlogClips, setVlogClips] = useState<VlogClip[]>([]);
+  const [isVlogClipsLoading, setIsVlogClipsLoading] = useState(false);
   const [activeClipModal, setActiveClipModal] = useState<VlogClip | null>(null);
   const [selectedProfileAvatar, setSelectedProfileAvatar] = useState<ProfileAvatar>(() => profileAvatarOf(me));
   const [pendingProfileAvatar, setPendingProfileAvatar] = useState<ProfileAvatar>(() => profileAvatarOf(me));
@@ -470,11 +419,40 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   }, []);
 
+  /** 핀로그 탭에서 고른 여행의 완성본 목록. 합성 중인 것은 아직 재생할 수 없어 뺀다. */
+  const reloadVlogClips = useCallback(async (tripId: number) => {
+    setIsVlogClipsLoading(true);
+    try {
+      const list = await fetchPinlogs(tripId);
+      setVlogClips(
+        list
+          .filter((p) => p.status === 'DONE')
+          .map((p) => ({
+            id: p.id,
+            time: p.createdAt.slice(0, 10).replace(/-/g, '.'),
+            location: p.title ?? 'PinLog',
+            thumbnail: pinlogThumbnailUrl(p) ?? pinlogVideoUrl(p) ?? '',
+            selected: false,
+          })),
+      );
+    } catch {
+      setVlogClips([]);
+    } finally {
+      setIsVlogClipsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     reloadTrips();
     reloadNotifications();
     reloadInvitations();
   }, [reloadTrips, reloadNotifications, reloadInvitations]);
+
+  // 핀로그 탭은 고른 여행이 바뀔 때마다 그 여행의 완성본을 다시 받는다.
+  useEffect(() => {
+    if (pinLogTrip) reloadVlogClips(pinLogTrip.id);
+    else setVlogClips([]);
+  }, [pinLogTrip, reloadVlogClips]);
 
   /** 여행의 일자와 핀을 받아 지도·바텀시트에 올린다. */
   const loadItinerary = useCallback(async (tripId: number) => {
@@ -547,7 +525,7 @@ function useAppState(me: Me, onLogout: () => void) {
           }
         : t;
     setTrips((cur) => cur.map(apply));
-    setActiveTrip((cur) => apply(cur));
+    setActiveTrip((cur) => (cur ? apply(cur) : cur));
     showToast('여행 정보를 수정했어요.');
   };
 
@@ -675,12 +653,12 @@ function useAppState(me: Me, onLogout: () => void) {
 
   // 빠른 촬영 영상을 그 장소의 내 기록에 붙인다. 기록이 없으면 새로 만든다(1인 1기록).
   const handleQuickPinLogUpload = (place: PlaceItem, clip: QuickClip) => {
-    const existing = placeRecords.find((r) => r.pinId === place.id && r.userId === CURRENT_USER.id);
+    const existing = placeRecords.find((r) => r.pinId === place.id && r.userId === me.id);
     handleSavePlaceRecord({
       id: existing?.id ?? Date.now(),
       pinId: place.id,
-      userId: CURRENT_USER.id,
-      authorName: CURRENT_USER.name,
+      userId: me.id,
+      authorName: me.nickname,
       authorAvatar: selectedProfileAvatar.image,
       createdAt: '방금 전',
       rating: existing?.rating ?? 5,
@@ -764,19 +742,19 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   };
 
+  /** 합성이 끝나면 목록 맨 앞에 끼워 넣는다. 서버에서 다시 받아도 같은 자리에 온다. */
   const handleSynthesizeComplete = (newVlog: SynthesizedVlog) => {
     const newClip: VlogClip = {
       id: newVlog.id,
-      time: '18:50',
-      location: '팀원 제주 완성 브이로그 🎬',
-      thumbnail: newVlog.clips[0]?.thumbnail || MAP_PLACES[0].thumbnail,
+      time: newVlog.createdAt,
+      location: newVlog.title,
+      thumbnail: newVlog.clips[0]?.thumbnail ?? '',
       selected: true,
     };
     setVlogClips((prev) => [newClip, ...prev]);
-    showToast('🎬 팀원 영상으로 만든 PinLog 브이로그가 등록되었습니다!');
+    showToast('🎬 PinLog 브이로그가 등록되었습니다!');
   };
 
-  // AI 추출 시뮬레이션
   /**
    * AI 장소 추출. 스크린샷이 있으면 먼저 올리고 그 주소로, 없으면 링크로 요청한다.
    *
@@ -1096,6 +1074,8 @@ function useAppState(me: Me, onLogout: () => void) {
     tripsSheetHeight, setTripsSheetHeight,
     selectedDayFilter, setSelectedDayFilter,
     vlogClips,
+    isVlogClipsLoading,
+    reloadVlogClips,
     activeClipModal, setActiveClipModal,
     selectedProfileAvatar, setSelectedProfileAvatar,
     pendingProfileAvatar, setPendingProfileAvatar,

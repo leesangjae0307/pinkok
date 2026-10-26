@@ -155,6 +155,8 @@ function GlobalModals() {
           onSaveRecord={handleSavePlaceRecord}
           onDeleteRecord={handleDeletePlaceRecord}
           currentUserAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
+          currentUserId={me.id}
+          currentUserName={me.nickname}
           onOpenPinLogMaker={() => {
             setIsPlaceDetailModalOpen(false);
             setIsPinLogMakerOpen(true);
@@ -174,11 +176,12 @@ function GlobalModals() {
         />
       )}
 
-      {isPinLogMakerOpen && (
+      {isPinLogMakerOpen && pinLogTrip && (
         <PinLogSynthesisModal
           places={mapPlaces}
           records={placeRecords}
           currentUserAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
+          currentUserId={me.id}
           tripTitle={pinLogTrip.title}
           tripId={pinLogTrip.id}
           onClose={() => setIsPinLogMakerOpen(false)}
@@ -186,7 +189,7 @@ function GlobalModals() {
         />
       )}
 
-      {isQuickPinLogCameraOpen && (
+      {isQuickPinLogCameraOpen && pinLogTrip && (
         <QuickPinLogCameraModal
           trip={pinLogTrip}
           places={mapPlaces}

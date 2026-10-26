@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Video from 'react-native-video';
 
-import { AvatarSource, CURRENT_USER, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
+import { AvatarSource, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
 import { PixelBackArrow, PixelHotAirBalloon } from '../../../components/pixel/PixelIcons';
 import { AnimatedLoop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
 import { errorMessage as apiErrorMessage } from '../../../api/axios';
@@ -21,6 +21,8 @@ interface PinLogSynthesisModalProps {
   places: PlaceItem[];
   records: PlaceRecord[];
   currentUserAvatarUrl: AvatarSource;
+  /** 로그인한 사용자. 내 기록인지 가릴 때 쓴다. */
+  currentUserId: number;
   /** 헤더에 보여줄 여행 이름 */
   tripTitle?: string;
   /** PinLog 를 만들 여행 */
@@ -61,6 +63,7 @@ export default function PinLogSynthesisModal({
   places,
   records,
   currentUserAvatarUrl,
+  currentUserId,
   tripTitle,
   tripId,
   onClose,
@@ -80,14 +83,14 @@ export default function PinLogSynthesisModal({
                 durationMs: Math.round(record.videoClip.duration * 1000),
                 author: {
                   nickname: record.authorName,
-                  avatar: record.userId === CURRENT_USER.id ? currentUserAvatarUrl : record.authorAvatar,
+                  avatar: record.userId === currentUserId ? currentUserAvatarUrl : record.authorAvatar,
                 },
-                mine: record.userId === CURRENT_USER.id,
+                mine: record.userId === currentUserId,
               },
             ]
           : [],
       ),
-    [records, currentUserAvatarUrl],
+    [records, currentUserAvatarUrl, currentUserId],
   );
 
   const [selectedMedia, setSelectedMedia] = useState<Record<string, number>>(() => {

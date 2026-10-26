@@ -4,15 +4,20 @@ import {tokenStore} from '../services/tokenStore';
 /**
  * 끝에 `/` 나 `/api` 를 붙이지 않는다. 서버에는 `/api` 접두사가 없어서 붙이면 전부 404 다.
  *
- * 지금 값은 서버 PC 에서 띄운 cloudflared 임시 터널 주소라서 **터널을 재시작하면 바뀐다**.
- * 연결이 안 되면 먼저 이 주소가 아직 살아 있는지 확인한다.
+ * 개발 PC 에서 띄운 서버를 USB 로 연결된 실기기에서 쓰는 설정이다.
+ * 기기의 8080 을 PC 로 넘겨줘야 하므로 앱을 켜기 전에 한 번 걸어둔다:
+ *
+ *     adb reverse tcp:8080 tcp:8080
+ *
+ * cloudflared 터널도 쓸 수 있지만 재시작할 때마다 주소가 바뀌어 매번 이 값을
+ * 고쳐야 했다. 같은 PC 에서 돌릴 거면 이 쪽이 손이 덜 간다.
  *
  * 환경별 대안:
- * - 서버를 같은 PC 에서 돌릴 때: `adb reverse tcp:8080 tcp:8080` 걸고 `http://localhost:8080`
  * - 에뮬레이터: `http://10.0.2.2:8080`
  * - 같은 와이파이의 실기기: 서버 PC 의 LAN IP (예: `http://192.168.1.53:8080`)
+ * - 서버가 다른 PC 에 있을 때: 그 PC 에서 띄운 터널 주소
  */
-export const BASE_URL = 'https://booth-vat-clips-polymer.trycloudflare.com';
+export const BASE_URL = 'http://localhost:8080';
 
 const api = axios.create({baseURL: BASE_URL, timeout: 15000});
 

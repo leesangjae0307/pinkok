@@ -8,6 +8,14 @@ import Video from 'react-native-video';
 import { AvatarSource, CURRENT_USER, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
 import { PixelBackArrow, PixelHotAirBalloon } from '../../../components/pixel/PixelIcons';
 import { AnimatedLoop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
+import { errorMessage as apiErrorMessage } from '../../../api/axios';
+import {
+  createPinlog,
+  deletePinlog,
+  fetchPinlog,
+  pinlogVideoUrl,
+  type Pinlog,
+} from '../../../api/pinlogApi';
 
 interface PinLogSynthesisModalProps {
   places: PlaceItem[];
@@ -15,6 +23,8 @@ interface PinLogSynthesisModalProps {
   currentUserAvatarUrl: AvatarSource;
   /** 헤더에 보여줄 여행 이름 */
   tripTitle?: string;
+  /** PinLog 를 만들 여행 */
+  tripId: number;
   onClose: () => void;
   onSynthesizeComplete: (result: SynthesizedVlog) => void;
 }
@@ -52,6 +62,7 @@ export default function PinLogSynthesisModal({
   records,
   currentUserAvatarUrl,
   tripTitle,
+  tripId,
   onClose,
   onSynthesizeComplete,
 }: PinLogSynthesisModalProps) {
@@ -103,15 +114,16 @@ export default function PinLogSynthesisModal({
 
   const totalDurationMs = selectedOptions.reduce((t, i) => t + i.option.durationMs, 0);
 
-  const finishGeneration = () => {
+  /** 완성된 PinLog 를 화면이 쓰는 모양으로 바꾼다. 고른 클립 정보는 앱이 들고 있는 걸 쓴다. */
+  const finishGeneration = (pinlog: Pinlog) => {
     const completed: SynthesizedVlog = {
-      id: pinLogId ?? Date.now(),
-      title: '제주 시그니처 가로형 PinLog',
-      totalDuration: Number((totalDurationMs / 1000).toFixed(1)),
+      id: pinlog.id,
+      title: pinlog.title ?? `${tripTitle ?? '여행'} PinLog`,
+      totalDuration: Number(((pinlog.durationMs ?? totalDurationMs) / 1000).toFixed(1)),
       clipsCount: selectedOptions.length,
       createdAt: '방금 전',
-      videoUrl: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
-      mine: true,
+      videoUrl: pinlogVideoUrl(pinlog) ?? undefined,
+      mine: pinlog.mine,
       clips: selectedOptions.map(({ place, option }) => ({
         placeName: place.name,
         authorName: option.author.nickname,
@@ -125,41 +137,76 @@ export default function PinLogSynthesisModal({
     onSynthesizeComplete(completed);
   };
 
-  // 합성이 끝날 때까지 2.4초마다 상태를 다시 확인한다.
+  /**
+   * 합성은 오래 걸려서 POST 는 바로 끝나고 상태만 QUEUED 로 온다.
+   * 서버가 완성을 알려주지 않으므로 2.4초마다 다시 물어본다.
+   */
   useEffect(() => {
-    if (status !== 'QUEUED' && status !== 'PROCESSING') return;
-    const timer = setTimeout(() => {
-      if (status === 'QUEUED') {
-        setStatus('PROCESSING');
-        setPollCount(1);
-        return;
-      }
-      if (pollCount < 2) {
+    if ((status !== 'QUEUED' && status !== 'PROCESSING') || pinLogId === null) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const latest = await fetchPinlog(pinLogId);
+        if (cancelled) return;
+        if (latest.status === 'DONE') {
+          finishGeneration(latest);
+          return;
+        }
+        if (latest.status === 'FAILED') {
+          setErrorMessage(latest.errorMessage ?? 'PinLog 합성에 실패했습니다.');
+          setStatus('FAILED');
+          return;
+        }
+        setStatus(latest.status === 'PROCESSING' ? 'PROCESSING' : 'QUEUED');
         setPollCount((c) => c + 1);
-        return;
+      } catch (e) {
+        if (cancelled) return;
+        setErrorMessage(apiErrorMessage(e, '진행 상태를 확인하지 못했어요.'));
+        setStatus('FAILED');
       }
-      finishGeneration();
     }, 2400);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, pollCount]);
+  }, [status, pollCount, pinLogId]);
 
-  const handleCreatePinLog = () => {
+  const handleCreatePinLog = async () => {
     if (selectedOptions.length === 0) {
       setErrorMessage('선택된 클립이 없어 PinLog를 생성할 수 없습니다.');
       setStatus('FAILED');
       return;
     }
-    setPinLogId(Date.now());
     setPollCount(0);
     setStatus('QUEUED');
+    try {
+      const created = await createPinlog({
+        tripId,
+        title: tripTitle ? `${tripTitle} PinLog` : undefined,
+        clips: selectedOptions.map(({ option }, index) => ({
+          diaryMediaId: option.diaryMediaId,
+          clipOrder: index + 1,
+        })),
+      });
+      setPinLogId(created.id);
+    } catch (e) {
+      setErrorMessage(apiErrorMessage(e, 'PinLog 를 만들지 못했어요.'));
+      setStatus('FAILED');
+    }
   };
 
-  const handleDelete = () => {
-    if (!result?.mine) return;
-    setResult(null);
-    setStatus('IDLE');
-    setPinLogId(null);
+  const handleDelete = async () => {
+    if (!result?.mine || pinLogId === null) return;
+    try {
+      await deletePinlog(pinLogId);
+      setResult(null);
+      setStatus('IDLE');
+      setPinLogId(null);
+    } catch (e) {
+      setErrorMessage(apiErrorMessage(e, 'PinLog 를 지우지 못했어요.'));
+      setStatus('FAILED');
+    }
   };
 
   return (

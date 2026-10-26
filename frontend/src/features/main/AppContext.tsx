@@ -14,7 +14,15 @@ import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 import { Me, fetchAvatars, logout } from '../../api/authApi';
 import { selectAvatar, updateNickname, updateProfileImage } from '../../api/userApi';
-import { fileUrl, uploadFile } from '../../api/fileApi';
+import { fileUrl, uploadFile, uploadFiles } from '../../api/fileApi';
+import {
+  createDiary,
+  deleteDiary,
+  fetchTripDiaries,
+  toPlaceRecord,
+  updateDiary,
+  type DiaryMediaPayload,
+} from '../../api/diaryApi';
 import { createTrip, deleteTrip, fetchTrip, fetchTrips, toTripFolder, updateTrip } from '../../api/tripApi';
 import { fetchItineraryDays, fetchItineraryItems, toPlaceItems } from '../../api/itineraryApi';
 import {
@@ -29,12 +37,11 @@ import {
   markNotificationRead,
   relativeTime,
 } from '../../api/notificationApi';
-import { errorMessage } from '../../api/axios';
+import { BASE_URL, errorMessage } from '../../api/axios';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
   AvatarSource,
   CURRENT_USER,
-  INITIAL_PLACE_RECORDS,
   INITIAL_TRIPS,
   MAP_PLACES,
   PlaceItem,
@@ -241,7 +248,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem>(MAP_PLACES[0]);
   const [isPlaceDetailModalOpen, setIsPlaceDetailModalOpen] = useState(false);
   const [startPlaceCamera, setStartPlaceCamera] = useState(false);
-  const [placeRecords, setPlaceRecords] = useState<PlaceRecord[]>(INITIAL_PLACE_RECORDS);
+  const [placeRecords, setPlaceRecords] = useState<PlaceRecord[]>([]);
+  const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [isPinLogMakerOpen, setIsPinLogMakerOpen] = useState(false);
   // 홈 빠른 촬영: 촬영 대상 여행과 열림 여부
   const [pinLogTrip, setPinLogTrip] = useState<TripFolder>(INITIAL_TRIPS[0]);
@@ -416,6 +424,10 @@ function useAppState(me: Me, onLogout: () => void) {
       ]);
       const places = toPlaceItems(items);
       setMapPlaces(places);
+      // 기록은 핀과 같이 보여주므로 함께 받아둔다. 실패해도 지도는 그대로 쓸 수 있다.
+      fetchTripDiaries(tripId)
+        .then((diaries) => setPlaceRecords(diaries.map(toPlaceRecord)))
+        .catch(() => setPlaceRecords([]));
       setTripDayNumbers(days.map((d) => d.dayNumber).sort((a, b) => a - b));
       // 핀을 고르기 전에도 상세 카드가 하나는 떠 있어야 해서 첫 핀을 잡아둔다.
       if (places.length > 0) setSelectedMapPin(places[0]);
@@ -487,17 +499,70 @@ function useAppState(me: Me, onLogout: () => void) {
   };
 
   // 장소 기록 저장 (1인 1기록 규칙)
-  const handleSavePlaceRecord = (record: PlaceRecord) => {
-    setPlaceRecords((prev) => {
-      const idx = prev.findIndex((r) => r.pinId === record.pinId && r.userId === record.userId);
-      if (idx >= 0) {
-        const updated = [...prev];
-        updated[idx] = record;
-        return updated;
-      }
-      return [record, ...prev];
-    });
-    showToast('장소 기록이 성공적으로 저장되었습니다! 📍');
+  /**
+   * 장소 기록을 저장한다. 사진·영상은 먼저 POST /files 로 올리고 받은 주소를 함께 보낸다.
+   *
+   * 서버는 핀 하나에 사람당 기록 하나만 두므로, 이미 내 기록이 있으면 PATCH 로 고친다.
+   * 화면이 들고 있던 기록은 로컬 파일 주소라, 저장 뒤에는 서버가 돌려준 값으로 바꿔
+   * 끼운다. 그래야 다시 열었을 때와 같은 것을 보게 된다.
+   */
+  const handleSavePlaceRecord = async (record: PlaceRecord) => {
+    if (isSavingRecord) return;
+    setIsSavingRecord(true);
+    try {
+      const media = await uploadRecordMedia(record);
+      const existing = placeRecords.find((r) => r.pinId === record.pinId && r.userId === me.id);
+      const saved = existing
+        ? await updateDiary(existing.id, { content: record.memo, rating: record.rating, media })
+        : await createDiary({
+            itineraryItemId: record.pinId,
+            content: record.memo,
+            rating: record.rating,
+            media,
+          });
+      const mapped = toPlaceRecord(saved);
+      setPlaceRecords((prev) => {
+        const idx = prev.findIndex((r) => r.id === mapped.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = mapped;
+          return updated;
+        }
+        return [mapped, ...prev];
+      });
+      showToast('장소 기록이 성공적으로 저장되었습니다! 📍');
+    } catch (e) {
+      showToast(errorMessage(e, '기록을 저장하지 못했어요.'));
+    } finally {
+      setIsSavingRecord(false);
+    }
+  };
+
+  /**
+   * 기록에 붙은 사진·영상 중 아직 안 올린 것만 올린다.
+   *
+   * 이미 서버에 있는 파일은 주소가 BASE_URL 로 시작하므로 그대로 다시 보내고,
+   * 갤러리·카메라에서 막 고른 것(file://, content://)만 업로드한다. 고칠 때마다
+   * 같은 사진을 다시 올리면 서버에 똑같은 파일이 쌓인다.
+   */
+  const uploadRecordMedia = async (record: PlaceRecord): Promise<DiaryMediaPayload[]> => {
+    const isUploaded = (uri: string) => uri.startsWith(BASE_URL);
+    const toServerPath = (uri: string) => uri.slice(BASE_URL.length);
+
+    const newPhotos = record.photos.filter((uri) => !isUploaded(uri));
+    const uploaded = newPhotos.length > 0 ? await uploadFiles(newPhotos.map((uri) => ({ uri }))) : [];
+    let next = 0;
+    const photos: DiaryMediaPayload[] = record.photos.map((uri) =>
+      isUploaded(uri) ? { fileUrl: toServerPath(uri) } : { fileUrl: uploaded[next++].url },
+    );
+
+    const clip = record.videoClip;
+    if (!clip?.videoUrl) return photos;
+    if (isUploaded(clip.videoUrl)) {
+      return [...photos, { fileUrl: toServerPath(clip.videoUrl), durationMs: Math.round(clip.duration * 1000) }];
+    }
+    const video = await uploadFile({ uri: clip.videoUrl, type: 'video/mp4' });
+    return [...photos, { fileUrl: video.url, durationMs: video.durationMs ?? Math.round(clip.duration * 1000) }];
   };
 
   /** 'D-28' → 28. 형식이 다르면 맨 뒤로 보낸다. */
@@ -588,9 +653,17 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   };
 
-  const handleDeletePlaceRecord = (recordId: number) => {
+  /** 붙어 있던 사진·영상 파일도 서버에서 같이 지워진다. */
+  const handleDeletePlaceRecord = async (recordId: number) => {
+    const previous = placeRecords;
     setPlaceRecords((prev) => prev.filter((r) => r.id !== recordId));
-    showToast('장소 기록이 삭제되었습니다.');
+    try {
+      await deleteDiary(recordId);
+      showToast('장소 기록이 삭제되었습니다.');
+    } catch (e) {
+      setPlaceRecords(previous);
+      showToast(errorMessage(e, '기록을 삭제하지 못했어요.'));
+    }
   };
 
   const handleSynthesizeComplete = (newVlog: SynthesizedVlog) => {

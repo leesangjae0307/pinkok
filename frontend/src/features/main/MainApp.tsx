@@ -7,7 +7,6 @@ import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Me } from '../../api/authApi';
-import { MAP_PLACES } from '../../data/mockData';
 import { AnimatedLoop, PixelPressable } from '../../components/pixel/Primitives';
 import { AppProvider, profileAvatarSource, useApp } from './AppContext';
 import BottomNav from './components/BottomNav';
@@ -173,10 +172,11 @@ function GlobalModals() {
 
       {isPinLogMakerOpen && (
         <PinLogSynthesisModal
-          places={MAP_PLACES}
+          places={mapPlaces}
           records={placeRecords}
           currentUserAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
           tripTitle={pinLogTrip.title}
+          tripId={pinLogTrip.id}
           onClose={() => setIsPinLogMakerOpen(false)}
           onSynthesizeComplete={handleSynthesizeComplete}
         />

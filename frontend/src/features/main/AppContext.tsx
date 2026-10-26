@@ -58,6 +58,7 @@ import {
 } from '../../api/routeOptimizationApi';
 import {
   acceptInvitation,
+  inviteToTrip,
   fetchMyInvitations,
   invitationDateLabel,
   rejectInvitation,
@@ -250,7 +251,7 @@ function useAppState(me: Me, onLogout: () => void) {
   const [isTripPickerOpen, setIsTripPickerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedTripForExtract, setSelectedTripForExtract] = useState(1);
-  // 첨부한 스크린샷 파일명 (최대 10장). TODO(서버 연동): POST /files 로 올린 뒤 받은 id 로 교체.
+  // 첨부한 스크린샷 파일 이름. 업로드에 쓰는 원본은 extractImages 가 들고 있다.
   const [extractImageNames, setExtractImageNames] = useState<string[]>([]);
   /** 고른 스크린샷 원본. 이름만으로는 업로드할 수 없어 따로 들고 있는다. */
   const [extractImages, setExtractImages] = useState<PickedFile[]>([]);
@@ -882,6 +883,19 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   };
 
+  /**
+   * 팀원 초대. 닉네임이 아니라 @아이디를 보낸다 — 닉네임은 중복될 수 있어 누구인지
+   * 특정할 수 없기 때문이다. 초대장이 갈 뿐이라 상대가 수락해야 팀원이 된다.
+   */
+  const handleInviteToTrip = async (tripId: number, nickname: string, loginId: string) => {
+    try {
+      await inviteToTrip(tripId, loginId);
+      showToast(`${nickname}(@${loginId})님에게 여행 초대를 보냈어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '초대를 보내지 못했어요.'));
+    }
+  };
+
   /** 수락하면 그 여행의 팀원이 되므로 목록을 다시 받아와야 새 여행이 보인다. */
   const handleAcceptInvitation = async (invitation: TripInvitation) => {
     if (respondingInvitationId !== null) return;
@@ -1029,6 +1043,7 @@ function useAppState(me: Me, onLogout: () => void) {
     reloadNotifications,
     reloadInvitations,
     handleMarkAllNotificationsRead,
+    handleInviteToTrip,
     isNotificationOpen, setIsNotificationOpen,
     notifications,
     tripInvitations,

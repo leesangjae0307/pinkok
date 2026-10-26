@@ -36,6 +36,31 @@ export interface TripMember {
   me: boolean;
 }
 
+/**
+ * 초대할 사람 검색 결과.
+ *
+ * 닉네임은 중복될 수 있어 화면에 아이디(@username)를 같이 보여줘야 누구인지 구분된다.
+ * 초대할 때 서버로 보내는 값도 닉네임이 아니라 아이디다.
+ */
+export interface UserSearchResult {
+  username: string;
+  nickname: string;
+  profileImageUrl: string | null;
+  avatarImageUrl: string | null;
+  /** 이미 이 여행의 팀원인지 (tripId 를 같이 보냈을 때만 의미 있다) */
+  alreadyMember: boolean;
+  /** 이미 초대를 보내 답을 기다리는 중인지 */
+  alreadyInvited: boolean;
+}
+
+/** 아이디와 닉네임 둘 다로 찾는다. 2글자 이상이어야 한다. */
+export async function searchUsers(keyword: string, tripId?: number): Promise<UserSearchResult[]> {
+  const { data } = await api.get<UserSearchResult[]>('/users/search', {
+    params: tripId ? { keyword, tripId } : { keyword },
+  });
+  return data;
+}
+
 /** 내가 받은 초대장. 아직 답하지 않은 것만 쓰려면 status 로 걸러 쓴다. */
 export async function fetchMyInvitations(): Promise<TripInvitationResponse[]> {
   const { data } = await api.get<TripInvitationResponse[]>('/trip-invitations');

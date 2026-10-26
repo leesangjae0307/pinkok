@@ -129,7 +129,6 @@ function GlobalModals() {
     setEditingTrip,
     handleTripUpdated,
     setInviteTrip,
-    showToast,
     isQuickPinLogCameraOpen,
     setIsQuickPinLogCameraOpen,
     pinLogTrip,
@@ -139,6 +138,7 @@ function GlobalModals() {
     isCreateTripInviteOpen,
     setIsCreateTripInviteOpen,
     addNewTripMember,
+    handleInviteToTrip,
   } = useApp();
 
   return (
@@ -213,7 +213,8 @@ function GlobalModals() {
           currentNickname={me.nickname}
           showTeamManagement
           onClose={() => setInviteTrip(null)}
-          onInvite={(nickname, loginId) => showToast(`${nickname}(@${loginId})님에게 여행 초대를 보냈어요.`)}
+          tripId={inviteTrip.id}
+          onInvite={(nickname, loginId) => handleInviteToTrip(inviteTrip.id, nickname, loginId)}
         />
       )}
 

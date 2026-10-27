@@ -1,14 +1,25 @@
-import React, { useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { ModalBackdrop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
 import { AvatarSource, isImageAvatar, toImageSource } from '../../../data/mockData';
+import { errorMessage } from '../../../api/axios';
+import { fileUrl } from '../../../api/fileApi';
+import {
+  fetchTripMembers,
+  leaveTrip,
+  removeTripMember,
+  searchUsers,
+  type UserSearchResult,
+} from '../../../api/invitationApi';
 
 interface TeamInviteModalProps {
   tripTitle: string;
-  currentAvatarUrl: number;
+  /** 팀원 목록을 받아올 여행. 새 여행을 만드는 중이면 없다. */
+  tripId?: number;
+  currentAvatarUrl: AvatarSource;
   /** 팀원 관리 목록에 "(나)" 로 보일 내 닉네임 */
   currentNickname?: string;
   onClose: () => void;
@@ -20,21 +31,17 @@ interface TeamInviteModalProps {
 
 interface CrewMember {
   id: string;
+  /** 서버 사용자 id. 내보내기에 쓴다. 나 자신이면 없다. */
+  userId?: number;
   nickname: string;
   avatar: AvatarSource;
 }
 
 const ME_ID = 'me';
 
-const TEAM_SEARCH_RESULTS = [
-  { loginId: 'gamjieun', nickname: '지은', avatar: '🎀', role: '감성 여행가' },
-  { loginId: 'kimjieun2', nickname: '지은', avatar: '📷', role: '사진 기록가' },
-  { loginId: 'jieun1234', nickname: '지은', avatar: '🧢', role: '맛집 탐험가' },
-  { loginId: 'jeju_mint', nickname: '민지', avatar: '🌿', role: '제주 로컬러' },
-];
-
 export default function TeamInviteModal({
   tripTitle,
+  tripId,
   currentAvatarUrl,
   currentNickname = '나',
   onClose,
@@ -43,24 +50,89 @@ export default function TeamInviteModal({
 }: TeamInviteModalProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const [query, setQuery] = useState('지은');
+  const [query, setQuery] = useState('');
   const [invitedLoginIds, setInvitedLoginIds] = useState<string[]>([]);
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  // TODO(서버 연동): GET /trips/{id}/members 로 교체. 지금은 웹 목업과 같은 고정 참여자.
-  const [members, setMembers] = useState<CrewMember[]>([
-    { id: ME_ID, nickname: currentNickname, avatar: currentAvatarUrl },
-    { id: 'minji', nickname: '민지', avatar: '🌿' },
-    { id: 'seojun', nickname: '서준', avatar: '📷' },
-  ]);
+  const [members, setMembers] = useState<CrewMember[]>([]);
+  const [isMembersLoading, setIsMembersLoading] = useState(false);
   const [leaderId, setLeaderId] = useState(ME_ID);
   const [actionMemberId, setActionMemberId] = useState<string | null>(null);
   const canManage = leaderId === ME_ID;
 
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return TEAM_SEARCH_RESULTS.filter((m) => m.nickname.toLowerCase().includes(q) || m.loginId.toLowerCase().includes(q));
-  }, [query]);
+  /** 팀원 목록. 새 여행을 만드는 중(tripId 없음)이면 아직 나뿐이다. */
+  useEffect(() => {
+    if (!tripId) {
+      setMembers([{ id: ME_ID, nickname: currentNickname, avatar: currentAvatarUrl }]);
+      return;
+    }
+    let cancelled = false;
+    setIsMembersLoading(true);
+    fetchTripMembers(tripId)
+      .then((list) => {
+        if (cancelled) return;
+        setMembers(
+          list.map((m) => ({
+            id: m.me ? ME_ID : String(m.userId),
+            userId: m.userId,
+            nickname: m.me ? currentNickname : m.nickname,
+            avatar: m.me
+              ? currentAvatarUrl
+              : fileUrl(m.avatarImageUrl ?? m.profileImageUrl) ?? '🙂',
+          })),
+        );
+        const owner = list.find((m) => m.role === 'OWNER');
+        setLeaderId(owner ? (owner.me ? ME_ID : String(owner.userId)) : ME_ID);
+      })
+      .catch(() => {
+        if (!cancelled) setMembers([{ id: ME_ID, nickname: currentNickname, avatar: currentAvatarUrl }]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsMembersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId, currentNickname, currentAvatarUrl]);
+
+  /**
+   * 사람 검색. 서버 규칙이 2글자 이상이라 그 전에는 부르지 않는다.
+   * 타자마다 요청하면 금방 쌓이므로 300ms 쉰 뒤에 보낸다.
+   */
+  useEffect(() => {
+    const keyword = query.trim();
+    if (keyword.length < 2) {
+      setResults([]);
+      setSearchError(null);
+      return;
+    }
+    let cancelled = false;
+    setIsSearching(true);
+    const timer = setTimeout(() => {
+      searchUsers(keyword, tripId)
+        .then((found) => {
+          if (!cancelled) {
+            setResults(found);
+            setSearchError(null);
+          }
+        })
+        .catch((e) => {
+          if (!cancelled) {
+            setResults([]);
+            setSearchError(errorMessage(e, '검색에 실패했어요.'));
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIsSearching(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query, tripId]);
 
   return (
     <ModalBackdrop onRequestClose={onClose}>
@@ -109,6 +181,11 @@ export default function TeamInviteModal({
               </View>
 
               <View className="gap-2">
+                {isMembersLoading && (
+                  <View className="items-center rounded-2xl border border-[#82F0DC] bg-white p-5">
+                    <ActivityIndicator color="#075953" />
+                  </View>
+                )}
                 {members.map((member) => {
                   const isLeader = leaderId === member.id;
                   const menuOpen = actionMemberId === member.id;
@@ -135,6 +212,25 @@ export default function TeamInviteModal({
                             </Text>
                           </View>
                         </View>
+                        {/* 팀장은 먼저 팀장을 넘겨야 나갈 수 있어서 버튼을 주지 않는다. */}
+                        {member.id === ME_ID && !isLeader && tripId && (
+                          <Pressable
+                            onPress={async () => {
+                              const previous = members;
+                              setMembers((cur) => cur.filter((m) => m.id !== ME_ID));
+                              try {
+                                await leaveTrip(tripId);
+                                onClose();
+                              } catch (e) {
+                                setMembers(previous);
+                                Alert.alert('PINKOK', errorMessage(e, '여행에서 나가지 못했어요.'));
+                              }
+                            }}
+                            className="h-8 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 active:bg-rose-100"
+                          >
+                            <Text className="text-[9px] font-black text-rose-600">나가기</Text>
+                          </Pressable>
+                        )}
                         {canManage && member.id !== ME_ID && (
                           <Pressable
                             onPress={() => setActionMemberId(menuOpen ? null : member.id)}
@@ -159,9 +255,17 @@ export default function TeamInviteModal({
                             <Text className="text-[10px] font-black text-[#075953]">팀장 위임</Text>
                           </Pressable>
                           <Pressable
-                            onPress={() => {
-                              setMembers((cur) => cur.filter((m) => m.id !== member.id));
+                            onPress={async () => {
                               setActionMemberId(null);
+                              if (!tripId || member.userId === undefined) return;
+                              const previous = members;
+                              setMembers((cur) => cur.filter((m) => m.id !== member.id));
+                              try {
+                                await removeTripMember(tripId, member.userId);
+                              } catch (e) {
+                                setMembers(previous);
+                                Alert.alert('PINKOK', errorMessage(e, '팀원을 내보내지 못했어요.'));
+                              }
                             }}
                             className="h-9 flex-1 items-center justify-center rounded-xl border-2 border-pixel-navy bg-white active:bg-slate-50"
                           >
@@ -198,50 +302,59 @@ export default function TeamInviteModal({
           </ShadowBox>
 
           <View className="gap-2">
-            {results.length > 0 ? (
-              results.map((member) => {
-                const invited = invitedLoginIds.includes(member.loginId);
+            {isSearching ? (
+              <View className="items-center rounded-2xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
+                <ActivityIndicator color="#075953" />
+              </View>
+            ) : searchError ? (
+              <View className="rounded-2xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
+                <Text className="text-center text-xs font-bold text-slate-500">{searchError}</Text>
+              </View>
+            ) : results.length > 0 ? (
+              results.map((user) => {
+                // 이미 팀원이거나 답을 기다리는 중이면 다시 초대할 수 없다.
+                const invited = invitedLoginIds.includes(user.username) || user.alreadyInvited;
+                const disabled = invited || user.alreadyMember;
+                const avatar = fileUrl(user.avatarImageUrl ?? user.profileImageUrl) ?? '🙂';
                 return (
-                  <View key={member.loginId} className="flex-row items-center gap-3 rounded-2xl border border-[#82F0DC] bg-white p-3 shadow-sm">
+                  <View key={user.username} className="flex-row items-center gap-3 rounded-2xl border border-[#82F0DC] bg-white p-3 shadow-sm">
                     <ShadowBox
                       shadowColor="#56EADD"
                       offset={2}
                       radius={12}
                       className="h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-pixel-navy bg-[#B4FAF0]"
                     >
-                      {member.loginId === 'gamjieun' ? (
-                        <Image source={currentAvatarUrl} resizeMode="cover" className="h-full w-full" />
+                      {isImageAvatar(avatar) ? (
+                        <Image source={toImageSource(avatar)} resizeMode="cover" className="h-full w-full" />
                       ) : (
-                        <Text className="text-xl">{member.avatar}</Text>
+                        <Text className="text-xl">{avatar}</Text>
                       )}
                     </ShadowBox>
                     <View className="min-w-0 flex-1">
                       <View className="flex-row items-center gap-2">
-                        <Text className="text-sm font-black text-slate-900">{member.nickname}</Text>
+                        <Text className="text-sm font-black text-slate-900">{user.nickname}</Text>
                         <Text numberOfLines={1} className="flex-shrink font-pixel text-[8px] text-[#075953]">
-                          @{member.loginId}
+                          @{user.username}
                         </Text>
                       </View>
-                      <Text className="mt-1 text-[10px] font-semibold text-slate-500">{member.role}</Text>
+                      <Text className="mt-1 text-[10px] font-semibold text-slate-500">
+                        {user.alreadyMember ? '이미 팀원이에요' : user.alreadyInvited ? '초대에 답을 기다리는 중' : '초대할 수 있어요'}
+                      </Text>
                     </View>
                     <PixelPressable
                       shadowColor="#075953"
                       offset={2}
                       radius={12}
-                      disabled={invited}
+                      disabled={disabled}
                       onPress={() => {
-                        setInvitedLoginIds((cur) => [...cur, member.loginId]);
-                        onInvite(
-                          member.nickname,
-                          member.loginId,
-                          member.loginId === 'gamjieun' ? currentAvatarUrl : member.avatar,
-                        );
+                        setInvitedLoginIds((cur) => [...cur, user.username]);
+                        onInvite(user.nickname, user.username, avatar);
                       }}
                       className="h-9 items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD] px-3"
                       disabledClassName="h-9 items-center justify-center rounded-xl border-2 border-slate-300 bg-slate-100 px-3"
                     >
-                      <Text className={`text-[10px] font-black ${invited ? 'text-slate-400' : 'text-pixel-navy'}`}>
-                        {invited ? '초대됨' : '초대'}
+                      <Text className={`text-[10px] font-black ${disabled ? 'text-slate-400' : 'text-pixel-navy'}`}>
+                        {user.alreadyMember ? '팀원' : invited ? '초대됨' : '초대'}
                       </Text>
                     </PixelPressable>
                   </View>
@@ -249,7 +362,9 @@ export default function TeamInviteModal({
               })
             ) : (
               <View className="rounded-2xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
-                <Text className="text-center text-xs font-bold text-slate-400">검색 결과가 없습니다.</Text>
+                <Text className="text-center text-xs font-bold text-slate-400">
+                  {query.trim().length < 2 ? '아이디나 닉네임을 2글자 이상 입력해 주세요.' : '검색 결과가 없습니다.'}
+                </Text>
               </View>
             )}
           </View>

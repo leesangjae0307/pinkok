@@ -2,13 +2,23 @@
  * 프로필 아바타 선택 / 내 여행 데이터 상세 / 1초 클립 재생 모달
  */
 import React from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MAP_PLACES } from '../../../data/mockData';
 import { FadeIn, ModalBackdrop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
-import { INITIAL_EXTRACTED_PLACES, PROFILE_AVATARS, useApp } from '../AppContext';
+import { PROFILE_AVATARS, useApp } from '../AppContext';
+import { fileUrl } from '../../../api/fileApi';
 
 function SheetHeader({
   eyebrow,
@@ -53,6 +63,8 @@ export function AvatarPickerModal() {
     pendingProfileNickname,
     setPendingProfileNickname,
     saveProfile,
+    pickProfilePhoto,
+    isUploadingProfilePhoto,
   } = useApp();
   if (!isAvatarPickerOpen) return null;
 
@@ -76,11 +88,41 @@ export function AvatarPickerModal() {
             className="mt-1.5 h-11 rounded-xl border-2 border-pixel-navy bg-white px-3 py-0 text-sm font-black text-slate-900"
           />
         </View>
+        {/* 직접 올린 사진. 서버는 아바타와 사진 중 하나만 들고 있어서 둘은 서로를 해제한다. */}
+        <View className="flex-row items-center gap-3 px-4 pt-2">
+          <View className="h-14 w-14 overflow-hidden rounded-2xl border-2 border-pixel-navy bg-white">
+            {pendingProfileAvatar.photoUrl ? (
+              <Image
+                source={{ uri: fileUrl(pendingProfileAvatar.photoUrl) ?? undefined }}
+                resizeMode="cover"
+                className="h-full w-full"
+              />
+            ) : (
+              <Image source={pendingProfileAvatar.image} resizeMode="cover" className="h-full w-full" />
+            )}
+          </View>
+          <Pressable
+            onPress={pickProfilePhoto}
+            disabled={isUploadingProfilePhoto}
+            className="h-10 flex-1 flex-row items-center justify-center rounded-xl border-2 border-pixel-navy bg-white active:translate-y-0.5"
+          >
+            {isUploadingProfilePhoto ? (
+              <ActivityIndicator size="small" color="#075953" />
+            ) : (
+              <Text className="text-[11px] font-black text-[#075953]">
+                {pendingProfileAvatar.photoUrl ? '사진 다시 고르기' : '직접 사진 올리기'}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+
         <View className="flex-row flex-wrap justify-between gap-y-3 p-4 pt-2">
           {PROFILE_AVATARS.map((avatar) => {
-            const selected = pendingProfileAvatar.id === avatar.id;
+            // 사진을 올려둔 동안에는 아바타가 선택된 상태로 보이면 안 된다.
+            const selected = !pendingProfileAvatar.photoUrl && pendingProfileAvatar.id === avatar.id;
             return (
               <Pressable key={avatar.id} onPress={() => setPendingProfileAvatar(avatar)} style={{ width: '31%' }}>
+                {/* avatar 에는 photoUrl 이 없으므로 고르는 순간 올려둔 사진은 해제된다. */}
                 {selected && (
                   <View
                     pointerEvents="none"
@@ -131,12 +173,17 @@ const REGIONS = ['제주', '부산', '서울', '강릉', '도쿄', '오사카', 
 
 export function ProfileDetailModal() {
   const insets = useSafeAreaInsets();
-  const { profileDetailModal, setProfileDetailModal } = useApp();
+  const { profileDetailModal, setProfileDetailModal, mapPlaces, placeRecords, me } = useApp();
   if (!profileDetailModal) return null;
 
   const title =
     profileDetailModal === 'visited' ? '방문한 장소' : profileDetailModal === 'saved' ? '저장한 장소' : '다녀온 지역';
-  const list = profileDetailModal === 'visited' ? MAP_PLACES.slice(0, 4) : INITIAL_EXTRACTED_PLACES;
+  /**
+   * 방문·저장 장소를 따로 주는 API 가 없어서 지금 열어 둔 여행의 자료로 보여준다.
+   * 방문한 곳은 내가 기록을 남긴 핀이고, 저장한 곳은 일정에 담아 둔 핀이다.
+   */
+  const visitedPinIds = new Set(placeRecords.filter((r) => r.userId === me.id).map((r) => r.pinId));
+  const list = profileDetailModal === 'visited' ? mapPlaces.filter((p) => visitedPinIds.has(p.id)) : mapPlaces;
 
   return (
     <ModalBackdrop onRequestClose={() => setProfileDetailModal(null)}>

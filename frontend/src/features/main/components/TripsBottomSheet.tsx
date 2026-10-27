@@ -2,7 +2,7 @@
  * 여행 지도 하단 조절형 바텀시트 (드래그 핸들 · 일자 필터 · 이동수단 타임라인)
  */
 import React, { useMemo, useRef } from 'react';
-import { Image, PanResponder, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Image, PanResponder, Pressable, ScrollView, Text, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 
 import { PlaceItem } from '../../../data/mockData';
@@ -24,6 +24,13 @@ interface TripsBottomSheetProps {
   teamRecordCounts: { [pinId: number]: number };
   onOptimizeRoute: () => void;
   isOptimizingRoute: boolean;
+  /** 이 여행에 실제로 있는 일자 번호. 비어 있으면 일자 칩을 숨긴다. */
+  dayNumbers: number[];
+  isLoading: boolean;
+  loadError: string | null;
+  onRetry: () => void;
+  onAddDay: () => void;
+  isAddingDay: boolean;
 }
 
 function DashedVLine() {
@@ -50,6 +57,12 @@ export default function TripsBottomSheet({
   teamRecordCounts,
   onOptimizeRoute,
   isOptimizingRoute,
+  dayNumbers,
+  isLoading,
+  loadError,
+  onRetry,
+  onAddDay,
+  isAddingDay,
 }: TripsBottomSheetProps) {
   // PanResponder 콜백 안에서 최신 값을 읽기 위한 ref
   const heightRef = useRef(sheetHeightPercent);
@@ -129,7 +142,21 @@ export default function TripsBottomSheet({
             </View>
           </Pressable>
 
-          {[1, 2, 3].map((d) => (
+          {/* 일자가 하나도 없으면 날짜별 보기도, 동선 최적화도 할 수 없다. */}
+          <Pressable
+            onPress={onAddDay}
+            disabled={isAddingDay}
+            accessibilityLabel="일자 추가"
+            className="flex-row items-center gap-1 rounded-full border-2 border-dashed border-[#075953] bg-white px-3 py-1.5 active:scale-95"
+          >
+            {isAddingDay ? (
+              <ActivityIndicator size="small" color="#075953" />
+            ) : (
+              <Text className="text-xs font-black text-[#075953]">+ 일자</Text>
+            )}
+          </Pressable>
+
+          {dayNumbers.map((d) => (
             <Pressable
               key={d}
               onPress={() => onSelectDay(d)}
@@ -166,7 +193,18 @@ export default function TripsBottomSheet({
 
       {/* 3. 장소 타임라인 */}
       <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }} showsVerticalScrollIndicator={false}>
-        {places.length === 0 ? (
+        {isLoading ? (
+          <View className="items-center rounded-2xl border-2 border-dashed border-slate-200 p-8">
+            <ActivityIndicator color="#075953" />
+          </View>
+        ) : loadError ? (
+          <View className="items-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 p-8">
+            <Text className="text-center text-xs text-slate-500">{loadError}</Text>
+            <Pressable onPress={onRetry} className="rounded-xl bg-[#56EADD] px-4 py-2 active:scale-95">
+              <Text className="text-xs font-black text-[#075953]">다시 시도</Text>
+            </Pressable>
+          </View>
+        ) : places.length === 0 ? (
           <View className="rounded-2xl border-2 border-dashed border-slate-200 p-8">
             <Text className="text-center text-xs text-slate-400">해당 일자에 등록된 장소가 없습니다.</Text>
           </View>

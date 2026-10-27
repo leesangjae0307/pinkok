@@ -9,10 +9,11 @@ import {tokenStore} from '../services/tokenStore';
  *
  * 환경별 대안:
  * - 서버를 같은 PC 에서 돌릴 때: `adb reverse tcp:8080 tcp:8080` 걸고 `http://localhost:8080`
+ *   (주소가 바뀌지 않아 이 값을 고칠 일이 없다)
  * - 에뮬레이터: `http://10.0.2.2:8080`
  * - 같은 와이파이의 실기기: 서버 PC 의 LAN IP (예: `http://192.168.1.53:8080`)
  */
-export const BASE_URL = 'https://charged-pharmacies-blake-andale.trycloudflare.com';
+export const BASE_URL = 'https://amongst-handheld-charm-poor.trycloudflare.com';
 
 const api = axios.create({baseURL: BASE_URL, timeout: 15000});
 

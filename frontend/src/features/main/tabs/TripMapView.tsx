@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import { MAP_PLACES, PlaceItem } from '../../../data/mockData';
+import { PlaceItem } from '../../../data/mockData';
 import { PixelBackArrow, PixelPin, PixelTripsIcon } from '../../../components/pixel/PixelIcons';
 import { AnimatedLoop } from '../../../components/pixel/Primitives';
 import TripsBottomSheet from '../components/TripsBottomSheet';
@@ -45,7 +45,7 @@ function MapMarker({
       <PixelPin
         size={focused ? 32 : 26}
         color={focused ? '#FF5A87' : '#075953'}
-        label={`${place.order}. ${place.name.split(' ')[1] || place.name.slice(0, 5)}`}
+        label={`${place.order}. ${place.name.replace(/^\d+\.\s*/, '')}`}
         active={focused}
       />
     </Pressable>
@@ -55,15 +55,23 @@ function MapMarker({
 export default function TripMapView() {
   const {
     activeTrip,
-    trips,
     selectedDayFilter,
     setSelectedDayFilter,
     displayedMapPlaces,
+    mapPlaces,
+    isMapPlacesLoading,
+    mapPlacesError,
+    tripDayNumbers,
+    reloadItinerary,
+    handleAddDay,
+    isAddingDay,
     selectedMapPin,
     setSelectedMapPin,
     setIsTripMapOpen,
     setInviteTrip,
+    setIsAddPlaceOpen,
     setIsPinLogMakerOpen,
+    setPinLogTrip,
     setIsPlaceDetailModalOpen,
     setStartPlaceCamera,
     placeRecords,
@@ -89,8 +97,8 @@ export default function TripMapView() {
     return acc;
   }, {} as { [key: number]: number });
 
-  const focusX = (selectedMapPin.lng / 100) * layout.width;
-  const focusY = (selectedMapPin.lat / 100) * layout.height;
+  const focusX = ((selectedMapPin?.lng ?? 50) / 100) * layout.width;
+  const focusY = ((selectedMapPin?.lat ?? 50) / 100) * layout.height;
 
   return (
     <View
@@ -116,8 +124,8 @@ export default function TripMapView() {
           </Svg>
         )}
 
-        {/* 포커스된 핀 레이더 */}
-        {layout.width > 0 && (
+        {/* 포커스된 핀 레이더. 고른 핀이 지금 지도에 없으면(빈 일정 등) 그리지 않는다. */}
+        {layout.width > 0 && displayedMapPlaces.some((p) => p.id === selectedMapPin?.id) && (
           <View
             pointerEvents="none"
             style={{ position: 'absolute', left: focusX - 24, top: focusY - 24, width: 48, height: 48, zIndex: 10 }}
@@ -137,7 +145,7 @@ export default function TripMapView() {
             <MapMarker
               key={place.id}
               place={place}
-              focused={selectedMapPin.id === place.id}
+              focused={selectedMapPin?.id === place.id}
               width={layout.width}
               height={layout.height}
               onPress={() => {
@@ -160,7 +168,7 @@ export default function TripMapView() {
             <View className="min-w-0 flex-1 flex-row items-center gap-2">
               <PixelTripsIcon size={20} active />
               <Text numberOfLines={1} className="flex-1 text-xs font-bold text-slate-800">
-                {activeTrip.title}
+                {activeTrip?.title ?? "여행"}
               </Text>
             </View>
             <View className="rounded border border-[#50E6DC] bg-[#56EADD] px-1.5 py-0.5">
@@ -170,13 +178,25 @@ export default function TripMapView() {
             </View>
           </View>
           <Pressable
-            onPress={() => setInviteTrip(trips[0] || null)}
+            onPress={() => setIsAddPlaceOpen(true)}
+            accessibilityLabel="장소 추가"
+            className="rounded-2xl border-2 border-pixel-navy bg-white px-2.5 py-2 shadow-md active:translate-y-0.5"
+          >
+            <Text className="text-[10px] font-black text-[#075953]">장소 +</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setInviteTrip(activeTrip)}
             className="rounded-2xl border-2 border-pixel-navy bg-white px-2.5 py-2 shadow-md active:translate-y-0.5"
           >
             <Text className="text-[10px] font-black text-[#075953]">팀원 +</Text>
           </Pressable>
           <Pressable
-            onPress={() => setIsPinLogMakerOpen(true)}
+            onPress={() => {
+              // PinLog 모달은 pinLogTrip 을 보고 그린다. 지도에서 바로 열 때는
+              // 핀로그 탭을 거치지 않으므로 지금 보고 있는 여행으로 맞춰준다.
+              if (activeTrip) setPinLogTrip(activeTrip);
+              setIsPinLogMakerOpen(true);
+            }}
             accessibilityLabel="팀원 영상으로 PinLog 만들기"
             className="flex-row items-center gap-1 rounded-2xl border-2 border-pixel-navy bg-mint-primary px-3 py-2 shadow-md active:translate-y-0.5 active:bg-mint-dark"
           >
@@ -193,11 +213,17 @@ export default function TripMapView() {
         selectedDay={selectedDayFilter}
         onSelectDay={(day) => {
           setSelectedDayFilter(day);
-          const matching = day === 'all' ? MAP_PLACES : MAP_PLACES.filter((p) => p.day === day);
+          const matching = day === 'all' ? mapPlaces : mapPlaces.filter((p) => p.day === day);
           if (matching.length > 0) setSelectedMapPin(matching[0]);
         }}
         places={displayedMapPlaces}
-        selectedPlaceId={selectedMapPin.id}
+        dayNumbers={tripDayNumbers}
+        isLoading={isMapPlacesLoading}
+        loadError={mapPlacesError}
+        onRetry={reloadItinerary}
+        onAddDay={handleAddDay}
+        isAddingDay={isAddingDay}
+        selectedPlaceId={selectedMapPin?.id ?? -1}
         onSelectPlace={(place) => {
           setSelectedMapPin(place);
           showToast(`📍 [${place.name}] 핀으로 카메라가 이동했습니다.`);

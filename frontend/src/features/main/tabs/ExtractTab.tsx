@@ -22,6 +22,7 @@ export default function ExtractTab() {
     setSelectedTripForExtract,
     extractImageNames,
     setExtractImageNames,
+    setExtractImages,
     showToast,
     handleExtractSubmit,
     handleToggleExtractedPlace,
@@ -33,6 +34,12 @@ export default function ExtractTab() {
     const assets = (res.assets ?? []).slice(0, MAX_IMAGES);
     if (assets.length > 0) {
       setExtractImageNames(assets.map((asset, i) => asset.fileName ?? `스크린샷 ${i + 1}`));
+      // 업로드에는 이름이 아니라 원본 주소가 필요하다.
+      setExtractImages(
+        assets
+          .filter((asset) => asset.uri)
+          .map((asset) => ({ uri: asset.uri as string, fileName: asset.fileName, type: asset.type })),
+      );
       showToast(`스크린샷 ${assets.length}장이 분석 대기열에 추가됐어요.`);
     }
   };
@@ -100,7 +107,7 @@ export default function ExtractTab() {
             <Text className="text-[10px] font-black text-[#075953]">
               첨부 이미지 {extractImageNames.length}/{MAX_IMAGES}
             </Text>
-            <Pressable onPress={() => setExtractImageNames([])} hitSlop={8}>
+            <Pressable onPress={() => { setExtractImageNames([]); setExtractImages([]); }} hitSlop={8}>
               <Text className="text-[9px] font-black text-rose-500">전체 삭제</Text>
             </Pressable>
           </View>

@@ -7,9 +7,8 @@ import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Me } from '../../api/authApi';
-import { MAP_PLACES } from '../../data/mockData';
 import { AnimatedLoop, PixelPressable } from '../../components/pixel/Primitives';
-import { AppProvider, useApp } from './AppContext';
+import { AppProvider, profileAvatarSource, useApp } from './AppContext';
 import BottomNav from './components/BottomNav';
 import NotificationScreen from './screens/NotificationScreen';
 import SettingsScreen from './screens/SettingsScreen';
@@ -22,6 +21,8 @@ import ProfileTab from './tabs/ProfileTab';
 import PlaceDetailModal from './modals/PlaceDetailModal';
 import PinLogSynthesisModal from './modals/PinLogSynthesisModal';
 import TeamInviteModal from './modals/TeamInviteModal';
+import EditTripModal from './modals/EditTripModal';
+import AddPlaceModal from './modals/AddPlaceModal';
 import QuickPinLogCameraModal from './modals/QuickPinLogCameraModal';
 import CreateTripScreen from './screens/CreateTripScreen';
 import PinLogTripPickerModal from './modals/PinLogTripPickerModal';
@@ -59,6 +60,7 @@ function ScreenBody() {
     setIsCreateTripInviteOpen,
     removeNewTripMember,
     handleCreateTrip,
+    isCreatingTrip,
   } = useApp();
 
   // 새 여행 만들기는 탭 위를 덮는 전체 화면 (웹과 같이 하단 탭바도 숨김)
@@ -66,12 +68,13 @@ function ScreenBody() {
     return (
       <CreateTripScreen
         hostName={me.nickname}
-        hostAvatar={selectedProfileAvatar.image}
+        hostAvatar={profileAvatarSource(selectedProfileAvatar)}
         invitedMembers={newTripMembers}
         onBack={closeCreateTrip}
         onOpenInvite={() => setIsCreateTripInviteOpen(true)}
         onRemoveMember={removeNewTripMember}
         onCreate={handleCreateTrip}
+        isCreating={isCreatingTrip}
       />
     );
   }
@@ -123,8 +126,14 @@ function GlobalModals() {
     trips,
     handleSynthesizeComplete,
     inviteTrip,
+    editingTrip,
+    isAddPlaceOpen,
+    setIsAddPlaceOpen,
+    handleAddPlace,
+    activeTrip,
+    setEditingTrip,
+    handleTripUpdated,
     setInviteTrip,
-    showToast,
     isQuickPinLogCameraOpen,
     setIsQuickPinLogCameraOpen,
     pinLogTrip,
@@ -134,6 +143,7 @@ function GlobalModals() {
     isCreateTripInviteOpen,
     setIsCreateTripInviteOpen,
     addNewTripMember,
+    handleInviteToTrip,
   } = useApp();
 
   return (
@@ -149,7 +159,9 @@ function GlobalModals() {
           startInCamera={startPlaceCamera}
           onSaveRecord={handleSavePlaceRecord}
           onDeleteRecord={handleDeletePlaceRecord}
-          currentUserAvatarUrl={selectedProfileAvatar.image}
+          currentUserAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
+          currentUserId={me.id}
+          currentUserName={me.nickname}
           onOpenPinLogMaker={() => {
             setIsPlaceDetailModalOpen(false);
             setIsPinLogMakerOpen(true);
@@ -169,18 +181,20 @@ function GlobalModals() {
         />
       )}
 
-      {isPinLogMakerOpen && (
+      {isPinLogMakerOpen && pinLogTrip && (
         <PinLogSynthesisModal
-          places={MAP_PLACES}
+          places={mapPlaces}
           records={placeRecords}
-          currentUserAvatarUrl={selectedProfileAvatar.image}
+          currentUserAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
+          currentUserId={me.id}
           tripTitle={pinLogTrip.title}
+          tripId={pinLogTrip.id}
           onClose={() => setIsPinLogMakerOpen(false)}
           onSynthesizeComplete={handleSynthesizeComplete}
         />
       )}
 
-      {isQuickPinLogCameraOpen && (
+      {isQuickPinLogCameraOpen && pinLogTrip && (
         <QuickPinLogCameraModal
           trip={pinLogTrip}
           places={mapPlaces}
@@ -189,21 +203,38 @@ function GlobalModals() {
         />
       )}
 
+      {isAddPlaceOpen && activeTrip && (
+        <AddPlaceModal
+          tripTitle={activeTrip.title}
+          onClose={() => setIsAddPlaceOpen(false)}
+          onAdd={handleAddPlace}
+        />
+      )}
+
+      {editingTrip && (
+        <EditTripModal
+          trip={editingTrip}
+          onClose={() => setEditingTrip(null)}
+          onSaved={(payload) => handleTripUpdated(editingTrip.id, payload)}
+        />
+      )}
+
       {inviteTrip && (
         <TeamInviteModal
           tripTitle={inviteTrip.title}
-          currentAvatarUrl={selectedProfileAvatar.image}
+          currentAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
           currentNickname={me.nickname}
           showTeamManagement
           onClose={() => setInviteTrip(null)}
-          onInvite={(nickname, loginId) => showToast(`${nickname}(@${loginId})님에게 여행 초대를 보냈어요.`)}
+          tripId={inviteTrip.id}
+          onInvite={(nickname, loginId) => handleInviteToTrip(inviteTrip.id, nickname, loginId)}
         />
       )}
 
       {isCreateTripInviteOpen && (
         <TeamInviteModal
           tripTitle="새 여행"
-          currentAvatarUrl={selectedProfileAvatar.image}
+          currentAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
           onClose={() => setIsCreateTripInviteOpen(false)}
           onInvite={(nickname, loginId, avatar) => addNewTripMember({ nickname, loginId, avatar })}
         />

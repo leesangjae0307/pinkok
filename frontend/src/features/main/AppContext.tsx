@@ -2,7 +2,9 @@
  * 메인 앱 전역 상태 (웹 App.tsx 의 useState / 핸들러를 그대로 옮긴 것)
  * 화면(탭)들이 props 대신 useApp() 으로 꺼내 써요.
  */
-import React, { createContext, useContext, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Alert } from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
 
 import avatarBookWinter from '../../assets/images/avatar-book-winter.png';
 import avatarSilverBucket from '../../assets/images/avatar-silver-bucket.png';
@@ -10,18 +12,77 @@ import avatarPinkCamera from '../../assets/images/avatar-pink-camera.png';
 import avatarMapPhone from '../../assets/images/avatar-map-phone.png';
 import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
-import { Me, logout } from '../../api/authApi';
-import { updateNickname } from '../../api/userApi';
-import { errorMessage } from '../../api/axios';
+import { Me, fetchAvatars, logout } from '../../api/authApi';
+import { selectAvatar, updateNickname, updateProfileImage } from '../../api/userApi';
+import { fileUrl, uploadFile, uploadFiles, type PickedFile } from '../../api/fileApi';
+import {
+  createDiary,
+  deleteDiary,
+  fetchTripDiaries,
+  toPlaceRecord,
+  updateDiary,
+  type DiaryMediaPayload,
+} from '../../api/diaryApi';
+import {
+  createTrip,
+  deleteTrip,
+  fetchTrip,
+  fetchTrips,
+  toTripFolder,
+  tripDDayLabel,
+  tripDateLabel,
+  updateTrip,
+  type TripUpdatePayload,
+} from '../../api/tripApi';
+import {
+  createItineraryDay,
+  createItineraryItem,
+  fetchItineraryDays,
+  fetchItineraryItems,
+  toPlaceItems,
+} from '../../api/itineraryApi';
+import type { PlaceSearchResult } from '../../api/placeApi';
+import { fetchTripStyles, replaceTripStyles } from '../../api/travelStyleApi';
+import { addDays } from '../../components/pixel/PixelCalendar';
+import { fetchPinlogs, pinlogThumbnailUrl, pinlogVideoUrl } from '../../api/pinlogApi';
+import {
+  addCandidatesToTrip,
+  createAiRequest,
+  fetchPlaceCandidates,
+  waitForAiRequest,
+  type PlaceCandidate,
+} from '../../api/aiRequestApi';
+import {
+  acceptRecommendation,
+  createRecommendation,
+  fetchRecommendations,
+  rejectRecommendation,
+  type Recommendation,
+} from '../../api/recommendationApi';
+import {
+  applyRouteOptimization,
+  createRouteOptimization,
+  savedDistanceM,
+} from '../../api/routeOptimizationApi';
+import {
+  acceptInvitation,
+  inviteToTrip,
+  fetchMyInvitations,
+  invitationDateLabel,
+  rejectInvitation,
+} from '../../api/invitationApi';
+import {
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  relativeTime,
+} from '../../api/notificationApi';
+import { BASE_URL, errorMessage } from '../../api/axios';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
-  CURRENT_USER,
-  INITIAL_PLACE_RECORDS,
-  INITIAL_TRIPS,
-  MAP_PLACES,
+  AvatarSource,
   PlaceItem,
   PlaceRecord,
-  SAMPLE_VLOG_CLIPS,
   TabType,
   TripFolder,
   VlogClip,
@@ -29,7 +90,6 @@ import {
 import type { SynthesizedVlog } from './modals/PinLogSynthesisModal';
 import type { QuickClip } from './modals/QuickPinLogCameraModal';
 import type { InvitedTripMember, NewTripPayload } from './screens/CreateTripScreen';
-import { daysBetween, toYmd } from '../../components/pixel/PixelCalendar';
 
 export type NotificationType = 'TRIP_INVITED' | 'TRIP_REMINDER' | 'TRIP_PLACE_ADDED';
 
@@ -60,116 +120,20 @@ export interface ProfileAvatar {
   id: string;
   image: number;
   label: string;
+  /** 서버 아바타 코드. PATCH /users/me/avatar 에 보낼 id 를 GET /avatars 에서 찾을 때 쓴다. */
+  code: string;
+  /** 아바타 대신 올린 프로필 사진. 이게 있으면 image 보다 우선한다. */
+  photoUrl?: string;
 }
 
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 1,
-    type: 'TRIP_INVITED',
-    targetType: 'INVITATION',
-    targetId: 1,
-    message: "'감지은'님이 '제주도 여행'에 초대했어요 ✉️",
-    createdAt: '방금 전',
-    read: false,
-  },
-  {
-    id: 2,
-    type: 'TRIP_REMINDER',
-    targetType: 'TRIP',
-    targetId: 1,
-    message: "'제주도 여행' D-1입니다. 핀로그를 작성해 보세요! 🎬",
-    createdAt: '2시간 전',
-    read: false,
-  },
-  {
-    id: 3,
-    type: 'TRIP_PLACE_ADDED',
-    targetType: 'TRIP',
-    targetId: 2,
-    message: '도쿄 여행에 새 장소 3개가 추가되었어요.',
-    createdAt: '어제',
-    read: true,
-  },
-];
-
-const INITIAL_TRIP_INVITATIONS: TripInvitation[] = [
-  {
-    id: 1,
-    inviterName: '감지은',
-    inviterAvatar: '🎀',
-    tripTitle: '제주도 여행',
-    date: '2026.10.12 - 10.15',
-  },
-];
-
-const INVITED_JEJU_TRIP: TripFolder = {
-  id: 4,
-  title: '제주도 여행 ✈️',
-  date: '2026.10.12 - 10.15',
-  dDay: 'D-28',
-  image: 'https://images.unsplash.com/photo-1548115184-bc6544d06a58?auto=format&fit=crop&w=600&q=80',
-  placesCount: 6,
-  tag: '팀여행',
-};
-
-export const INITIAL_EXTRACTED_PLACES: ExtractedPlace[] = [
-  {
-    id: 101,
-    name: '앤트러사이트 한림점',
-    category: '제주 / 감성 베이커리 카페',
-    rating: 4.9,
-    reviewsCount: 512,
-    address: '제주특별자치도 제주시 한림읍 한림로 564',
-    thumbnail: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=500&q=80',
-    lat: 55,
-    lng: 40,
-    order: 1,
-    day: 1,
-    note: '영상 속 간판과 위치 태그가 일치해 정확도가 높아요.',
-    extractionStatus: 'success',
-    confidence: 98,
-  },
-  {
-    id: 102,
-    name: '협재해수욕장',
-    category: '제주 / 해변 · 자연 명소',
-    rating: 4.8,
-    reviewsCount: 1420,
-    address: '제주특별자치도 제주시 한림읍 협재리 2497-1',
-    thumbnail: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=500&q=80',
-    lat: 30,
-    lng: 26,
-    order: 2,
-    day: 1,
-    note: '바다 풍경과 자막의 장소명이 함께 확인됐어요.',
-    extractionStatus: 'success',
-    confidence: 95,
-  },
-  {
-    id: 103,
-    name: '비양도 석양 포인트',
-    category: '제주 / 전망대 후보',
-    rating: 4.6,
-    reviewsCount: 87,
-    address: '제주특별자치도 제주시 한림읍 협재리 일대',
-    thumbnail: 'https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=500&q=80',
-    lat: 65,
-    lng: 35,
-    order: 3,
-    day: 1,
-    note: '정확한 촬영 지점이 여러 곳으로 분석됐어요. 주소를 확인해 주세요.',
-    extractionStatus: 'review',
-    confidence: 72,
-  },
-];
 
 export const PROFILE_AVATARS: ProfileAvatar[] = [
-  { id: 'book-winter', image: avatarBookWinter, label: '책 읽는 겨울 여행가' },
-  { id: 'silver-bucket', image: avatarSilverBucket, label: '은발 버킷햇 여행가' },
-  { id: 'pink-camera', image: avatarPinkCamera, label: '핑크 카메라 여행가' },
-  { id: 'map-phone', image: avatarMapPhone, label: '지도 보는 도시 여행가' },
-  { id: 'headphone-wink', image: avatarHeadphoneWink, label: '윙크 헤드폰 여행가' },
-  { id: 'sunglasses', image: avatarSunglasses, label: '선글라스 로컬 여행가' },
+  { id: 'book-winter', image: avatarBookWinter, label: '책 읽는 겨울 여행가', code: 'F1' },
+  { id: 'silver-bucket', image: avatarSilverBucket, label: '은발 버킷햇 여행가', code: 'F2' },
+  { id: 'pink-camera', image: avatarPinkCamera, label: '핑크 카메라 여행가', code: 'F3' },
+  { id: 'map-phone', image: avatarMapPhone, label: '지도 보는 도시 여행가', code: 'M1' },
+  { id: 'headphone-wink', image: avatarHeadphoneWink, label: '윙크 헤드폰 여행가', code: 'M2' },
+  { id: 'sunglasses', image: avatarSunglasses, label: '선글라스 로컬 여행가', code: 'M3' },
 ];
 
 export const TRAVEL_TASTES = [
@@ -195,6 +159,52 @@ const AVATAR_IMAGE_BY_SERVER_CODE: Record<string, number | undefined> = {
   M3: avatarSunglasses,
 };
 
+/**
+ * 로그인한 사용자의 프로필 표시값. 서버는 아바타와 사진 중 하나만 들고 있다.
+ * 둘 다 없으면(아직 안 골랐으면) 첫 번째 아바타로 보여준다.
+ */
+export function profileAvatarOf(me: Me): ProfileAvatar {
+  if (me.profileImageUrl) {
+    return { ...PROFILE_AVATARS[0], photoUrl: me.profileImageUrl };
+  }
+  return PROFILE_AVATARS.find((a) => a.code === me.avatar?.code) ?? PROFILE_AVATARS[0];
+}
+
+/**
+ * 프로필을 그릴 때 쓸 값. 올린 사진이 있으면 그 주소를, 없으면 아바타 이미지를 준다.
+ * Image 에는 toImageSource() 로 넘긴다.
+ */
+export function profileAvatarSource(avatar: ProfileAvatar): AvatarSource {
+  return fileUrl(avatar.photoUrl) ?? avatar.image;
+}
+
+/**
+ * AI 후보를 추출 탭이 쓰는 ExtractedPlace 로 바꾼다.
+ *
+ * 여기 lat/lng 는 목록에만 쓰이고 지도에 찍히지 않아서 가운데 값으로 둔다. 지도에
+ * 올라가는 건 여행에 추가한 뒤 GET /itinerary-items 로 다시 받은 핀이고, 그때
+ * 좌표가 제대로 투영된다.
+ */
+export function toExtractedPlace(candidate: PlaceCandidate): ExtractedPlace {
+  return {
+    id: candidate.id,
+    name: candidate.place?.name ?? candidate.rawName,
+    category: candidate.categoryText ?? candidate.place?.categoryName ?? '장소',
+    rating: 0,
+    reviewsCount: 0,
+    address: candidate.place?.roadAddress ?? candidate.rawAddress ?? '',
+    thumbnail: '',
+    lat: 50,
+    lng: 50,
+    order: candidate.displayOrder ?? 0,
+    day: 0,
+    note: candidate.description ?? undefined,
+    // 좌표를 못 찾았거나 이름이 흐릿하면 사용자가 한 번 봐야 한다.
+    extractionStatus: candidate.mapped && !candidate.needsReview ? 'success' : 'review',
+    confidence: Math.round((candidate.confidence ?? 0) * 100),
+  };
+}
+
 export function avatarImageForCode(code: string | undefined | null): number | null {
   if (!code) return null;
   return AVATAR_IMAGE_BY_SERVER_CODE[code] ?? null;
@@ -203,23 +213,36 @@ export function avatarImageForCode(code: string | undefined | null): number | nu
 function useAppState(me: Me, onLogout: () => void) {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [trips, setTrips] = useState<TripFolder[]>(INITIAL_TRIPS);
+  const [trips, setTrips] = useState<TripFolder[]>([]);
+  const [isTripsLoading, setIsTripsLoading] = useState(true);
+  const [tripsError, setTripsError] = useState<string | null>(null);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
-  const [tripInvitations, setTripInvitations] = useState<TripInvitation[]>(INITIAL_TRIP_INVITATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [tripInvitations, setTripInvitations] = useState<TripInvitation[]>([]);
   const [focusedInvitationId, setFocusedInvitationId] = useState<number | null>(null);
   const [isTripMapOpen, setIsTripMapOpen] = useState(false);
-  const [activeTrip, setActiveTrip] = useState<TripFolder>(INITIAL_TRIPS[0]);
+  /** 지도를 보고 있는 여행. 아직 아무것도 열지 않았으면 null 이다. */
+  const [activeTrip, setActiveTrip] = useState<TripFolder | null>(null);
   const [tripSearchQuery, setTripSearchQuery] = useState('');
   const [recommendationPeople, setRecommendationPeople] = useState('2');
   const [recommendationStyle, setRecommendationStyle] = useState<string>(TRAVEL_STYLES[0].code);
   const [recommendationRegion, setRecommendationRegion] = useState('제주');
   const [inviteTrip, setInviteTrip] = useState<TripFolder | null>(null);
+  /** 수정 모달을 띄울 여행. null 이면 닫혀 있다. */
+  const [editingTrip, setEditingTrip] = useState<TripFolder | null>(null);
+  const [isAddPlaceOpen, setIsAddPlaceOpen] = useState(false);
+  const [isAddingDay, setIsAddingDay] = useState(false);
 
   // 새 여행 만들기
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [isCreateTripInviteOpen, setIsCreateTripInviteOpen] = useState(false);
   const [newTripMembers, setNewTripMembers] = useState<InvitedTripMember[]>([]);
+  const [isCreatingTrip, setIsCreatingTrip] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingProfilePhoto, setIsUploadingProfilePhoto] = useState(false);
+  /** 수락·거절 응답을 기다리는 초대. 두 번 눌리지 않게 한다. */
+  const [respondingInvitationId, setRespondingInvitationId] = useState<number | null>(null);
+  const [deletingTripId, setDeletingTripId] = useState<number | null>(null);
 
   // 환경설정
   const [pushNotification, setPushNotification] = useState(true);
@@ -229,26 +252,35 @@ function useAppState(me: Me, onLogout: () => void) {
   // 추출 탭
   const [inputUrl, setInputUrl] = useState('https://instagram.com/p/C_jeju_cafe_art');
   const [isExtracting, setIsExtracting] = useState(false);
-  const [extractedPlaces, setExtractedPlaces] = useState<ExtractedPlace[]>(INITIAL_EXTRACTED_PLACES);
+  const [extractedPlaces, setExtractedPlaces] = useState<ExtractedPlace[]>([]);
+  /** 맞춤 추천 결과. 아직 수락·거절하지 않은 것만 담는다. */
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [selectedExtractedPlaceIds, setSelectedExtractedPlaceIds] = useState<number[]>(
-    INITIAL_EXTRACTED_PLACES.map((p) => p.id),
+    [],
   );
   const [isTripPickerOpen, setIsTripPickerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedTripForExtract, setSelectedTripForExtract] = useState(1);
-  // 첨부한 스크린샷 파일명 (최대 10장). TODO(서버 연동): POST /files 로 올린 뒤 받은 id 로 교체.
+  // 첨부한 스크린샷 파일 이름. 업로드에 쓰는 원본은 extractImages 가 들고 있다.
   const [extractImageNames, setExtractImageNames] = useState<string[]>([]);
+  /** 고른 스크린샷 원본. 이름만으로는 업로드할 수 없어 따로 들고 있는다. */
+  const [extractImages, setExtractImages] = useState<PickedFile[]>([]);
 
   // 여행 지도 & 팀 기록
-  const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem>(MAP_PLACES[0]);
+  const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem | null>(null);
   const [isPlaceDetailModalOpen, setIsPlaceDetailModalOpen] = useState(false);
   const [startPlaceCamera, setStartPlaceCamera] = useState(false);
-  const [placeRecords, setPlaceRecords] = useState<PlaceRecord[]>(INITIAL_PLACE_RECORDS);
+  const [placeRecords, setPlaceRecords] = useState<PlaceRecord[]>([]);
+  const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [isPinLogMakerOpen, setIsPinLogMakerOpen] = useState(false);
   // 홈 빠른 촬영: 촬영 대상 여행과 열림 여부
-  const [pinLogTrip, setPinLogTrip] = useState<TripFolder>(INITIAL_TRIPS[0]);
+  const [pinLogTrip, setPinLogTrip] = useState<TripFolder | null>(null);
   const [isQuickPinLogCameraOpen, setIsQuickPinLogCameraOpen] = useState(false);
-  const [mapPlaces, setMapPlaces] = useState<PlaceItem[]>(MAP_PLACES);
+  const [mapPlaces, setMapPlaces] = useState<PlaceItem[]>([]);
+  const [isMapPlacesLoading, setIsMapPlacesLoading] = useState(false);
+  const [mapPlacesError, setMapPlacesError] = useState<string | null>(null);
+  /** 이 여행에 실제로 있는 일자 번호 (1day, 2day ... 칩). */
+  const [tripDayNumbers, setTripDayNumbers] = useState<number[]>([]);
   const [isOptimizingRoute, setIsOptimizingRoute] = useState(false);
 
   // 바텀시트
@@ -256,10 +288,11 @@ function useAppState(me: Me, onLogout: () => void) {
   const [selectedDayFilter, setSelectedDayFilter] = useState<number | 'all'>('all');
 
   // 핀로그 & 프로필
-  const [vlogClips, setVlogClips] = useState<VlogClip[]>(SAMPLE_VLOG_CLIPS);
+  const [vlogClips, setVlogClips] = useState<VlogClip[]>([]);
+  const [isVlogClipsLoading, setIsVlogClipsLoading] = useState(false);
   const [activeClipModal, setActiveClipModal] = useState<VlogClip | null>(null);
-  const [selectedProfileAvatar, setSelectedProfileAvatar] = useState<ProfileAvatar>(PROFILE_AVATARS[0]);
-  const [pendingProfileAvatar, setPendingProfileAvatar] = useState<ProfileAvatar>(PROFILE_AVATARS[0]);
+  const [selectedProfileAvatar, setSelectedProfileAvatar] = useState<ProfileAvatar>(() => profileAvatarOf(me));
+  const [pendingProfileAvatar, setPendingProfileAvatar] = useState<ProfileAvatar>(() => profileAvatarOf(me));
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [profileNickname, setProfileNickname] = useState(me.nickname);
   const [pendingProfileNickname, setPendingProfileNickname] = useState(me.nickname);
@@ -273,24 +306,56 @@ function useAppState(me: Me, onLogout: () => void) {
     setIsAvatarPickerOpen(true);
   };
 
-  /** 닉네임은 PATCH /users/me 로 저장한다. 아바타 선택은 아직 서버 연동 전이라 앱 안에서만 바뀐다. */
+  /**
+   * 닉네임·아바타·프로필 사진을 저장한다.
+   *
+   * 서버는 아바타와 프로필 사진을 둘 중 하나만 들고 있어서, 사진을 고르면 아바타가
+   * 해제되고 아바타를 고르면 사진이 지워진다. 그래서 둘 중 바뀐 쪽만 보낸다.
+   */
   const saveProfile = async () => {
     const nickname = pendingProfileNickname.trim();
-    if (!nickname) {
+    if (!nickname || isSavingProfile) {
       return;
     }
-    if (nickname !== profileNickname) {
-      try {
+    setIsSavingProfile(true);
+    try {
+      if (nickname !== profileNickname) {
         await updateNickname(nickname);
-      } catch {
-        showToast('닉네임을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
-        return;
       }
+      if (pendingProfileAvatar.photoUrl) {
+        if (pendingProfileAvatar.photoUrl !== selectedProfileAvatar.photoUrl) {
+          await updateProfileImage(pendingProfileAvatar.photoUrl);
+        }
+      } else if (pendingProfileAvatar.code !== selectedProfileAvatar.code || selectedProfileAvatar.photoUrl) {
+        const avatars = await fetchAvatars();
+        const match = avatars.find((a) => a.code === pendingProfileAvatar.code);
+        if (match) await selectAvatar(match.id);
+      }
+      setSelectedProfileAvatar(pendingProfileAvatar);
+      setProfileNickname(nickname);
+      setIsAvatarPickerOpen(false);
+      showToast('프로필을 변경했어요.');
+    } catch (e) {
+      showToast(errorMessage(e, '프로필을 저장하지 못했어요.'));
+    } finally {
+      setIsSavingProfile(false);
     }
-    setSelectedProfileAvatar(pendingProfileAvatar);
-    setProfileNickname(nickname);
-    setIsAvatarPickerOpen(false);
-    showToast('프로필을 변경했어요.');
+  };
+
+  /** 갤러리에서 고른 사진을 올려 프로필 사진 후보로 잡아둔다. 저장은 saveProfile 이 한다. */
+  const pickProfilePhoto = async () => {
+    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
+    const asset = res.assets?.[0];
+    if (res.didCancel || !asset?.uri) return;
+    setIsUploadingProfilePhoto(true);
+    try {
+      const uploaded = await uploadFile({ uri: asset.uri, fileName: asset.fileName, type: asset.type });
+      setPendingProfileAvatar((cur) => ({ ...cur, photoUrl: uploaded.url }));
+    } catch (e) {
+      showToast(errorMessage(e, '사진을 올리지 못했어요.'));
+    } finally {
+      setIsUploadingProfilePhoto(false);
+    }
   };
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -308,6 +373,252 @@ function useAppState(me: Me, onLogout: () => void) {
     toastTimer.current = setTimeout(() => setToastMessage(null), 2800);
   };
 
+  /** GET /trips. 실패하면 목록 자리에 다시 시도할 수 있는 안내를 띄운다. */
+  const reloadTrips = useCallback(async () => {
+    setIsTripsLoading(true);
+    setTripsError(null);
+    try {
+      const list = await fetchTrips();
+      setTrips(list.map((trip) => toTripFolder(trip)));
+    } catch (e) {
+      setTripsError(errorMessage(e, '여행 목록을 불러오지 못했어요.'));
+    } finally {
+      setIsTripsLoading(false);
+    }
+  }, []);
+
+  /**
+   * GET /notifications. 서버의 title·body 를 한 줄 메시지로 합친다.
+   * 알림은 실패해도 화면 한 구석일 뿐이라 비워 두고 넘어간다.
+   */
+  const reloadNotifications = useCallback(async () => {
+    try {
+      const list = await fetchNotifications();
+      setNotifications(
+        list.map((n) => ({
+          id: n.id,
+          type: n.type as NotificationType,
+          targetType: n.targetType as NotificationItem['targetType'],
+          targetId: n.targetId ?? 0,
+          message: n.body ? `${n.title} ${n.body}` : n.title,
+          createdAt: relativeTime(n.createdAt),
+          read: n.read,
+        })),
+      );
+    } catch {
+      setNotifications([]);
+    }
+  }, []);
+
+  /** GET /trip-invitations 중 아직 답하지 않은 것만 "받은 초대"에 띄운다. */
+  const reloadInvitations = useCallback(async () => {
+    try {
+      const list = await fetchMyInvitations();
+      setTripInvitations(
+        list
+          .filter((i) => i.status === 'PENDING')
+          .map((i) => ({
+            id: i.id,
+            inviterName: i.inviter.nickname,
+            inviterAvatar: i.inviter.avatarImageUrl ?? i.inviter.profileImageUrl ?? '🎀',
+            tripTitle: i.tripTitle,
+            date: invitationDateLabel(i.startDate, i.endDate),
+          })),
+      );
+    } catch {
+      setTripInvitations([]);
+    }
+  }, []);
+
+  /** 핀로그 탭에서 고른 여행의 완성본 목록. 합성 중인 것은 아직 재생할 수 없어 뺀다. */
+  const reloadVlogClips = useCallback(async (tripId: number) => {
+    setIsVlogClipsLoading(true);
+    try {
+      const list = await fetchPinlogs(tripId);
+      setVlogClips(
+        list
+          .filter((p) => p.status === 'DONE')
+          .map((p) => ({
+            id: p.id,
+            time: p.createdAt.slice(0, 10).replace(/-/g, '.'),
+            location: p.title ?? 'PinLog',
+            thumbnail: pinlogThumbnailUrl(p) ?? pinlogVideoUrl(p) ?? '',
+            selected: false,
+          })),
+      );
+    } catch {
+      setVlogClips([]);
+    } finally {
+      setIsVlogClipsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadTrips();
+    reloadNotifications();
+    reloadInvitations();
+  }, [reloadTrips, reloadNotifications, reloadInvitations]);
+
+  // 핀로그 탭은 고른 여행이 바뀔 때마다 그 여행의 완성본을 다시 받는다.
+  useEffect(() => {
+    if (pinLogTrip) reloadVlogClips(pinLogTrip.id);
+    else setVlogClips([]);
+  }, [pinLogTrip, reloadVlogClips]);
+
+  /**
+   * 검색해서 고른 장소를 지금 보고 있는 여행에 핀으로 추가한다.
+   *
+   * 검색 결과와 서버의 PlaceInput 은 필드가 같아서 그대로 넘긴다. 날짜는 정하지 않아
+   * "미배정 핀"으로 들어가고, 추가 뒤에는 일정을 다시 받아 지도에 반영한다.
+   */
+  const handleAddPlace = async (place: PlaceSearchResult): Promise<boolean> => {
+    if (!activeTrip) return false;
+    try {
+      await createItineraryItem({ tripId: activeTrip.id, place });
+      await loadItinerary(activeTrip.id);
+      setTrips((cur) =>
+        cur.map((t) => (t.id === activeTrip.id ? { ...t, placesCount: t.placesCount + 1 } : t)),
+      );
+      showToast(`'${place.name}'을(를) 지도에 추가했어요.`);
+      return true;
+    } catch (e) {
+      showToast(errorMessage(e, '장소를 추가하지 못했어요.'));
+      return false;
+    }
+  };
+
+  /**
+   * 다음 번호의 일자를 만든다.
+   *
+   * 날짜는 여행 시작일 + (N-1)일로 채운다. 서버는 visitDate 없이도 받아주지만,
+   * 날짜가 없으면 화면에서 "며칠인지" 알 수 없어 일자 칩이 번호뿐이 된다.
+   * 여행 시작일을 모르면(상세 조회 실패) 번호만 보낸다.
+   */
+  const handleAddDay = async () => {
+    if (!activeTrip || isAddingDay) return;
+    setIsAddingDay(true);
+    try {
+      const nextNumber = (tripDayNumbers[tripDayNumbers.length - 1] ?? 0) + 1;
+      let visitDate: string | undefined;
+      try {
+        const detail = await fetchTrip(activeTrip.id);
+        if (detail.startDate) visitDate = addDays(detail.startDate, nextNumber - 1);
+      } catch {
+        // 날짜 없이도 일자는 만들 수 있다.
+      }
+      await createItineraryDay(activeTrip.id, nextNumber, visitDate);
+      await loadItinerary(activeTrip.id);
+      showToast(`${nextNumber}일차를 만들었어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '일자를 만들지 못했어요.'));
+    } finally {
+      setIsAddingDay(false);
+    }
+  };
+
+  /** 여행의 일자와 핀을 받아 지도·바텀시트에 올린다. */
+  const loadItinerary = useCallback(async (tripId: number) => {
+    setIsMapPlacesLoading(true);
+    setMapPlacesError(null);
+    try {
+      const [days, items] = await Promise.all([
+        fetchItineraryDays(tripId),
+        fetchItineraryItems(tripId),
+      ]);
+      const places = toPlaceItems(items);
+      setMapPlaces(places);
+      // 기록은 핀과 같이 보여주므로 함께 받아둔다. 실패해도 지도는 그대로 쓸 수 있다.
+      fetchTripDiaries(tripId)
+        .then((diaries) => setPlaceRecords(diaries.map(toPlaceRecord)))
+        .catch(() => setPlaceRecords([]));
+      setTripDayNumbers(days.map((d) => d.dayNumber).sort((a, b) => a - b));
+      // 핀을 고르기 전에도 상세 카드가 하나는 떠 있어야 해서 첫 핀을 잡아둔다.
+      if (places.length > 0) setSelectedMapPin(places[0]);
+    } catch (e) {
+      setMapPlaces([]);
+      setTripDayNumbers([]);
+      setMapPlacesError(errorMessage(e, '일정을 불러오지 못했어요.'));
+    } finally {
+      setIsMapPlacesLoading(false);
+    }
+  }, []);
+
+  /**
+   * 목록의 여행을 연다. 카드가 들고 있는 값으로 먼저 열어 두고,
+   * GET /trips/{id} 로 받은 최신 값(장소 개수 등)으로 덮어쓴다.
+   * 지도에 띄울 일정은 여행마다 다르므로 열 때마다 새로 받는다.
+   */
+  const openTrip = async (trip: TripFolder) => {
+    setActiveTrip(trip);
+    setIsTripMapOpen(true);
+    setSelectedDayFilter('all');
+    loadItinerary(trip.id);
+    try {
+      // 목록(GET /trips)에는 테마가 없어서 여행을 열 때 따로 받아 카드에 반영한다.
+      const [detail, styles] = await Promise.all([
+        fetchTrip(trip.id),
+        fetchTripStyles(trip.id).catch(() => []),
+      ]);
+      const fresh = toTripFolder(detail, {
+        image: trip.image,
+        tag: styles[0] ? travelStyleLabel(styles[0].code) : trip.tag,
+      });
+      setActiveTrip(fresh);
+      setTrips((cur) => cur.map((t) => (t.id === fresh.id ? fresh : t)));
+    } catch {
+      // 상세를 못 받아와도 목록에서 온 값으로 화면은 그대로 쓸 수 있다.
+    }
+  };
+
+  /**
+   * 수정이 끝난 뒤 목록·지도에 반영한다.
+   *
+   * 서버를 다시 부르지 않고 바꾼 값만 덮어쓴다. 제목·날짜만 고쳤는데 장소 개수나
+   * 표지까지 서버 기준으로 되돌아가면 사용자에겐 엉뚱한 변화로 보인다.
+   */
+  const handleTripUpdated = (tripId: number, payload: TripUpdatePayload) => {
+    const apply = (t: TripFolder): TripFolder =>
+      t.id === tripId
+        ? {
+            ...t,
+            title: payload.title ?? t.title,
+            date: tripDateLabel(payload.startDate ?? null, payload.endDate ?? null),
+            dDay: tripDDayLabel(payload.startDate ?? null),
+          }
+        : t;
+    setTrips((cur) => cur.map(apply));
+    setActiveTrip((cur) => (cur ? apply(cur) : cur));
+    showToast('여행 정보를 수정했어요.');
+  };
+
+  /**
+   * DELETE /trips/{id}. 되돌릴 수 없으므로 먼저 확인을 받는다.
+   * 주인만 지울 수 있어서 카드에서도 OWNER 에게만 버튼을 보여준다.
+   */
+  const handleDeleteTrip = (trip: TripFolder) => {
+    Alert.alert('여행 삭제', `'${trip.title}' 여행을 삭제할까요?\n되돌릴 수 없어요.`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingTripId(trip.id);
+          try {
+            await deleteTrip(trip.id);
+            setTrips((cur) => cur.filter((t) => t.id !== trip.id));
+            // 지운 여행의 지도를 보고 있었다면 목록으로 돌려보낸다.
+            if (activeTrip?.id === trip.id) setIsTripMapOpen(false);
+            showToast('여행을 삭제했어요.');
+          } catch (e) {
+            showToast(errorMessage(e, '여행을 삭제하지 못했어요.'));
+          } finally {
+            setDeletingTripId(null);
+          }
+        },
+      },
+    ]);
+  };
+
   // 서버 호출이 실패해도 토큰은 지워져 있으므로 로그인 화면으로 보낸다.
   const handleLogout = async () => {
     try {
@@ -319,17 +630,70 @@ function useAppState(me: Me, onLogout: () => void) {
   };
 
   // 장소 기록 저장 (1인 1기록 규칙)
-  const handleSavePlaceRecord = (record: PlaceRecord) => {
-    setPlaceRecords((prev) => {
-      const idx = prev.findIndex((r) => r.pinId === record.pinId && r.userId === record.userId);
-      if (idx >= 0) {
-        const updated = [...prev];
-        updated[idx] = record;
-        return updated;
-      }
-      return [record, ...prev];
-    });
-    showToast('장소 기록이 성공적으로 저장되었습니다! 📍');
+  /**
+   * 장소 기록을 저장한다. 사진·영상은 먼저 POST /files 로 올리고 받은 주소를 함께 보낸다.
+   *
+   * 서버는 핀 하나에 사람당 기록 하나만 두므로, 이미 내 기록이 있으면 PATCH 로 고친다.
+   * 화면이 들고 있던 기록은 로컬 파일 주소라, 저장 뒤에는 서버가 돌려준 값으로 바꿔
+   * 끼운다. 그래야 다시 열었을 때와 같은 것을 보게 된다.
+   */
+  const handleSavePlaceRecord = async (record: PlaceRecord) => {
+    if (isSavingRecord) return;
+    setIsSavingRecord(true);
+    try {
+      const media = await uploadRecordMedia(record);
+      const existing = placeRecords.find((r) => r.pinId === record.pinId && r.userId === me.id);
+      const saved = existing
+        ? await updateDiary(existing.id, { content: record.memo, rating: record.rating, media })
+        : await createDiary({
+            itineraryItemId: record.pinId,
+            content: record.memo,
+            rating: record.rating,
+            media,
+          });
+      const mapped = toPlaceRecord(saved);
+      setPlaceRecords((prev) => {
+        const idx = prev.findIndex((r) => r.id === mapped.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = mapped;
+          return updated;
+        }
+        return [mapped, ...prev];
+      });
+      showToast('장소 기록이 성공적으로 저장되었습니다! 📍');
+    } catch (e) {
+      showToast(errorMessage(e, '기록을 저장하지 못했어요.'));
+    } finally {
+      setIsSavingRecord(false);
+    }
+  };
+
+  /**
+   * 기록에 붙은 사진·영상 중 아직 안 올린 것만 올린다.
+   *
+   * 이미 서버에 있는 파일은 주소가 BASE_URL 로 시작하므로 그대로 다시 보내고,
+   * 갤러리·카메라에서 막 고른 것(file://, content://)만 업로드한다. 고칠 때마다
+   * 같은 사진을 다시 올리면 서버에 똑같은 파일이 쌓인다.
+   */
+  const uploadRecordMedia = async (record: PlaceRecord): Promise<DiaryMediaPayload[]> => {
+    const isUploaded = (uri: string) => uri.startsWith(BASE_URL);
+    const toServerPath = (uri: string) => uri.slice(BASE_URL.length);
+
+    const newPhotos = record.photos.filter((uri) => !isUploaded(uri));
+    const uploaded = newPhotos.length > 0 ? await uploadFiles(newPhotos.map((uri) => ({ uri }))) : [];
+    let next = 0;
+    const photos: DiaryMediaPayload[] = record.photos.map((uri) =>
+      isUploaded(uri) ? { fileUrl: toServerPath(uri) } : { fileUrl: uploaded[next++].url },
+    );
+
+    const clip = record.videoClip;
+    if (!clip?.videoUrl) return photos;
+    if (isUploaded(clip.videoUrl)) {
+      return [...photos, { fileUrl: toServerPath(clip.videoUrl), durationMs: Math.round(clip.duration * 1000) }];
+    }
+    const video = await uploadFile({ uri: clip.videoUrl, type: 'video/mp4' });
+    return [...photos, { fileUrl: video.url, durationMs: video.durationMs ?? Math.round(clip.duration * 1000) }];
   };
 
   /** 'D-28' → 28. 형식이 다르면 맨 뒤로 보낸다. */
@@ -351,12 +715,12 @@ function useAppState(me: Me, onLogout: () => void) {
 
   // 빠른 촬영 영상을 그 장소의 내 기록에 붙인다. 기록이 없으면 새로 만든다(1인 1기록).
   const handleQuickPinLogUpload = (place: PlaceItem, clip: QuickClip) => {
-    const existing = placeRecords.find((r) => r.pinId === place.id && r.userId === CURRENT_USER.id);
+    const existing = placeRecords.find((r) => r.pinId === place.id && r.userId === me.id);
     handleSavePlaceRecord({
       id: existing?.id ?? Date.now(),
       pinId: place.id,
-      userId: CURRENT_USER.id,
-      authorName: CURRENT_USER.name,
+      userId: me.id,
+      authorName: me.nickname,
       authorAvatar: selectedProfileAvatar.image,
       createdAt: '방금 전',
       rating: existing?.rating ?? 5,
@@ -379,56 +743,121 @@ function useAppState(me: Me, onLogout: () => void) {
   const removeNewTripMember = (loginId: string) =>
     setNewTripMembers((cur) => cur.filter((m) => m.loginId !== loginId));
 
-  // TODO(서버 연동): POST /trips 로 만들고, newTripMembers 에게 초대를 보낸 뒤 응답의 여행을 목록에 넣는다.
-  const handleCreateTrip = (payload: NewTripPayload) => {
-    const dDay = daysBetween(toYmd(new Date()), payload.startDate);
-    const createdTrip: TripFolder = {
-      id: Date.now(),
-      title: `${payload.title} ${payload.emoji}`,
-      // 목업 형식 그대로: '2026.10.25 - 10.28'
-      date: `${payload.startDate.replace(/-/g, '.')} - ${payload.endDate.slice(5).replace('-', '.')}`,
-      dDay: dDay > 0 ? `D-${dDay}` : dDay === 0 ? 'D-DAY' : `D+${-dDay}`,
-      image: payload.coverImage,
-      placesCount: 0,
-      tag: payload.tags[0] ?? '여행',
-    };
-    setTrips((cur) => [createdTrip, ...cur]);
-    setActiveTrip(createdTrip);
-    closeCreateTrip();
-    showToast(`'${payload.title}' 여행을 만들었어요.`);
+  /**
+   * POST /trips. 초대한 사람들에게는 초대장이 갈 뿐이라 만든 직후에는 아직 나 혼자다.
+   *
+   * 표지는 POST /trips 에 실을 자리가 없어서 만든 뒤 PATCH 로 붙인다. 붙이기에 실패해도
+   * 여행 자체는 만들어졌으므로 기본 표지로 두고 넘어간다.
+   *
+   * 태그는 여전히 서버에 보낼 자리가 없어 화면에만 얹어 둔다.
+   */
+  const handleCreateTrip = async (payload: NewTripPayload) => {
+    if (isCreatingTrip) return;
+    setIsCreatingTrip(true);
+    try {
+      let created = await createTrip({
+        title: `${payload.title} ${payload.emoji}`.trim(),
+        region: payload.location || undefined,
+        startDate: payload.startDate,
+        endDate: payload.endDate,
+        inviteeUsernames: newTripMembers.map((m) => m.loginId),
+      });
+      if (payload.coverImageUrl) {
+        try {
+          created = await updateTrip(created.id, { coverImageUrl: payload.coverImageUrl });
+        } catch {
+          showToast('표지는 저장하지 못했어요. 기본 표지로 만들었어요.');
+        }
+      }
+      if (payload.styleCodes.length > 0) {
+        try {
+          await replaceTripStyles(created.id, payload.styleCodes);
+        } catch {
+          showToast('테마는 저장하지 못했어요. 나중에 다시 골라 주세요.');
+        }
+      }
+      const createdTrip = toTripFolder(created, {
+        image: payload.coverImage,
+        tag: travelStyleLabel(payload.styleCodes[0] ?? ''),
+      });
+      setTrips((cur) => [createdTrip, ...cur]);
+      setActiveTrip(createdTrip);
+      closeCreateTrip();
+      showToast(`'${payload.title}' 여행을 만들었어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '여행을 만들지 못했어요.'));
+    } finally {
+      setIsCreatingTrip(false);
+    }
   };
 
-  const handleDeletePlaceRecord = (recordId: number) => {
+  /** 붙어 있던 사진·영상 파일도 서버에서 같이 지워진다. */
+  const handleDeletePlaceRecord = async (recordId: number) => {
+    const previous = placeRecords;
     setPlaceRecords((prev) => prev.filter((r) => r.id !== recordId));
-    showToast('장소 기록이 삭제되었습니다.');
+    try {
+      await deleteDiary(recordId);
+      showToast('장소 기록이 삭제되었습니다.');
+    } catch (e) {
+      setPlaceRecords(previous);
+      showToast(errorMessage(e, '기록을 삭제하지 못했어요.'));
+    }
   };
 
+  /** 합성이 끝나면 목록 맨 앞에 끼워 넣는다. 서버에서 다시 받아도 같은 자리에 온다. */
   const handleSynthesizeComplete = (newVlog: SynthesizedVlog) => {
     const newClip: VlogClip = {
       id: newVlog.id,
-      time: '18:50',
-      location: '팀원 제주 완성 브이로그 🎬',
-      thumbnail: newVlog.clips[0]?.thumbnail || MAP_PLACES[0].thumbnail,
+      time: newVlog.createdAt,
+      location: newVlog.title,
+      thumbnail: newVlog.clips[0]?.thumbnail ?? '',
       selected: true,
     };
     setVlogClips((prev) => [newClip, ...prev]);
-    showToast('🎬 팀원 영상으로 만든 PinLog 브이로그가 등록되었습니다!');
+    showToast('🎬 PinLog 브이로그가 등록되었습니다!');
   };
 
-  // AI 추출 시뮬레이션
-  const handleExtractSubmit = () => {
-    if (!inputUrl && extractImageNames.length === 0) {
-      return;
-    }
+  /**
+   * AI 장소 추출. 스크린샷이 있으면 먼저 올리고 그 주소로, 없으면 링크로 요청한다.
+   *
+   * Gemini 호출이라 바로 끝나지 않는다. 요청은 202 로 끝나고 상태를 폴링해서
+   * SUCCESS 가 되면 후보 목록을 읽는다. 좌표를 못 찾은 후보(mapped=false)는 핀으로
+   * 추가할 수 없어서 기본 선택에서 빼둔다.
+   */
+  const handleExtractSubmit = async () => {
+    if (isExtracting) return;
+    if (!inputUrl.trim() && extractImages.length === 0) return;
     setIsExtracting(true);
-    setTimeout(() => {
-      setIsExtracting(false);
-      const refreshed = INITIAL_EXTRACTED_PLACES.map((p) => ({ ...p, id: Date.now() + p.id }));
-      setExtractedPlaces(refreshed);
-      setSelectedExtractedPlaceIds(refreshed.map((p) => p.id));
+    try {
+      const request =
+        extractImages.length > 0
+          ? await createAiRequest({
+              inputType: 'IMAGE',
+              imageUrls: (await uploadFiles(extractImages)).map((f) => f.url),
+            })
+          : await createAiRequest({ inputType: 'LINK', sourceUrl: inputUrl.trim() });
+
+      const finished = await waitForAiRequest(request.id);
+      if (finished.status !== 'SUCCESS') {
+        showToast(
+          finished.status === 'FAILED'
+            ? `추출에 실패했어요. (${finished.errorCode ?? '알 수 없는 오류'})`
+            : '추출이 아직 끝나지 않았어요. 잠시 후 다시 확인해 주세요.',
+        );
+        return;
+      }
+
+      const candidates = await fetchPlaceCandidates(finished.id);
+      const places = candidates.map(toExtractedPlace);
+      setExtractedPlaces(places);
+      setSelectedExtractedPlaceIds(candidates.filter((c) => c.mapped).map((c) => c.id));
       setIsTripPickerOpen(false);
-      showToast(`AI가 장소 ${refreshed.length}곳을 추출했습니다!`);
-    }, 2000);
+      showToast(`AI가 장소 ${places.length}곳을 추출했습니다!`);
+    } catch (e) {
+      showToast(errorMessage(e, '추출 요청을 보내지 못했어요.'));
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const handleToggleExtractedPlace = (placeId: number) => {
@@ -437,14 +866,25 @@ function useAppState(me: Me, onLogout: () => void) {
     );
   };
 
-  const handleAddPlaceToTrip = (tripId: number) => {
+  /** 체크한 후보를 여행에 핀으로 추가한다. 좌표를 못 찾은 것은 서버가 건너뛴다. */
+  const handleAddPlaceToTrip = async (tripId: number) => {
     const targetTrip = trips.find((t) => t.id === tripId);
-    const count = selectedExtractedPlaceIds.length;
-    if (!count) return;
-    setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, placesCount: t.placesCount + count } : t)));
-    setSelectedTripForExtract(tripId);
-    setIsTripPickerOpen(false);
-    showToast(`선택한 ${count}개 장소를 '${targetTrip?.title}'에 추가했어요.`);
+    if (selectedExtractedPlaceIds.length === 0) return;
+    try {
+      const { addedCount, skippedCount } = await addCandidatesToTrip(tripId, selectedExtractedPlaceIds);
+      setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, placesCount: t.placesCount + addedCount } : t)));
+      setSelectedTripForExtract(tripId);
+      setIsTripPickerOpen(false);
+      showToast(
+        skippedCount > 0
+          ? `${addedCount}개를 '${targetTrip?.title}'에 추가했어요. ${skippedCount}개는 지도에서 찾지 못했어요.`
+          : `선택한 ${addedCount}개 장소를 '${targetTrip?.title}'에 추가했어요.`,
+      );
+      // 지금 보고 있는 여행이면 지도에도 바로 반영한다.
+      if (activeTrip?.id === tripId) loadItinerary(tripId);
+    } catch (e) {
+      showToast(errorMessage(e, '장소를 추가하지 못했어요.'));
+    }
   };
 
   const handleClearCache = () => {
@@ -457,13 +897,27 @@ function useAppState(me: Me, onLogout: () => void) {
     showToast('여행 목록이 모두 지워졌습니다. 첫 여행을 생성해보세요!');
   };
 
-  const handleResetTrips = () => {
-    setTrips(INITIAL_TRIPS);
-    showToast('기본 샘플 여행 목록이 복원되었습니다 🎉');
+  // 목록은 이제 서버가 갖고 있으므로 샘플을 되돌리는 대신 다시 받아온다.
+  const handleResetTrips = async () => {
+    await reloadTrips();
+    showToast('여행 목록을 다시 불러왔어요.');
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    const previous = notifications;
+    setNotifications((cur) => cur.map((n) => ({ ...n, read: true })));
+    try {
+      await markAllNotificationsRead();
+    } catch (e) {
+      setNotifications(previous);
+      showToast(errorMessage(e, '읽음 처리를 하지 못했어요.'));
+    }
   };
 
   const handleNotificationSelect = (notification: NotificationItem) => {
     setNotifications((cur) => cur.map((n) => (n.id === notification.id ? { ...n, read: true } : n)));
+    // 읽음 표시가 실패해도 화면 이동까지 막을 이유는 없다. 다음 조회 때 다시 안 읽음으로 보일 뿐이다.
+    if (!notification.read) markNotificationRead(notification.id).catch(() => {});
 
     if (notification.type === 'TRIP_INVITED' && notification.targetType === 'INVITATION') {
       setFocusedInvitationId(notification.targetId);
@@ -490,56 +944,143 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   };
 
-  const handleAcceptInvitation = (invitation: TripInvitation) => {
-    setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
-    setTrips((cur) => (cur.some((t) => t.id === INVITED_JEJU_TRIP.id) ? cur : [INVITED_JEJU_TRIP, ...cur]));
-    setFocusedInvitationId(null);
-    showToast(`'${invitation.tripTitle}' 초대를 수락했어요.`);
+  /**
+   * 팀원 초대. 닉네임이 아니라 @아이디를 보낸다 — 닉네임은 중복될 수 있어 누구인지
+   * 특정할 수 없기 때문이다. 초대장이 갈 뿐이라 상대가 수락해야 팀원이 된다.
+   */
+  const handleInviteToTrip = async (tripId: number, nickname: string, loginId: string) => {
+    try {
+      await inviteToTrip(tripId, loginId);
+      showToast(`${nickname}(@${loginId})님에게 여행 초대를 보냈어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '초대를 보내지 못했어요.'));
+    }
   };
 
-  const handleRejectInvitation = (invitation: TripInvitation) => {
-    setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
-    setFocusedInvitationId(null);
-    showToast(`'${invitation.tripTitle}' 초대를 거절했어요.`);
+  /** 수락하면 그 여행의 팀원이 되므로 목록을 다시 받아와야 새 여행이 보인다. */
+  const handleAcceptInvitation = async (invitation: TripInvitation) => {
+    if (respondingInvitationId !== null) return;
+    setRespondingInvitationId(invitation.id);
+    try {
+      await acceptInvitation(invitation.id);
+      setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
+      setFocusedInvitationId(null);
+      showToast(`'${invitation.tripTitle}' 초대를 수락했어요.`);
+      await reloadTrips();
+    } catch (e) {
+      showToast(errorMessage(e, '초대를 수락하지 못했어요.'));
+    } finally {
+      setRespondingInvitationId(null);
+    }
   };
 
-  const handleOptimizeRoute = () => {
-    if (isOptimizingRoute) return;
+  const handleRejectInvitation = async (invitation: TripInvitation) => {
+    if (respondingInvitationId !== null) return;
+    setRespondingInvitationId(invitation.id);
+    try {
+      await rejectInvitation(invitation.id);
+      setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
+      setFocusedInvitationId(null);
+      showToast(`'${invitation.tripTitle}' 초대를 거절했어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '초대를 거절하지 못했어요.'));
+    } finally {
+      setRespondingInvitationId(null);
+    }
+  };
+
+  /**
+   * 동선 최적화. 서버가 제안을 만들고(일정은 아직 그대로) 반영은 따로 요청해야 한다.
+   *
+   * 화면에는 "최적화" 버튼 하나뿐이라 둘을 이어서 부른다. 다만 제안만 만들고 끝나면
+   * 사용자 눈에는 아무 일도 안 일어난 것으로 보이기 때문이다. 반영까지 끝나면 일정을
+   * 다시 받아 바뀐 순서를 보여준다.
+   */
+  const handleOptimizeRoute = async () => {
+    if (isOptimizingRoute || !activeTrip) return;
+    if (mapPlaces.length < 2) {
+      showToast('최적화하려면 장소가 두 곳 이상 필요해요.');
+      return;
+    }
     setIsOptimizingRoute(true);
     showToast('AI가 이동 거리와 방문 시간을 계산하고 있어요.');
-
-    setTimeout(() => {
-      setMapPlaces((current) => {
-        if (current.length < 2) return current;
-        const remaining = [...current];
-        const optimized = [remaining.shift()!];
-        while (remaining.length > 0) {
-          const last = optimized[optimized.length - 1];
-          let nearestIndex = 0;
-          let nearestDistance = Number.POSITIVE_INFINITY;
-          remaining.forEach((candidate, index) => {
-            const distance =
-              Math.hypot(candidate.lat - last.lat, candidate.lng - last.lng) + Math.abs(candidate.day - last.day) * 30;
-            if (distance < nearestDistance) {
-              nearestDistance = distance;
-              nearestIndex = index;
-            }
-          });
-          optimized.push(remaining.splice(nearestIndex, 1)[0]);
-        }
-        return optimized.map((place, index) => ({ ...place, order: index + 1 }));
-      });
+    try {
+      const proposal = await createRouteOptimization(activeTrip.id);
+      await applyRouteOptimization(proposal.id);
+      await loadItinerary(activeTrip.id);
+      const saved = savedDistanceM(proposal);
+      showToast(
+        saved > 0
+          ? `동선을 정리했어요. 약 ${(saved / 1000).toFixed(1)}km 짧아졌어요.`
+          : '가장 효율적인 동선으로 장소 순서를 정리했어요.',
+      );
+    } catch (e) {
+      showToast(errorMessage(e, '동선을 최적화하지 못했어요.'));
+    } finally {
       setIsOptimizingRoute(false);
-      showToast('가장 효율적인 동선으로 장소 순서를 정리했어요.');
-    }, 1400);
+    }
   };
 
-  const handleAiTripRecommendation = () => {
+  /**
+   * 맞춤 추천. 고른 조건으로 요청하고, 완성되면 추출 탭의 후보 목록으로 보여준다.
+   *
+   * 추천은 AI 요청과 같은 파이프라인이라 상태를 똑같이 폴링한다. 다만 결과는
+   * place-candidates 가 아니라 /recommendations 에서 읽는다.
+   */
+  const handleAiTripRecommendation = async () => {
+    if (isExtracting) return;
+    const trip = activeTrip ?? trips[0];
+    if (!trip) {
+      showToast('먼저 여행을 만들어 주세요.');
+      return;
+    }
+    setIsExtracting(true);
+    setActiveTab('extract');
     setInputUrl(
       `${recommendationPeople}명 · ${recommendationRegion} · ${travelStyleLabel(recommendationStyle)} 여행 추천`,
     );
-    setActiveTab('extract');
-    showToast('선택한 조건으로 AI 추천 장소를 준비했어요.');
+    try {
+      const request = await createRecommendation({
+        tripId: trip.id,
+        styleCodes: [recommendationStyle],
+      });
+      const finished = await waitForAiRequest(request.id);
+      if (finished.status !== 'SUCCESS') {
+        showToast(`추천을 받지 못했어요. (${finished.errorCode ?? '잠시 후 다시 시도해 주세요'})`);
+        return;
+      }
+      const list = await fetchRecommendations(trip.id);
+      const suggested = list.filter((r) => r.status === 'SUGGESTED');
+      setRecommendations(suggested);
+      showToast(`조건에 맞는 장소 ${suggested.length}곳을 추천했어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '추천을 받지 못했어요.'));
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  /** 추천 수락 — 서버가 좌표를 찾아 일정에 핀으로 넣는다. 못 찾으면 422 다. */
+  const handleAcceptRecommendation = async (recommendationId: number) => {
+    try {
+      await acceptRecommendation(recommendationId);
+      setRecommendations((cur) => cur.filter((r) => r.id !== recommendationId));
+      showToast('추천 장소를 일정에 추가했어요.');
+      if (activeTrip) loadItinerary(activeTrip.id);
+    } catch (e) {
+      showToast(errorMessage(e, '추천 장소를 추가하지 못했어요.'));
+    }
+  };
+
+  const handleRejectRecommendation = async (recommendationId: number) => {
+    const previous = recommendations;
+    setRecommendations((cur) => cur.filter((r) => r.id !== recommendationId));
+    try {
+      await rejectRecommendation(recommendationId);
+    } catch (e) {
+      setRecommendations(previous);
+      showToast(errorMessage(e, '추천을 거절하지 못했어요.'));
+    }
   };
 
   return {
@@ -549,6 +1090,26 @@ function useAppState(me: Me, onLogout: () => void) {
     activeTab, setActiveTab,
     isSettingsOpen, setIsSettingsOpen,
     trips, setTrips,
+    isTripsLoading,
+    tripsError,
+    reloadTrips,
+    openTrip,
+    isCreatingTrip,
+    handleDeleteTrip,
+    deletingTripId,
+    editingTrip,
+    setEditingTrip,
+    handleTripUpdated,
+    isAddPlaceOpen,
+    setIsAddPlaceOpen,
+    handleAddPlace,
+    handleAddDay,
+    isAddingDay,
+    respondingInvitationId,
+    reloadNotifications,
+    reloadInvitations,
+    handleMarkAllNotificationsRead,
+    handleInviteToTrip,
     isNotificationOpen, setIsNotificationOpen,
     notifications,
     tripInvitations,
@@ -574,6 +1135,10 @@ function useAppState(me: Me, onLogout: () => void) {
     toastMessage,
     selectedTripForExtract, setSelectedTripForExtract,
     extractImageNames, setExtractImageNames,
+    extractImages, setExtractImages,
+    recommendations,
+    handleAcceptRecommendation,
+    handleRejectRecommendation,
     selectedMapPin, setSelectedMapPin,
     isPlaceDetailModalOpen, setIsPlaceDetailModalOpen,
     startPlaceCamera, setStartPlaceCamera,
@@ -582,10 +1147,16 @@ function useAppState(me: Me, onLogout: () => void) {
     pinLogTrip, setPinLogTrip,
     isQuickPinLogCameraOpen, setIsQuickPinLogCameraOpen,
     mapPlaces,
+    isMapPlacesLoading,
+    mapPlacesError,
+    tripDayNumbers,
+    reloadItinerary: () => activeTrip && loadItinerary(activeTrip.id),
     isOptimizingRoute,
     tripsSheetHeight, setTripsSheetHeight,
     selectedDayFilter, setSelectedDayFilter,
     vlogClips,
+    isVlogClipsLoading,
+    reloadVlogClips,
     activeClipModal, setActiveClipModal,
     selectedProfileAvatar, setSelectedProfileAvatar,
     pendingProfileAvatar, setPendingProfileAvatar,
@@ -596,6 +1167,9 @@ function useAppState(me: Me, onLogout: () => void) {
     isPinLogTripPickerOpen, setIsPinLogTripPickerOpen,
     openProfileEditor,
     saveProfile,
+    isSavingProfile,
+    pickProfilePhoto,
+    isUploadingProfilePhoto,
     profileDetailModal, setProfileDetailModal,
     // 파생값
     displayedMapPlaces,

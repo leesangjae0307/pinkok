@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from 'react-native';
 
 import { PixelExtractIcon, PixelHotAirBalloon, PixelTripsIcon } from '../../../components/pixel/PixelIcons';
 import {
@@ -11,7 +11,7 @@ import {
 } from '../../../components/pixel/Primitives';
 import { TRAVEL_STYLES } from '../../../constants';
 import { toImageSource } from '../../../data/mockData';
-import { avatarSilverBucket, useApp } from '../AppContext';
+import { avatarSilverBucket, profileAvatarSource, useApp } from '../AppContext';
 
 /** 목업 date 문자열('2026.10.12 - 10.15')에서 일수를 계산한다. 서버 연동 시 startDate/endDate 로 대체. */
 function tripDayCount(date: string): number {
@@ -32,8 +32,13 @@ export default function TripsListView() {
     focusedInvitationId,
     handleAcceptInvitation,
     handleRejectInvitation,
-    setActiveTrip,
-    setIsTripMapOpen,
+    openTrip,
+    handleDeleteTrip,
+    deletingTripId,
+    setEditingTrip,
+    isTripsLoading,
+    tripsError,
+    reloadTrips,
     setInviteTrip,
     selectedProfileAvatar,
     recommendationPeople,
@@ -43,6 +48,9 @@ export default function TripsListView() {
     recommendationRegion,
     setRecommendationRegion,
     handleAiTripRecommendation,
+    recommendations,
+    handleAcceptRecommendation,
+    handleRejectRecommendation,
   } = useApp();
   const [searchFocused, setSearchFocused] = React.useState(false);
 
@@ -160,17 +168,14 @@ export default function TripsListView() {
         <View className="gap-3">
           {filteredTrips.map((trip) => {
             const days = `${tripDayCount(trip.date)} days`;
-            const openTrip = () => {
-              setActiveTrip(trip);
-              setIsTripMapOpen(true);
-            };
+            const open = () => openTrip(trip);
             return (
               <View
                 key={trip.id}
                 className="w-full flex-row items-center gap-3 rounded-3xl border border-[#82F0DC] bg-white p-3 shadow-sm"
               >
                 <Pressable
-                  onPress={openTrip}
+                  onPress={open}
                   className="relative h-20 w-20 overflow-hidden rounded-2xl border border-slate-100 active:scale-95"
                 >
                   <Image source={toImageSource(trip.image)} resizeMode="cover" className="h-full w-full" />
@@ -180,7 +185,7 @@ export default function TripsListView() {
                 </Pressable>
 
                 <View className="min-w-0 flex-1">
-                  <Pressable onPress={openTrip}>
+                  <Pressable onPress={open}>
                     <Text numberOfLines={1} className="text-sm font-black text-slate-900">
                       {trip.title}
                     </Text>
@@ -198,14 +203,37 @@ export default function TripsListView() {
                     <Text className="text-[8px] font-bold text-slate-500">⏱️ {days}</Text>
                   </View>
 
-                  <View className="mt-1.5 flex-row justify-end">
+                  <View className="mt-1.5 flex-row items-center justify-end gap-1.5">
+                    {trip.isOwner && (
+                      <Pressable
+                        onPress={() => setEditingTrip(trip)}
+                        accessibilityLabel={`${trip.title} 수정`}
+                        className="h-[26px] w-[26px] items-center justify-center rounded-lg border border-[#82F0DC] bg-white active:scale-95"
+                      >
+                        <Text className="text-[11px]">✏️</Text>
+                      </Pressable>
+                    )}
+                    {trip.isOwner && (
+                      <Pressable
+                        onPress={() => handleDeleteTrip(trip)}
+                        disabled={deletingTripId === trip.id}
+                        accessibilityLabel={`${trip.title} 삭제`}
+                        className="h-[26px] w-[26px] items-center justify-center rounded-lg border border-rose-300 bg-rose-50 active:scale-95"
+                      >
+                        {deletingTripId === trip.id ? (
+                          <ActivityIndicator size="small" color="#e11d48" />
+                        ) : (
+                          <Text className="text-[11px]">🗑️</Text>
+                        )}
+                      </Pressable>
+                    )}
                     <Pressable
                       onPress={() => setInviteTrip(trip)}
                       accessibilityLabel={`${trip.title} 팀원 관리`}
                       className="flex-row items-center gap-1.5 rounded-lg border border-[#075953] bg-[#56EADD] px-2 py-1 active:scale-95"
                     >
                       <View className="flex-row items-center">
-                        <Image source={selectedProfileAvatar.image} className="h-4 w-4 rounded border border-white" />
+                        <Image source={toImageSource(profileAvatarSource(selectedProfileAvatar))} className="h-4 w-4 rounded border border-white" />
                         <Image source={avatarSilverBucket} className="-ml-1 h-4 w-4 rounded border border-white" />
                       </View>
                       <Text className="text-[8px] font-black text-[#075953]">팀원 추가·수정</Text>
@@ -215,13 +243,26 @@ export default function TripsListView() {
               </View>
             );
           })}
-          {filteredTrips.length === 0 && (
+          {isTripsLoading ? (
+            <View className="items-center rounded-3xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
+              <ActivityIndicator color="#075953" />
+            </View>
+          ) : tripsError ? (
+            <View className="items-center gap-3 rounded-3xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
+              <Text className="text-center text-xs font-bold text-slate-500">{tripsError}</Text>
+              <Pressable onPress={reloadTrips} className="rounded-xl bg-[#56EADD] px-4 py-2 active:scale-95">
+                <Text className="text-xs font-black text-[#075953]">다시 시도</Text>
+              </Pressable>
+            </View>
+          ) : filteredTrips.length === 0 ? (
             <View className="rounded-3xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
               <Text className="text-center text-xs font-bold text-slate-400">
-                '{tripSearchQuery}'와 일치하는 여행이 없어요.
+                {tripSearchQuery.trim()
+                  ? `'${tripSearchQuery}'와 일치하는 여행이 없어요.`
+                  : '아직 만든 여행이 없어요. 새 여행을 만들어 보세요.'}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
       </View>
 
@@ -272,6 +313,39 @@ export default function TripsListView() {
           >
             <Text className="text-xs font-black text-[#56EADD]">AI 추천 장소 추출하기</Text>
           </Pressable>
+
+          {/* 추천 결과. 수락하면 지금 보고 있는 여행의 일정에 핀으로 들어간다. */}
+          {recommendations.length > 0 && (
+            <View className="mt-3 gap-2">
+              {recommendations.map((rec) => (
+                <View key={rec.id} className="rounded-2xl border-2 border-[#075953] bg-white p-3">
+                  <Text className="text-xs font-black text-slate-900">{rec.name}</Text>
+                  {rec.address ? (
+                    <Text numberOfLines={1} className="mt-0.5 text-[9px] font-bold text-slate-500">
+                      📍 {rec.address}
+                    </Text>
+                  ) : null}
+                  {rec.reason ? (
+                    <Text className="mt-1 text-[10px] font-semibold leading-4 text-slate-600">{rec.reason}</Text>
+                  ) : null}
+                  <View className="mt-2 flex-row justify-end gap-1.5">
+                    <Pressable
+                      onPress={() => handleRejectRecommendation(rec.id)}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 active:scale-95"
+                    >
+                      <Text className="text-[9px] font-black text-slate-500">거절</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleAcceptRecommendation(rec.id)}
+                      className="rounded-lg border border-[#075953] bg-[#56EADD] px-2.5 py-1.5 active:scale-95"
+                    >
+                      <Text className="text-[9px] font-black text-[#075953]">일정에 추가</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
         </LinearGradient>
       </ShadowBox>
     </FadeIn>

@@ -29,6 +29,8 @@ interface TripsBottomSheetProps {
   isLoading: boolean;
   loadError: string | null;
   onRetry: () => void;
+  onAddDay: () => void;
+  isAddingDay: boolean;
 }
 
 function DashedVLine() {
@@ -59,6 +61,8 @@ export default function TripsBottomSheet({
   isLoading,
   loadError,
   onRetry,
+  onAddDay,
+  isAddingDay,
 }: TripsBottomSheetProps) {
   // PanResponder 콜백 안에서 최신 값을 읽기 위한 ref
   const heightRef = useRef(sheetHeightPercent);
@@ -136,6 +140,20 @@ export default function TripsBottomSheet({
             <View className="rounded-full bg-white/70 px-1">
               <Text className="font-pixel text-[9px] text-slate-700">{places.length}</Text>
             </View>
+          </Pressable>
+
+          {/* 일자가 하나도 없으면 날짜별 보기도, 동선 최적화도 할 수 없다. */}
+          <Pressable
+            onPress={onAddDay}
+            disabled={isAddingDay}
+            accessibilityLabel="일자 추가"
+            className="flex-row items-center gap-1 rounded-full border-2 border-dashed border-[#075953] bg-white px-3 py-1.5 active:scale-95"
+          >
+            {isAddingDay ? (
+              <ActivityIndicator size="small" color="#075953" />
+            ) : (
+              <Text className="text-xs font-black text-[#075953]">+ 일자</Text>
+            )}
           </Pressable>
 
           {dayNumbers.map((d) => (

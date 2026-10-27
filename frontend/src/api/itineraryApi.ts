@@ -44,9 +44,72 @@ export interface ItineraryItem {
   createdAt: string;
 }
 
+/**
+ * 일자를 만든다. visitDate 는 선택이라 비워도 되고, 그러면 날짜 없이 N일차만 생긴다.
+ *
+ * 동선 최적화는 일자가 하나도 없으면 400 으로 거절한다. 핀을 날짜별로 나누려면
+ * 먼저 여기서 일자를 만들어야 한다.
+ */
+export async function createItineraryDay(
+  tripId: number,
+  dayNumber: number,
+  visitDate?: string,
+): Promise<ItineraryDay> {
+  const { data } = await api.post<ItineraryDay>('/itinerary-days', { tripId, dayNumber, visitDate });
+  return data;
+}
+
+/** 일자를 지워도 그 핀들은 "날짜 미배정" 으로 남고 삭제되지 않는다. */
+export async function deleteItineraryDay(dayId: number): Promise<void> {
+  await api.delete(`/itinerary-days/${dayId}`);
+}
+
 export async function fetchItineraryDays(tripId: number): Promise<ItineraryDay[]> {
   const { data } = await api.get<ItineraryDay[]>('/itinerary-days', { params: { tripId } });
   return data;
+}
+
+/** 핀을 추가할 때 함께 보내는 장소. GET /places/search 결과를 그대로 넣으면 된다. */
+export interface PlaceInput {
+  kakaoPlaceId?: string | null;
+  name: string;
+  roadAddress?: string | null;
+  lotAddress?: string | null;
+  latitude: number;
+  longitude: number;
+  categoryGroupCode?: string | null;
+  categoryName?: string | null;
+  phone?: string | null;
+  placeUrl?: string | null;
+}
+
+export interface ItineraryItemCreatePayload {
+  tripId: number;
+  /** 아직 날짜를 안 정했으면 비운다("미배정 핀"). */
+  dayId?: number;
+  place: PlaceInput;
+  /** 'HH:mm' */
+  plannedArrivalTime?: string;
+  stayMinutes?: number;
+  /** CAR / WALK / BUS / TRAIN */
+  transportMode?: string;
+  memo?: string;
+}
+
+/**
+ * 지도에 핀을 추가한다.
+ *
+ * kakaoPlaceId 가 이미 저장된 장소와 같으면 서버가 그 장소를 재사용하고,
+ * 아니면 보낸 정보로 새 장소를 만든다.
+ */
+export async function createItineraryItem(payload: ItineraryItemCreatePayload): Promise<ItineraryItem> {
+  const { data } = await api.post<ItineraryItem>('/itinerary-items', payload);
+  return data;
+}
+
+/** 핀 삭제. */
+export async function deleteItineraryItem(itemId: number): Promise<void> {
+  await api.delete(`/itinerary-items/${itemId}`);
 }
 
 export async function fetchItineraryItems(tripId: number): Promise<ItineraryItem[]> {
@@ -109,7 +172,7 @@ function projectToCanvas(items: ItineraryItem[]): Map<number, { lat: number; lng
  */
 export function toPlaceItems(items: ItineraryItem[]): PlaceItem[] {
   const projected = projectToCanvas(items);
-  return items.map((item) => {
+  return items.map((item, index) => {
     const transit = item.transportMode ? TRANSIT_BY_MODE[item.transportMode] : undefined;
     const point = projected.get(item.id) ?? { lat: 50, lng: 50 };
     return {
@@ -122,7 +185,9 @@ export function toPlaceItems(items: ItineraryItem[]): PlaceItem[] {
       thumbnail: fileUrl(item.thumbnailUrl) ?? FALLBACK_THUMBNAIL,
       lat: point.lat,
       lng: point.lng,
-      order: item.visitOrder ?? 0,
+      // 날짜를 안 정한 핀은 visitOrder 가 없다. 화면에는 순번이 꼭 필요하므로
+      // 받은 순서대로 1 부터 매긴다. 0 으로 두면 지도와 목록에 "0." 이 찍힌다.
+      order: item.visitOrder ?? index + 1,
       day: item.dayNumber ?? 0,
       time: timeLabel(item.plannedArrivalTime),
       transitToNext: transit && { ...transit, duration: '' },

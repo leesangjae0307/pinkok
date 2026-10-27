@@ -55,7 +55,6 @@ function MapMarker({
 export default function TripMapView() {
   const {
     activeTrip,
-    trips,
     selectedDayFilter,
     setSelectedDayFilter,
     displayedMapPlaces,
@@ -64,11 +63,15 @@ export default function TripMapView() {
     mapPlacesError,
     tripDayNumbers,
     reloadItinerary,
+    handleAddDay,
+    isAddingDay,
     selectedMapPin,
     setSelectedMapPin,
     setIsTripMapOpen,
     setInviteTrip,
+    setIsAddPlaceOpen,
     setIsPinLogMakerOpen,
+    setPinLogTrip,
     setIsPlaceDetailModalOpen,
     setStartPlaceCamera,
     placeRecords,
@@ -175,13 +178,25 @@ export default function TripMapView() {
             </View>
           </View>
           <Pressable
-            onPress={() => setInviteTrip(trips[0] || null)}
+            onPress={() => setIsAddPlaceOpen(true)}
+            accessibilityLabel="장소 추가"
+            className="rounded-2xl border-2 border-pixel-navy bg-white px-2.5 py-2 shadow-md active:translate-y-0.5"
+          >
+            <Text className="text-[10px] font-black text-[#075953]">장소 +</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setInviteTrip(activeTrip)}
             className="rounded-2xl border-2 border-pixel-navy bg-white px-2.5 py-2 shadow-md active:translate-y-0.5"
           >
             <Text className="text-[10px] font-black text-[#075953]">팀원 +</Text>
           </Pressable>
           <Pressable
-            onPress={() => setIsPinLogMakerOpen(true)}
+            onPress={() => {
+              // PinLog 모달은 pinLogTrip 을 보고 그린다. 지도에서 바로 열 때는
+              // 핀로그 탭을 거치지 않으므로 지금 보고 있는 여행으로 맞춰준다.
+              if (activeTrip) setPinLogTrip(activeTrip);
+              setIsPinLogMakerOpen(true);
+            }}
             accessibilityLabel="팀원 영상으로 PinLog 만들기"
             className="flex-row items-center gap-1 rounded-2xl border-2 border-pixel-navy bg-mint-primary px-3 py-2 shadow-md active:translate-y-0.5 active:bg-mint-dark"
           >
@@ -206,6 +221,8 @@ export default function TripMapView() {
         isLoading={isMapPlacesLoading}
         loadError={mapPlacesError}
         onRetry={reloadItinerary}
+        onAddDay={handleAddDay}
+        isAddingDay={isAddingDay}
         selectedPlaceId={selectedMapPin?.id ?? -1}
         onSelectPlace={(place) => {
           setSelectedMapPin(place);

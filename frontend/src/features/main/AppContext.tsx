@@ -34,8 +34,16 @@ import {
   updateTrip,
   type TripUpdatePayload,
 } from '../../api/tripApi';
-import { fetchItineraryDays, fetchItineraryItems, toPlaceItems } from '../../api/itineraryApi';
+import {
+  createItineraryDay,
+  createItineraryItem,
+  fetchItineraryDays,
+  fetchItineraryItems,
+  toPlaceItems,
+} from '../../api/itineraryApi';
+import type { PlaceSearchResult } from '../../api/placeApi';
 import { fetchTripStyles, replaceTripStyles } from '../../api/travelStyleApi';
+import { addDays } from '../../components/pixel/PixelCalendar';
 import { fetchPinlogs, pinlogThumbnailUrl, pinlogVideoUrl } from '../../api/pinlogApi';
 import {
   addCandidatesToTrip,
@@ -222,6 +230,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [inviteTrip, setInviteTrip] = useState<TripFolder | null>(null);
   /** 수정 모달을 띄울 여행. null 이면 닫혀 있다. */
   const [editingTrip, setEditingTrip] = useState<TripFolder | null>(null);
+  const [isAddPlaceOpen, setIsAddPlaceOpen] = useState(false);
+  const [isAddingDay, setIsAddingDay] = useState(false);
 
   // 새 여행 만들기
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
@@ -454,6 +464,57 @@ function useAppState(me: Me, onLogout: () => void) {
     if (pinLogTrip) reloadVlogClips(pinLogTrip.id);
     else setVlogClips([]);
   }, [pinLogTrip, reloadVlogClips]);
+
+  /**
+   * 검색해서 고른 장소를 지금 보고 있는 여행에 핀으로 추가한다.
+   *
+   * 검색 결과와 서버의 PlaceInput 은 필드가 같아서 그대로 넘긴다. 날짜는 정하지 않아
+   * "미배정 핀"으로 들어가고, 추가 뒤에는 일정을 다시 받아 지도에 반영한다.
+   */
+  const handleAddPlace = async (place: PlaceSearchResult): Promise<boolean> => {
+    if (!activeTrip) return false;
+    try {
+      await createItineraryItem({ tripId: activeTrip.id, place });
+      await loadItinerary(activeTrip.id);
+      setTrips((cur) =>
+        cur.map((t) => (t.id === activeTrip.id ? { ...t, placesCount: t.placesCount + 1 } : t)),
+      );
+      showToast(`'${place.name}'을(를) 지도에 추가했어요.`);
+      return true;
+    } catch (e) {
+      showToast(errorMessage(e, '장소를 추가하지 못했어요.'));
+      return false;
+    }
+  };
+
+  /**
+   * 다음 번호의 일자를 만든다.
+   *
+   * 날짜는 여행 시작일 + (N-1)일로 채운다. 서버는 visitDate 없이도 받아주지만,
+   * 날짜가 없으면 화면에서 "며칠인지" 알 수 없어 일자 칩이 번호뿐이 된다.
+   * 여행 시작일을 모르면(상세 조회 실패) 번호만 보낸다.
+   */
+  const handleAddDay = async () => {
+    if (!activeTrip || isAddingDay) return;
+    setIsAddingDay(true);
+    try {
+      const nextNumber = (tripDayNumbers[tripDayNumbers.length - 1] ?? 0) + 1;
+      let visitDate: string | undefined;
+      try {
+        const detail = await fetchTrip(activeTrip.id);
+        if (detail.startDate) visitDate = addDays(detail.startDate, nextNumber - 1);
+      } catch {
+        // 날짜 없이도 일자는 만들 수 있다.
+      }
+      await createItineraryDay(activeTrip.id, nextNumber, visitDate);
+      await loadItinerary(activeTrip.id);
+      showToast(`${nextNumber}일차를 만들었어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '일자를 만들지 못했어요.'));
+    } finally {
+      setIsAddingDay(false);
+    }
+  };
 
   /** 여행의 일자와 핀을 받아 지도·바텀시트에 올린다. */
   const loadItinerary = useCallback(async (tripId: number) => {
@@ -1039,6 +1100,11 @@ function useAppState(me: Me, onLogout: () => void) {
     editingTrip,
     setEditingTrip,
     handleTripUpdated,
+    isAddPlaceOpen,
+    setIsAddPlaceOpen,
+    handleAddPlace,
+    handleAddDay,
+    isAddingDay,
     respondingInvitationId,
     reloadNotifications,
     reloadInvitations,

@@ -69,16 +69,13 @@ export default function TripMapView() {
       <KakaoMapView
         markers={mapMarkers}
         selectedId={selectedMapPin?.id ?? null}
-        onSelect={(id) => {
-          const place = displayedMapPlaces.find((p) => p.id === id);
-          if (!place) return;
-          setSelectedMapPin(place);
-          showToast(`📍 [${place.name}] 마커로 이동했습니다.`);
-        }}
+        bottomInset={Math.round((layout.height * tripsSheetHeight) / 100)}
+        // 상단 플로팅 바(top-3 + 버튼 높이)에 마커 말풍선이 가리지 않게 한다.
+        topInset={72}
       />
 
       {/* 지도 위에 띄우는 조작부. 지도 제스처를 막지 않도록 빈 곳은 터치를 흘려보낸다. */}
-      <View className="absolute inset-0" pointerEvents="box-none">
+      <View className="absolute bottom-0 left-0 right-0 top-0" pointerEvents="box-none">
         {/* 상단 플로팅 바 */}
         <View className="absolute left-3 right-3 top-3 z-20 flex-row items-center gap-2">
           <Pressable

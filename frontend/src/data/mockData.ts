@@ -44,10 +44,13 @@ export interface PlaceItem {
   reviewsCount: number;
   address: string;
   thumbnail: string;
+  /** 실제 위도(WGS84). 카카오맵 마커에 그대로 쓴다. */
   lat: number;
+  /** 실제 경도(WGS84) */
   lng: number;
   order: number;
-  day: number; // 1, 2, or 3
+  /** 1일차, 2일차 ... 날짜를 안 정한 핀은 0 */
+  day: number;
   time?: string;
   transitToNext?: TransitInfo;
   note?: string;

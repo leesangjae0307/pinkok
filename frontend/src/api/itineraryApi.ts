@@ -134,47 +134,19 @@ function timeLabel(value: string | null): string | undefined {
   return value.slice(0, 5);
 }
 
-/**
- * 지도는 실제 지도가 아니라 일러스트 캔버스이고, PlaceItem 의 lat/lng 는
- * 그 캔버스의 백분율(0~100) 이다. 그래서 서버의 진짜 위경도를 그대로 쓸 수 없다.
- *
- * 핀 전체를 감싸는 사각형을 구해 10~90% 안으로 펴 넣는다. 서로의 위치 관계는
- * 유지되고 가장자리에 붙어 잘리지도 않는다. 핀이 하나뿐이거나 모두 같은 지점이면
- * 가운데(50%)에 둔다. 위도는 북쪽이 위라서 y 를 뒤집는다.
- */
-function projectToCanvas(items: ItineraryItem[]): Map<number, { lat: number; lng: number }> {
-  const MIN = 10;
-  const SPAN = 80;
-  const lats = items.map((i) => i.place.latitude);
-  const lngs = items.map((i) => i.place.longitude);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const latRange = maxLat - minLat;
-  const lngRange = maxLng - minLng;
-
-  const projected = new Map<number, { lat: number; lng: number }>();
-  for (const item of items) {
-    const x = lngRange === 0 ? 50 : MIN + ((item.place.longitude - minLng) / lngRange) * SPAN;
-    // 위도가 클수록(북쪽) 화면 위쪽이어야 하므로 뒤집는다.
-    const y = latRange === 0 ? 50 : MIN + ((maxLat - item.place.latitude) / latRange) * SPAN;
-    projected.set(item.id, { lat: y, lng: x });
-  }
-  return projected;
-}
 
 /**
  * 서버 핀을 지도·바텀시트가 쓰는 PlaceItem 으로 바꾼다.
+ *
+ * lat/lng 는 실제 위경도(WGS84)를 그대로 넘긴다. 예전 일러스트 지도는 캔버스
+ * 백분율을 썼고 그래서 투영이 필요했지만, 카카오맵으로 바뀌면서 그 변환이 없어졌다.
  *
  * 이동 수단은 서버가 종류만 주고 소요 시간·거리는 주지 않아서 라벨만 채운다.
  * 날짜를 안 정한 핀(dayNumber 가 null)은 0 으로 두어 day 필터에 걸리지 않게 한다.
  */
 export function toPlaceItems(items: ItineraryItem[]): PlaceItem[] {
-  const projected = projectToCanvas(items);
   return items.map((item, index) => {
     const transit = item.transportMode ? TRANSIT_BY_MODE[item.transportMode] : undefined;
-    const point = projected.get(item.id) ?? { lat: 50, lng: 50 };
     return {
       id: item.id,
       name: item.place.name,
@@ -183,8 +155,8 @@ export function toPlaceItems(items: ItineraryItem[]): PlaceItem[] {
       reviewsCount: item.reviewsCount,
       address: item.place.roadAddress ?? item.place.lotAddress ?? '',
       thumbnail: fileUrl(item.thumbnailUrl) ?? FALLBACK_THUMBNAIL,
-      lat: point.lat,
-      lng: point.lng,
+      lat: item.place.latitude,
+      lng: item.place.longitude,
       // 날짜를 안 정한 핀은 visitOrder 가 없다. 화면에는 순번이 꼭 필요하므로
       // 받은 순서대로 1 부터 매긴다. 0 으로 두면 지도와 목록에 "0." 이 찍힌다.
       order: item.visitOrder ?? index + 1,

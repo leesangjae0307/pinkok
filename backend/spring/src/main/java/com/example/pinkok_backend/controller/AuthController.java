@@ -1,12 +1,17 @@
 package com.example.pinkok_backend.controller;
 
 import com.example.pinkok_backend.dto.LoginRequest;
+import com.example.pinkok_backend.dto.PasswordResetConfirmRequest;
+import com.example.pinkok_backend.dto.PasswordResetRequest;
+import com.example.pinkok_backend.dto.PasswordResetVerifyRequest;
+import com.example.pinkok_backend.dto.PasswordResetVerifyResponse;
 import com.example.pinkok_backend.dto.RefreshTokenRequest;
 import com.example.pinkok_backend.dto.SignupRequest;
 import com.example.pinkok_backend.dto.SocialLoginRequest;
 import com.example.pinkok_backend.dto.TokenResponse;
 import com.example.pinkok_backend.dto.UserResponse;
 import com.example.pinkok_backend.service.AuthService;
+import com.example.pinkok_backend.service.PasswordService;
 import com.example.pinkok_backend.service.SocialAuthService;
 import com.example.pinkok_backend.service.UserService;
 import jakarta.validation.Valid;
@@ -25,11 +30,14 @@ public class AuthController {
     private final UserService userService;
     private final AuthService authService;
     private final SocialAuthService socialAuthService;
+    private final PasswordService passwordService;
 
-    public AuthController(UserService userService, AuthService authService, SocialAuthService socialAuthService) {
+    public AuthController(UserService userService, AuthService authService, SocialAuthService socialAuthService,
+                          PasswordService passwordService) {
         this.userService = userService;
         this.authService = authService;
         this.socialAuthService = socialAuthService;
+        this.passwordService = passwordService;
     }
 
     @PostMapping("/signup")
@@ -67,6 +75,30 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenRequest request) {
         authService.logout(request.getRefreshToken());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 비밀번호 재설정 1단계: 이메일로 인증번호(6자리, 10분) 발송.
+     * 가입된 이메일인지 알 수 없게 항상 204 로 답한다. 같은 이메일로는 60초 안에 다시 보내지 않는다.
+     */
+    @PostMapping("/password-reset/request")
+    public ResponseEntity<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+        passwordService.requestReset(request.getEmail());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 2단계: 인증번호 확인. 맞으면 15분짜리 일회용 {@code resetToken} 을 준다. 5번 틀리면 그 인증번호는 못 쓴다. */
+    @PostMapping("/password-reset/verify")
+    public ResponseEntity<PasswordResetVerifyResponse> verifyPasswordReset(
+            @Valid @RequestBody PasswordResetVerifyRequest request) {
+        return ResponseEntity.ok(passwordService.verify(request.getEmail(), request.getCode()));
+    }
+
+    /** 3단계: 새 비밀번호 설정. 성공하면 그 계정의 모든 로그인이 끊기니 새로 로그인해야 한다. */
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<Void> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
+        passwordService.confirmReset(request.getResetToken(), request.getNewPassword());
         return ResponseEntity.noContent().build();
     }
 }

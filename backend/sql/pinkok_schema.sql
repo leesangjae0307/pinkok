@@ -424,3 +424,20 @@ CREATE TABLE notifications (
     KEY idx_notifications_user (user_id, is_read, created_at),
     CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users (id)
 ) COMMENT='알림';
+
+
+CREATE TABLE password_reset_codes (
+    id                    BIGINT      NOT NULL AUTO_INCREMENT COMMENT '비밀번호 재설정 시도 ID',
+    user_id               BIGINT      NOT NULL COMMENT '사용자 ID',
+    code_hash             CHAR(64)    NOT NULL COMMENT '이메일로 보낸 6자리 인증번호의 해시 (원문은 저장하지 않음)',
+    expires_at            DATETIME    NOT NULL COMMENT '인증번호 만료 시각 (발송 후 10분)',
+    attempts              INT         NOT NULL DEFAULT 0 COMMENT '인증번호를 틀린 횟수 (5회 넘으면 무효)',
+    reset_token_hash      CHAR(64)    NULL COMMENT '인증번호를 맞춘 뒤 발급한 재설정 토큰의 해시',
+    reset_token_expires_at DATETIME   NULL COMMENT '재설정 토큰 만료 시각 (15분)',
+    used_at               DATETIME    NULL COMMENT '비밀번호를 바꿨거나 새 인증번호가 발급돼 무효가 된 시각',
+    created_at            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_password_reset_user (user_id, used_at),
+    KEY idx_password_reset_token (reset_token_hash),
+    CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES users (id)
+) COMMENT='비밀번호 재설정 (인증번호 → 재설정 토큰 → 새 비밀번호)';

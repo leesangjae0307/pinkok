@@ -5,6 +5,15 @@ import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
 import { useApp } from '../AppContext';
 
+/** 안 읽은 알림 카드에만 주는 그림자 */
+const UNREAD_SHADOW = {
+  shadowColor: '#000',
+  shadowOpacity: 0.12,
+  shadowRadius: 6,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 3,
+} as const;
+
 export default function NotificationScreen() {
   const {
     notifications,
@@ -57,8 +66,11 @@ export default function NotificationScreen() {
           <Pressable
             key={n.id}
             onPress={() => handleNotificationSelect(n)}
+            // 읽음 여부로 shadow-* 클래스를 붙였다 떼면 NativeWind 가 업그레이드 경고를
+            // 찍고, 그 경고가 props 직렬화에서 무한 재귀에 빠져 JS 스레드가 멈춘다.
+            style={n.read ? undefined : UNREAD_SHADOW}
             className={`relative w-full rounded-3xl border p-4 active:scale-[0.98] ${
-              n.read ? 'border-slate-200 bg-white/55 opacity-70' : 'border-[#56EADD] bg-white shadow-md'
+              n.read ? 'border-slate-200 bg-white/55 opacity-70' : 'border-[#56EADD] bg-white'
             }`}
           >
             {!n.read && (

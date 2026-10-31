@@ -8,6 +8,21 @@ import Svg, { Line } from 'react-native-svg';
 import { PlaceItem } from '../../../data/mockData';
 import { AnimatedLoop, PixelPressable } from '../../../components/pixel/Primitives';
 
+/**
+ * 선택 상태에서만 주는 그림자.
+ *
+ * className 으로 shadow-* 를 붙였다 뗐다 하면 NativeWind 가 이미 올라간 컴포넌트를
+ * "업그레이드"해야 한다고 보고 경고를 찍는데, 그 경고가 props 를 직렬화하다 무한
+ * 재귀에 빠져 JS 스레드를 통째로 멈춘다. 그래서 그림자는 클래스 대신 style 로 준다.
+ */
+const SELECTED_SHADOW = {
+  shadowColor: '#000',
+  shadowOpacity: 0.12,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 3,
+} as const;
+
 interface TripsBottomSheetProps {
   /** 바텀시트가 놓인 영역의 실제 높이(px) */
   containerHeight: number;
@@ -132,8 +147,9 @@ export default function TripsBottomSheet({
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1" contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
           <Pressable
             onPress={() => onSelectDay('all')}
+            style={selectedDay === 'all' ? SELECTED_SHADOW : undefined}
             className={`flex-row items-center gap-1 rounded-full border-2 px-3 py-1.5 ${
-              selectedDay === 'all' ? 'border-pixel-navy bg-mint-primary shadow-sm' : 'border-slate-200 bg-slate-100'
+              selectedDay === 'all' ? 'border-pixel-navy bg-mint-primary' : 'border-slate-200 bg-slate-100'
             }`}
           >
             <Text className={`text-xs font-black ${selectedDay === 'all' ? 'text-pixel-navy' : 'text-slate-600'}`}>전체</Text>
@@ -160,8 +176,9 @@ export default function TripsBottomSheet({
             <Pressable
               key={d}
               onPress={() => onSelectDay(d)}
+              style={selectedDay === d ? SELECTED_SHADOW : undefined}
               className={`flex-row items-center gap-1 rounded-full border-2 px-3 py-1.5 ${
-                selectedDay === d ? 'border-pixel-navy bg-mint-primary shadow-sm' : 'border-slate-200 bg-slate-100'
+                selectedDay === d ? 'border-pixel-navy bg-mint-primary' : 'border-slate-200 bg-slate-100'
               }`}
             >
               <Text className={`font-pixel text-[10px] ${selectedDay === d ? 'text-pixel-navy' : 'text-slate-600'}`}>{d}day</Text>
@@ -217,8 +234,9 @@ export default function TripsBottomSheet({
               <React.Fragment key={place.id}>
                 <Pressable
                   onPress={() => onSelectPlace(place)}
+                  style={isSelected ? SELECTED_SHADOW : undefined}
                   className={`flex-row items-center justify-between gap-3 rounded-2xl border-2 p-3 ${
-                    isSelected ? 'border-pixel-navy bg-[#B4FAF0]/70 shadow-md' : 'border-slate-200 bg-white'
+                    isSelected ? 'border-pixel-navy bg-[#B4FAF0]/70' : 'border-slate-200 bg-white'
                   }`}
                 >
                   <View className="min-w-0 flex-1 flex-row items-center gap-3">

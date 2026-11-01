@@ -5,7 +5,10 @@ import com.example.pinkok_backend.gemini.GeminiClient;
 import com.example.pinkok_backend.gemini.GeminiGenerateRequest;
 import com.example.pinkok_backend.kakao.KakaoKeywordSearchResponse;
 import com.example.pinkok_backend.kakao.KakaoLocalApiClient;
+import com.example.pinkok_backend.repository.AiRequestRepository;
+import com.example.pinkok_backend.repository.RecommendationRepository;
 import com.example.pinkok_backend.seed.TravelStyleSeeder;
+import com.example.pinkok_backend.service.GeminiJobRunner;
 import com.example.pinkok_backend.support.DatabaseCleaner;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
@@ -21,12 +24,15 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.example.pinkok_backend.support.GeminiTestSupport.successResponse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -56,6 +62,15 @@ class RecommendationTest {
 
     @Autowired
     TravelStyleSeeder travelStyleSeeder;
+
+    @Autowired
+    AiRequestRepository aiRequestRepository;
+
+    @Autowired
+    RecommendationRepository recommendationRepository;
+
+    @MockitoSpyBean
+    GeminiJobRunner geminiJobRunner;
 
     @MockitoBean
     GeminiClient geminiClient;
@@ -283,6 +298,39 @@ class RecommendationTest {
         mockMvc.perform(get("/recommendations").param("tripId", String.valueOf(tripId))
                         .header("Authorization", "Bearer " + token))
                 .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("SUCCESS 는 추천 저장이 끝난 뒤에 나간다 - 앱이 SUCCESS 를 보고 조회했는데 비어 있으면 안 된다")
+    void successIsMarkedAfterRecommendationsAreSaved() throws Exception {
+        String token = signupAndLogin("recsave@pinkok.com", "recsave01");
+        long tripId = createJejuTrip(token);
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(TWO_PLACES_JSON, 10, 10));
+
+        // SUCCESS 로 바뀌는 바로 그 순간에 저장된 추천 개수를 기록한다
+        List<Long> savedAtSuccess = new ArrayList<>();
+        Mockito.doAnswer(invocation -> {
+            savedAtSuccess.add(recommendationRepository.count());
+            return invocation.callRealMethod();
+        }).when(geminiJobRunner).markSucceeded(Mockito.any());
+
+        requestRecommendation(token, String.format("{\"tripId\":%d}", tripId));
+
+        assertEquals(List.of(2L), savedAtSuccess);
+        assertEquals("SUCCESS", aiRequestRepository.findAll().get(0).getStatus());
+    }
+
+    @Test
+    @DisplayName("저장에 실패한 추천은 SUCCESS 를 거치지 않고 FAILED 로 끝난다")
+    void parseFailureNeverPassesThroughSuccess() throws Exception {
+        String token = signupAndLogin("recfail@pinkok.com", "recfail01");
+        long tripId = createJejuTrip(token);
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse("JSON 이 아닌 답변", 10, 10));
+
+        requestRecommendation(token, String.format("{\"tripId\":%d}", tripId));
+
+        Mockito.verify(geminiJobRunner, Mockito.never()).markSucceeded(Mockito.any());
+        assertEquals("FAILED", aiRequestRepository.findAll().get(0).getStatus());
     }
 
     @Test

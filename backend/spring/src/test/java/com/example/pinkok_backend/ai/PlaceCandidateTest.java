@@ -4,6 +4,9 @@ import com.example.pinkok_backend.gemini.GeminiClient;
 import com.example.pinkok_backend.gemini.GeminiGenerateResponse;
 import com.example.pinkok_backend.kakao.KakaoKeywordSearchResponse;
 import com.example.pinkok_backend.kakao.KakaoLocalApiClient;
+import com.example.pinkok_backend.entity.AiRequest;
+import com.example.pinkok_backend.repository.AiRequestRepository;
+import com.example.pinkok_backend.service.AiRequestService;
 import com.example.pinkok_backend.support.DatabaseCleaner;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
@@ -17,12 +20,15 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,6 +54,15 @@ class PlaceCandidateTest {
 
     @Autowired
     DatabaseCleaner databaseCleaner;
+
+    @Autowired
+    AiRequestRepository aiRequestRepository;
+
+    @Autowired
+    AiRequestService aiRequestService;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @MockitoBean
     GeminiClient geminiClient;
@@ -330,6 +345,130 @@ class PlaceCandidateTest {
                 .andExpect(jsonPath("$[0].mapped").value(true))
                 // 지역을 확인하지 못했으므로 1.0 이 아니라 0.8
                 .andExpect(jsonPath("$[0].confidence").value(0.800));
+    }
+
+    @Test
+    @DisplayName("후보를 저장하는 동안에는 SUCCESS 가 아니다 - 앱이 SUCCESS 를 보고 조회했는데 0곳이 나오던 문제")
+    void statusIsNotSuccessWhileSavingCandidates() throws Exception {
+        String token = signupAndLogin("cand14@pinkok.com", "cand14");
+        geminiExtracts(place("협재해수욕장", "제주시"));
+
+        KakaoKeywordSearchResponse response = new KakaoKeywordSearchResponse();
+        response.setDocuments(List.of(document("1", "협재해수욕장", "제주특별자치도 제주시 한림읍", "126.23", "33.39")));
+
+        // 카카오 검색은 후보 저장 도중에 일어난다. 그 순간 앱이 폴링하면 보게 될 상태를 기록해둔다.
+        List<String> statusWhileSaving = new ArrayList<>();
+        Mockito.doAnswer(invocation -> {
+            statusWhileSaving.add(aiRequestRepository.findAll().get(0).getStatus());
+            return response;
+        }).when(kakaoLocalApiClient).searchByKeyword(Mockito.anyString(), Mockito.anyInt(), Mockito.anyInt());
+
+        Long aiRequestId = requestExtraction(token);   // 다 끝나면 SUCCESS 인지는 이 안에서 확인한다
+
+        assertThat(statusWhileSaving).isNotEmpty().doesNotContain("SUCCESS");
+        mockMvc.perform(get("/place-candidates").param("aiRequestId", aiRequestId.toString())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    @DisplayName("후보를 저장하는 동안 재시도 API 를 부르면 400 - 후보가 두 번 저장되면 안 된다")
+    void retryWhileSavingIsRejected() throws Exception {
+        String token = signupAndLogin("cand15@pinkok.com", "cand15");
+        geminiExtracts(place("협재해수욕장", "제주시"));
+
+        KakaoKeywordSearchResponse response = new KakaoKeywordSearchResponse();
+        response.setDocuments(List.of(document("1", "협재해수욕장", "제주특별자치도 제주시 한림읍", "126.23", "33.39")));
+
+        List<Integer> retryStatus = new ArrayList<>();
+        Mockito.doAnswer(invocation -> {
+            AiRequest saving = aiRequestRepository.findAll().get(0);
+            retryStatus.add(mockMvc.perform(post("/place-candidates").param("aiRequestId", saving.getId().toString())
+                            .header("Authorization", "Bearer " + token))
+                    .andReturn().getResponse().getStatus());
+            return response;
+        }).when(kakaoLocalApiClient).searchByKeyword(Mockito.anyString(), Mockito.anyInt(), Mockito.anyInt());
+
+        Long aiRequestId = requestExtraction(token);
+
+        assertThat(retryStatus).containsExactly(400);
+        assertThat((List<?>) JsonPath.read(candidates(token, aiRequestId), "$")).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("candidatesReady - 후보 저장이 실패하면 false, 재시도로 만들면 true")
+    void candidatesReadyTellsWhetherRetryIsNeeded() throws Exception {
+        String token = signupAndLogin("cand16@pinkok.com", "cand16");
+        geminiExtracts(place("협재해수욕장", "제주시"));
+        kakaoIsDown();
+        Long aiRequestId = requestExtraction(token);
+
+        mockMvc.perform(get("/ai-requests/" + aiRequestId).header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.candidatesReady").value(false));
+
+        kakaoFinds("1", "협재해수욕장", "126.23", "33.39");
+        mockMvc.perform(post("/place-candidates").param("aiRequestId", aiRequestId.toString())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/ai-requests/" + aiRequestId).header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.candidatesReady").value(true));
+    }
+
+    @Test
+    @DisplayName("candidatesReady - AI 가 장소를 하나도 못 찾았으면 true (진짜 0곳)")
+    void candidatesReadyIsTrueWhenNoPlacesFound() throws Exception {
+        String token = signupAndLogin("cand17@pinkok.com", "cand17");
+        geminiExtracts("");
+        Long aiRequestId = requestExtraction(token);
+
+        mockMvc.perform(get("/ai-requests/" + aiRequestId).header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.places.length()").value(0))
+                .andExpect(jsonPath("$.candidatesReady").value(true));
+    }
+
+    @Test
+    @DisplayName("서버 재시작 복구 - Gemini 응답까지 받은 요청은 후보 저장부터 이어서 끝낸다")
+    void recoverResumesFromGeminiResponse() throws Exception {
+        String token = signupAndLogin("cand18@pinkok.com", "cand18");
+        geminiExtracts(place("협재해수욕장", "제주시"));
+        kakaoIsDown();
+        Long aiRequestId = requestExtraction(token);
+
+        // 후보를 저장하다가 서버가 꺼진 상태를 만든다
+        // (H2 는 JSON 컬럼을 읽어 다시 저장하면 한 겹 더 감싸므로, 엔티티 대신 상태만 직접 바꾼다)
+        jdbcTemplate.update("update ai_requests set status = 'PROCESSING', completed_at = null where id = ?", aiRequestId);
+
+        kakaoFinds("1", "협재해수욕장", "126.23", "33.39");
+        aiRequestService.recoverInterrupted(LocalDateTime.now().plusSeconds(1));
+
+        assertThat(aiRequestRepository.findById(aiRequestId).orElseThrow().getStatus()).isEqualTo("SUCCESS");
+        assertThat((List<?>) JsonPath.read(candidates(token, aiRequestId), "$")).hasSize(1);
+        Mockito.verify(geminiClient, Mockito.times(1)).generate(Mockito.any());
+    }
+
+    @Test
+    @DisplayName("서버 재시작 복구 - Gemini 응답이 없으면 FAILED, 서버가 켜진 뒤 들어온 요청은 건드리지 않는다")
+    void recoverFailsRequestsWithoutResponse() throws Exception {
+        String token = signupAndLogin("cand19@pinkok.com", "cand19");
+        geminiExtracts(place("협재해수욕장", "제주시"));
+        kakaoFindsNothing();
+        Long aiRequestId = requestExtraction(token);
+
+        AiRequest interrupted = aiRequestRepository.findById(aiRequestId).orElseThrow();
+        interrupted.setStatus("PROCESSING");
+        interrupted.setRawResponse(null);
+        interrupted.setCompletedAt(null);
+        aiRequestRepository.save(interrupted);
+
+        aiRequestService.recoverInterrupted(interrupted.getRequestedAt().minusSeconds(1));
+        assertThat(aiRequestRepository.findById(aiRequestId).orElseThrow().getStatus()).isEqualTo("PROCESSING");
+
+        aiRequestService.recoverInterrupted(LocalDateTime.now().plusSeconds(1));
+        AiRequest recovered = aiRequestRepository.findById(aiRequestId).orElseThrow();
+        assertThat(recovered.getStatus()).isEqualTo("FAILED");
+        assertThat(recovered.getErrorCode()).isEqualTo("SERVER_RESTARTED");
     }
 
     @Test

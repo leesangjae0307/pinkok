@@ -113,6 +113,17 @@ public class RefreshTokenService {
                 .forEach(token -> token.setRevokedAt(now));
     }
 
+    /**
+     * 비밀번호를 바꿀 때 그 사람의 모든 세션을 끊는다. 폐기 표시({@code revokedAt}) 대신 지우는 이유:
+     * 폐기된 토큰이 다시 들어오면 {@link #rotate} 가 "탈취"로 보고 그 사용자의 모든 세션을 끊는데,
+     * 다른 기기가 옛 토큰을 내밀 때마다 방금 비밀번호를 바꾼 기기까지 로그아웃되기 때문이다.
+     * 지우면 그 기기는 그냥 "유효하지 않은 토큰"(401)만 받는다.
+     */
+    @Transactional
+    public void deleteAllForUser(Long userId) {
+        refreshTokenRepository.deleteAllByUser_Id(userId);
+    }
+
     private void revokeAllForUser(Long userId, LocalDateTime now) {
         refreshTokenRepository.findAllByUser_IdAndRevokedAtIsNullAndExpiresAtAfter(userId, now)
                 .forEach(token -> token.setRevokedAt(now));

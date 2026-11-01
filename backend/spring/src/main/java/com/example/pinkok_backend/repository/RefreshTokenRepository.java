@@ -16,4 +16,6 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     /** 탈퇴할 때 그 사람의 모든 세션을 끊는다 (기기 여러 대에 로그인돼 있을 수 있다). */
     List<RefreshToken> findAllByUser_IdAndRevokedAtIsNull(Long userId);
 
+    /** 비밀번호를 바꿀 때 그 사람의 모든 세션을 지운다. */
+    void deleteAllByUser_Id(Long userId);
 }

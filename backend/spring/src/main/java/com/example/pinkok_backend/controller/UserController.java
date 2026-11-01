@@ -3,12 +3,15 @@ package com.example.pinkok_backend.controller;
 import com.example.pinkok_backend.dto.AccountDeleteRequest;
 import com.example.pinkok_backend.dto.AvatarSelectionRequest;
 import com.example.pinkok_backend.dto.NicknameUpdateRequest;
+import com.example.pinkok_backend.dto.PasswordChangeRequest;
 import com.example.pinkok_backend.dto.ProfileImageUpdateRequest;
+import com.example.pinkok_backend.dto.TokenResponse;
 import com.example.pinkok_backend.dto.UserResponse;
 import com.example.pinkok_backend.dto.UserSearchResponse;
 import com.example.pinkok_backend.entity.User;
 import com.example.pinkok_backend.repository.UserRepository;
 import com.example.pinkok_backend.security.CurrentUserId;
+import com.example.pinkok_backend.service.PasswordService;
 import com.example.pinkok_backend.service.TripInvitationService;
 import com.example.pinkok_backend.service.UserService;
 import jakarta.validation.Valid;
@@ -33,12 +36,14 @@ public class UserController {
     private final UserRepository userRepository;
     private final UserService userService;
     private final TripInvitationService tripInvitationService;
+    private final PasswordService passwordService;
 
     public UserController(UserRepository userRepository, UserService userService,
-                          TripInvitationService tripInvitationService) {
+                          TripInvitationService tripInvitationService, PasswordService passwordService) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.tripInvitationService = tripInvitationService;
+        this.passwordService = passwordService;
     }
 
     /**
@@ -111,5 +116,18 @@ public class UserController {
             @Valid @RequestBody AvatarSelectionRequest request) {
         User user = userService.selectAvatar(userId, request.getAvatarId());
         return ResponseEntity.ok(UserResponse.from(user));
+    }
+
+    /**
+     * 비밀번호 변경(로그인한 상태). 현재 비밀번호를 확인한다.
+     *
+     * <p>다른 기기의 로그인은 모두 끊기고, 응답으로 받은 새 토큰({@code accessToken}, {@code refreshToken})으로
+     * 바꿔 저장해야 지금 기기가 로그아웃되지 않는다. 틀린 입력은 401 이 아니라 400 이다.
+     */
+    @PatchMapping("/me/password")
+    public ResponseEntity<TokenResponse> changePassword(
+            @CurrentUserId Long userId,
+            @Valid @RequestBody PasswordChangeRequest request) {
+        return ResponseEntity.ok(passwordService.change(userId, request.getCurrentPassword(), request.getNewPassword()));
     }
 }

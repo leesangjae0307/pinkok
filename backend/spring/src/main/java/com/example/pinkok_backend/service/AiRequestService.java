@@ -138,13 +138,13 @@ public class AiRequestService {
 
         // 테스트처럼 동기 실행 환경이면 위 execute() 가 이미 끝나 있을 수 있어 최신 상태를 다시 읽는다.
         AiRequest latest = aiRequestRepository.findById(aiRequestId).orElse(aiRequest);
-        return AiRequestResponse.of(latest, parseResult(latest));
+        return toResponse(latest);
     }
 
     @Transactional(readOnly = true)
     public AiRequestResponse get(Long id, Long userId) {
         AiRequest aiRequest = getOwnedOrThrow(id, userId);
-        return AiRequestResponse.of(aiRequest, parseResult(aiRequest));
+        return toResponse(aiRequest);
     }
 
     @Transactional(readOnly = true)
@@ -153,8 +153,58 @@ public class AiRequestService {
                 ? aiRequestRepository.findAllByUser_IdOrderByRequestedAtDesc(userId)
                 : aiRequestRepository.findAllByUser_IdAndTrip_IdOrderByRequestedAtDesc(userId, tripId);
         return requests.stream()
-                .map(r -> AiRequestResponse.of(r, parseResult(r)))
+                .map(this::toResponse)
                 .toList();
+    }
+
+    private AiRequestResponse toResponse(AiRequest aiRequest) {
+        AiExtractionResult result = parseResult(aiRequest);
+        if (result == null) {
+            return AiRequestResponse.of(aiRequest, null);
+        }
+        return AiRequestResponse.of(aiRequest, result,
+                !hasNamedPlace(result) || placeCandidateService.hasCandidates(aiRequest.getId()));
+    }
+
+    private boolean hasNamedPlace(AiExtractionResult result) {
+        return result.places() != null
+                && result.places().stream().anyMatch(place -> StringUtils.hasText(place.name()));
+    }
+
+    /**
+     * 서버가 꺼지면서 끝내지 못한 요청을 마무리한다. 그대로 두면 앱이 PROCESSING 을 영원히 기다린다.
+     *
+     * <p>Gemini 응답까지 받은 장소 추출은 돈을 낸 결과가 남아 있으니 후보 저장부터 이어서 끝낸다.
+     * 나머지는 이어갈 수 없어서 FAILED 로 끝낸다.
+     *
+     * @param startedBefore 이 시각 이전에 들어온 요청만 본다. 서버가 켜진 뒤 들어온 요청은 건드리면 안 된다.
+     */
+    public void recoverInterrupted(LocalDateTime startedBefore) {
+        List<AiRequest> interrupted = aiRequestRepository.findAllByStatusInAndRequestedAtBefore(
+                List.of(STATUS_PENDING, GeminiJobRunner.STATUS_PROCESSING), startedBefore);
+
+        for (AiRequest aiRequest : interrupted) {
+            try {
+                recover(aiRequest);
+            } catch (RuntimeException e) {
+                log.warn("중단된 AI 요청을 복구하지 못했다 (id={})", aiRequest.getId(), e);
+            }
+        }
+    }
+
+    private void recover(AiRequest aiRequest) {
+        boolean placeExtract = REQUEST_TYPE_PLACE_EXTRACT.equals(aiRequest.getRequestType());
+        boolean resumable = placeExtract && aiRequest.getRawResponse() != null;
+
+        if (resumable) {
+            placeCandidateService.createFromQuietly(aiRequest.getId());
+            geminiJobRunner.markSucceeded(aiRequest);
+        } else {
+            geminiJobRunner.markFailed(aiRequest, aiRequest.getRetryCount(), "SERVER_RESTARTED");
+        }
+        if (placeExtract) {
+            notifyFinished(aiRequest, resumable);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -183,10 +233,17 @@ public class AiRequestService {
             // 여기서 뽑은 건 장소 "이름"까지다. 카카오맵 좌표로 바꿔 후보로 저장하는 건 지은 담당(PlaceCandidateService).
             // 카카오맵이 죽어도 이미 돈을 내고 받아온 이 AI 결과까지 실패가 되면 안 되므로, 예외를 삼키는 메서드를 쓴다.
             placeCandidateService.createFromQuietly(aiRequest.getId());
+            // 후보 저장이 끝난 뒤에 SUCCESS 를 알린다. 앱은 SUCCESS 를 보자마자 후보를 조회한다.
+            // 카카오가 실패해서 후보가 없어도 SUCCESS 로 끝내야 POST /place-candidates 로 다시 만들 수 있다.
+            geminiJobRunner.markSucceeded(aiRequest);
         }
 
-        // 추출은 수십 초가 걸려서 그 사이 앱을 꺼뒀을 수 있다. 성공이든 실패든 결과를 알려준다.
-        // (후보까지 다 만든 뒤에 보내야, 알림을 눌렀을 때 바로 목록이 보인다)
+        // 후보까지 다 만든 뒤에 보내야, 알림을 눌렀을 때 바로 목록이 보인다
+        notifyFinished(aiRequest, succeeded);
+    }
+
+    /** 추출은 수십 초가 걸려서 그 사이 앱을 꺼뒀을 수 있다. 성공이든 실패든 결과를 알려준다. */
+    private void notifyFinished(AiRequest aiRequest, boolean succeeded) {
         notificationService.notify(aiRequest.getUser(),
                 NotificationService.TYPE_AI_EXTRACT_DONE,
                 succeeded ? "장소 추출이 끝났어요" : "장소 추출에 실패했어요",

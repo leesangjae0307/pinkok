@@ -21,7 +21,8 @@ import java.util.List;
  *
  * <p>장소 추출(AiRequestService), 맞춤 추천(RecommendationService) 등 Gemini를 쓰는 기능이 전부 이걸 쓴다.
  * 호출 이력(AiRequest)을 같은 방식으로 남겨야 비용 집계와 오류 추적이 한 곳에서 된다.
- * 도메인별 후처리(추출 결과를 추천 row로 저장하는 등)는 {@link #run} 이 true 를 돌려줄 때 호출한 쪽이 한다.
+ * 도메인별 후처리(추출 결과를 추천 row로 저장하는 등)는 {@link #run} 이 true 를 돌려줄 때 호출한 쪽이 하고,
+ * 그게 끝나면 {@link #markSucceeded} 를 부른다.
  */
 @Component
 public class GeminiJobRunner {
@@ -52,7 +53,11 @@ public class GeminiJobRunner {
     }
 
     /**
-     * @return Gemini 호출이 성공해서 aiRequest.rawResponse 가 채워졌으면 true, 최종 실패(FAILED)면 false
+     * 호출이 성공해도 상태는 PROCESSING 으로 둔다. 앱은 SUCCESS 를 보자마자 결과를 조회하므로,
+     * 후보·추천을 저장하기 전에 SUCCESS 를 알리면 빈 목록을 받게 된다.
+     *
+     * @return Gemini 호출이 성공해서 aiRequest.rawResponse 가 채워졌으면 true, 최종 실패(FAILED)면 false.
+     *         true 면 호출한 쪽이 후처리를 끝낸 뒤 {@link #markSucceeded} 를 불러야 한다.
      */
     public boolean run(AiRequest aiRequest, List<GeminiGenerateRequest.Part> parts) {
         aiRequest.setStatus(STATUS_PROCESSING);
@@ -68,7 +73,7 @@ public class GeminiJobRunner {
         while (true) {
             try {
                 GeminiGenerateResponse response = geminiClient.generate(geminiRequest);
-                onSuccess(aiRequest, response, attempt);
+                recordResponse(aiRequest, response, attempt);
                 return true;
             } catch (GeminiCallException e) {
                 if (attempt >= maxRetries) {
@@ -101,7 +106,14 @@ public class GeminiJobRunner {
         aiRequestRepository.save(aiRequest);
     }
 
-    private void onSuccess(AiRequest aiRequest, GeminiGenerateResponse response, int attempt) {
+    /** 도메인별 저장까지 다 끝났을 때 부른다. 이때부터 앱이 결과를 조회한다. */
+    public void markSucceeded(AiRequest aiRequest) {
+        aiRequest.setStatus(STATUS_SUCCESS);
+        aiRequest.setCompletedAt(LocalDateTime.now());
+        aiRequestRepository.save(aiRequest);
+    }
+
+    private void recordResponse(AiRequest aiRequest, GeminiGenerateResponse response, int attempt) {
         GeminiGenerateResponse.UsageMetadata usage = response.getUsageMetadata();
 
         aiRequest.setModelName(geminiClient.modelName());
@@ -112,8 +124,6 @@ public class GeminiJobRunner {
             aiRequest.setOutputTokens(usage.getCandidatesTokenCount());
             aiRequest.setCostUsd(GeminiPricing.estimateUsd(usage.getPromptTokenCount(), usage.getCandidatesTokenCount()));
         }
-        aiRequest.setStatus(STATUS_SUCCESS);
-        aiRequest.setCompletedAt(LocalDateTime.now());
         aiRequestRepository.save(aiRequest);
     }
 

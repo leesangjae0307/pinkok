@@ -275,7 +275,11 @@ public class RecommendationService {
             // 호출은 성공했지만 응답이 약속한 JSON 형식이 아닌 경우 - 토큰·비용 기록은 남기고 실패로 끝낸다
             int retries = aiRequest.getRetryCount() == null ? 0 : aiRequest.getRetryCount();
             geminiJobRunner.markFailed(aiRequest, retries, "PARSE_ERROR: " + e.getMessage());
+            return;
         }
+
+        // 추천 저장이 끝난 뒤에 SUCCESS 를 알린다. 앱은 SUCCESS 를 보자마자 추천을 조회한다.
+        geminiJobRunner.markSucceeded(aiRequest);
     }
 
     private void saveRecommendations(AiRequest aiRequest, Long tripId, int count, List<String> excludeNames) {

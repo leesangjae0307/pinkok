@@ -120,14 +120,19 @@ public class PlaceCandidateService {
         }
     }
 
+    public boolean hasCandidates(Long aiRequestId) {
+        return placeCandidateRepository.existsByAiRequest_Id(aiRequestId);
+    }
+
     /** 실제 후보 생성. 실패를 호출한 쪽에 알려야 하는 재시도 API에서 쓴다. */
     public void createFrom(Long aiRequestId) {
         if (placeCandidateRepository.existsByAiRequest_Id(aiRequestId)) {
             return;
         }
 
+        // 상태는 보지 않는다. 자동 생성은 SUCCESS 가 되기 전(PROCESSING)에 돌고, AI 응답이 없으면 아래에서 걸러진다.
         AiRequest aiRequest = aiRequestRepository.findById(aiRequestId).orElse(null);
-        if (aiRequest == null || !STATUS_SUCCESS.equals(aiRequest.getStatus())) {
+        if (aiRequest == null) {
             return;
         }
 

@@ -4,6 +4,17 @@ module.exports = {
   presets: ['module:@react-native/babel-preset', 'nativewind/babel'],
   plugins: [
     [
+      // .env 값을 '@env' 모듈로 읽어온다. 키를 소스에 적어 두지 않기 위한 것이고,
+      // 번들에는 그대로 박히므로 비밀이 되는 건 아니다(클라이언트 키 특성).
+      'module:react-native-dotenv',
+      {
+        moduleName: '@env',
+        path: '.env',
+        safe: false,
+        allowUndefined: true,
+      },
+    ],
+    [
       'module-resolver',
       {
         root: ['./src'],

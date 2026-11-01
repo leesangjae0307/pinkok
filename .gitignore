@@ -28,4 +28,26 @@ frontend/dist/
 # OS
 ############################
 .DS_Store
-Thumbs.dbfrontend_old/
+Thumbs.db
+frontend_old/
+
+############################
+# Secrets / local config
+############################
+# 키·토큰·서버 주소는 저장소에 올리지 않는다. 예시는 *.example 로만 둔다.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# 백엔드 로컬 설정 (Gemini·카카오 REST 키가 여기 들어간다)
+backend/spring/src/main/resources/application-*.properties
+backend/spring/src/main/resources/application*.yml
+backend/spring/src/main/resources/application*.yaml
+
+# 서명 키 (RN 기본 debug.keystore 만 예외로 둔다)
+*.jks
+*.p12
+*.pem

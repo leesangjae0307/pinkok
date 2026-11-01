@@ -1,19 +1,21 @@
 import axios, {AxiosError, InternalAxiosRequestConfig} from 'axios';
+import {API_BASE_URL} from '@env';
 import {tokenStore} from '../services/tokenStore';
 
 /**
+ * 서버 주소. 값은 저장소에 없는 .env 에 둔다(`.env.example` 을 복사해서 채운다).
  * 끝에 `/` 나 `/api` 를 붙이지 않는다. 서버에는 `/api` 접두사가 없어서 붙이면 전부 404 다.
  *
- * 지금 값은 서버 PC 에서 띄운 cloudflared 임시 터널 주소라서 **터널을 재시작하면 바뀐다**.
- * 연결이 안 되면 먼저 이 주소가 아직 살아 있는지 확인한다.
+ * cloudflared 임시 터널을 쓰면 **터널을 재시작할 때마다 주소가 바뀐다**. 연결이 안 되면
+ * 먼저 그 주소가 아직 살아 있는지 확인한다.
  *
  * 환경별 대안:
  * - 서버를 같은 PC 에서 돌릴 때: `adb reverse tcp:8080 tcp:8080` 걸고 `http://localhost:8080`
- *   (주소가 바뀌지 않아 이 값을 고칠 일이 없다)
+ *   (주소가 바뀌지 않아 .env 를 고칠 일이 없다)
  * - 에뮬레이터: `http://10.0.2.2:8080`
  * - 같은 와이파이의 실기기: 서버 PC 의 LAN IP (예: `http://192.168.1.53:8080`)
  */
-export const BASE_URL = 'https://yale-posts-homeland-partners.trycloudflare.com';
+export const BASE_URL = API_BASE_URL ?? 'http://localhost:8080';
 
 const api = axios.create({baseURL: BASE_URL, timeout: 15000});
 

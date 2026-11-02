@@ -53,23 +53,27 @@ export default function RecordClipModal({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (Platform.OS !== 'android') {
-        setPermsOk(true);
-        return;
+      try {
+        if (Platform.OS !== 'android') {
+          setPermsOk(true);
+          return;
+        }
+        const need = [
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        ];
+        const have = await Promise.all(need.map((p) => PermissionsAndroid.check(p)));
+        if (cancelled) return;
+        if (have.every(Boolean)) {
+          setPermsOk(true);
+          return;
+        }
+        const res = await PermissionsAndroid.requestMultiple(need);
+        if (cancelled) return;
+        setPermsOk(need.every((p) => res[p] === PermissionsAndroid.RESULTS.GRANTED));
+      } catch {
+        // 권한 조회가 실패하면 막힌 상태로 둔다. 화면이 설정으로 안내한다.
       }
-      const need = [
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-      ];
-      const have = await Promise.all(need.map((p) => PermissionsAndroid.check(p)));
-      if (cancelled) return;
-      if (have.every(Boolean)) {
-        setPermsOk(true);
-        return;
-      }
-      const res = await PermissionsAndroid.requestMultiple(need);
-      if (cancelled) return;
-      setPermsOk(need.every((p) => res[p] === PermissionsAndroid.RESULTS.GRANTED));
     })();
     return () => {
       cancelled = true;
@@ -187,9 +191,13 @@ export default function RecordClipModal({
             onPress={isRecording ? stop : start}
             disabled={blocked || device == null || isBusy}
             accessibilityLabel={isRecording ? '촬영 멈추기' : '촬영 시작'}
-            className={`h-16 w-16 items-center justify-center rounded-full border-4 ${
+            // 못 누르는 상태를 className 의 opacity-* 로 주면 안 된다. NativeWind 가
+            // 스타일 구조가 바뀐 것으로 보고 경고를 찍는데, 그 경고가 props 직렬화에서
+            // 무한 재귀에 빠져 그 렌더를 통째로 날려버린다(바텀시트 그림자와 같은 문제).
+            style={{ opacity: blocked || device == null ? 0.4 : 1 }}
+            className={`h-16 w-16 items-center justify-center rounded-full border-4 active:scale-95 ${
               isRecording ? 'border-white bg-rose-500' : 'border-white/70 bg-white/15'
-            } ${blocked || device == null ? 'opacity-40' : 'active:scale-95'}`}
+            }`}
           >
             {isBusy ? (
               <ActivityIndicator color="#fff" />

@@ -855,7 +855,13 @@ function useAppState(me: Me, onLogout: () => void) {
     return Number.isFinite(n) && dDay.trim() !== '' ? n : Number.MAX_SAFE_INTEGER;
   };
 
-  // 홈 "핀로그 촬영": D-Day 가 가장 가까운 여행으로 빠른 촬영 화면을 연다.
+  /**
+   * 홈 "핀로그 촬영": D-Day 가 가장 가까운 여행으로 빠른 촬영 화면을 연다.
+   *
+   * 촬영한 영상은 장소에 붙이는 것이라 그 여행의 핀 목록이 있어야 한다. 지도를
+   * 거치지 않고 홈에서 바로 들어오면 mapPlaces 가 비어 있어서 "어떤 장소의
+   * 영상인가요?" 가 고를 것 없는 빈 목록이 됐다. 그래서 여기서 일정을 받아 둔다.
+   */
   const openQuickPinLogCamera = () => {
     if (!trips.length) {
       showToast('먼저 여행을 만들어 주세요.');
@@ -864,6 +870,7 @@ function useAppState(me: Me, onLogout: () => void) {
     const closestTrip = [...trips].sort((a, b) => dDayNumber(a.dDay) - dDayNumber(b.dDay))[0];
     setPinLogTrip(closestTrip);
     setIsQuickPinLogCameraOpen(true);
+    loadItinerary(closestTrip.id);
   };
 
   // 빠른 촬영 영상을 그 장소의 내 기록에 붙인다. 기록이 없으면 새로 만든다(1인 1기록).

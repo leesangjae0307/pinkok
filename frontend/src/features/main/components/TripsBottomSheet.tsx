@@ -2,7 +2,7 @@
  * 여행 지도 하단 조절형 바텀시트 (드래그 핸들 · 일자 필터 · 이동수단 타임라인)
  */
 import React, { useMemo, useRef } from 'react';
-import { ActivityIndicator, Image, PanResponder, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, PanResponder, Pressable, ScrollView, Text, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 
 import { PlaceItem } from '../../../data/mockData';
@@ -30,7 +30,10 @@ interface TripsBottomSheetProps {
   onHeightChange: (height: number) => void;
   selectedDay: number | 'all';
   onSelectDay: (day: number | 'all') => void;
+  /** 지금 고른 일자의 장소. 일자를 고르면 걸러진 목록이 온다. */
   places: PlaceItem[];
+  /** 일자와 상관없는 전체 장소 수. "전체" 칩의 숫자로 쓴다. */
+  totalCount: number;
   selectedPlaceId: number;
   onSelectPlace: (place: PlaceItem) => void;
   onOpenTeamRecord: (place: PlaceItem) => void;
@@ -46,6 +49,14 @@ interface TripsBottomSheetProps {
   onRetry: () => void;
   onAddDay: () => void;
   isAddingDay: boolean;
+  /** 일자 칩을 길게 눌렀을 때. 그 일자의 핀은 지워지지 않고 미배정으로 돌아간다. */
+  onDeleteDay: (day: number) => void;
+  /** 장소의 일자를 고르는 창을 연다. */
+  onAssignDay: (place: PlaceItem) => void;
+  /** 일자 안에서 한 칸 위(-1)/아래(1)로 옮긴다. */
+  onMovePlace: (placeId: number, direction: -1 | 1) => void;
+  /** 여행할 시각을 고르는 창을 연다. */
+  onEditTime: (place: PlaceItem) => void;
 }
 
 function DashedVLine() {
@@ -65,6 +76,7 @@ export default function TripsBottomSheet({
   selectedDay,
   onSelectDay,
   places,
+  totalCount,
   selectedPlaceId,
   onSelectPlace,
   onOpenTeamRecord,
@@ -78,6 +90,10 @@ export default function TripsBottomSheet({
   onRetry,
   onAddDay,
   isAddingDay,
+  onDeleteDay,
+  onAssignDay,
+  onMovePlace,
+  onEditTime,
 }: TripsBottomSheetProps) {
   // PanResponder 콜백 안에서 최신 값을 읽기 위한 ref
   const heightRef = useRef(sheetHeightPercent);
@@ -144,26 +160,48 @@ export default function TripsBottomSheet({
 
       {/* 2. 일자 탭 */}
       <View className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 py-2">
+        {/*
+          칩은 하나하나 shrink-0 이어야 한다. 가로 ScrollView 안이라도 기본값(shrink:1)이면
+          공간이 모자랄 때 눌려서 글자가 잘린다("1day" 가 잘려 보이던 원인).
+        */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1" contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
           <Pressable
             onPress={() => onSelectDay('all')}
             style={selectedDay === 'all' ? SELECTED_SHADOW : undefined}
-            className={`flex-row items-center gap-1 rounded-full border-2 px-3 py-1.5 ${
+            className={`shrink-0 flex-row items-center gap-1 rounded-full border-2 px-3 py-1.5 ${
               selectedDay === 'all' ? 'border-pixel-navy bg-mint-primary' : 'border-slate-200 bg-slate-100'
             }`}
           >
             <Text className={`text-xs font-black ${selectedDay === 'all' ? 'text-pixel-navy' : 'text-slate-600'}`}>전체</Text>
             <View className="rounded-full bg-white/70 px-1">
-              <Text className="font-pixel text-[9px] text-slate-700">{places.length}</Text>
+              <Text className="font-pixel text-[9px] text-slate-700">{totalCount}</Text>
             </View>
           </Pressable>
 
-          {/* 일자가 하나도 없으면 날짜별 보기도, 동선 최적화도 할 수 없다. */}
+          {dayNumbers.map((d) => (
+            <Pressable
+              key={d}
+              onPress={() => onSelectDay(d)}
+              onLongPress={() => onDeleteDay(d)}
+              accessibilityLabel={`${d}일차. 길게 누르면 삭제`}
+              style={selectedDay === d ? SELECTED_SHADOW : undefined}
+              className={`shrink-0 flex-row items-center gap-1 rounded-full border-2 px-3 py-1.5 ${
+                selectedDay === d ? 'border-pixel-navy bg-mint-primary' : 'border-slate-200 bg-slate-100'
+              }`}
+            >
+              <Text className={`font-pixel text-[10px] ${selectedDay === d ? 'text-pixel-navy' : 'text-slate-600'}`}>{d}day</Text>
+              {selectedDay === d && (
+                <Text className="text-[10px] font-black text-pixel-navy/50">✕</Text>
+              )}
+            </Pressable>
+          ))}
+
+          {/* 일자가 하나도 없으면 날짜별 보기도, 동선 최적화도 할 수 없다. 항상 맨 뒤에 둔다. */}
           <Pressable
             onPress={onAddDay}
             disabled={isAddingDay}
             accessibilityLabel="일자 추가"
-            className="flex-row items-center gap-1 rounded-full border-2 border-dashed border-[#075953] bg-white px-3 py-1.5 active:scale-95"
+            className="shrink-0 flex-row items-center gap-1 rounded-full border-2 border-dashed border-[#075953] bg-white px-3 py-1.5 active:scale-95"
           >
             {isAddingDay ? (
               <ActivityIndicator size="small" color="#075953" />
@@ -171,19 +209,6 @@ export default function TripsBottomSheet({
               <Text className="text-xs font-black text-[#075953]">+ 일자</Text>
             )}
           </Pressable>
-
-          {dayNumbers.map((d) => (
-            <Pressable
-              key={d}
-              onPress={() => onSelectDay(d)}
-              style={selectedDay === d ? SELECTED_SHADOW : undefined}
-              className={`flex-row items-center gap-1 rounded-full border-2 px-3 py-1.5 ${
-                selectedDay === d ? 'border-pixel-navy bg-mint-primary' : 'border-slate-200 bg-slate-100'
-              }`}
-            >
-              <Text className={`font-pixel text-[10px] ${selectedDay === d ? 'text-pixel-navy' : 'text-slate-600'}`}>{d}day</Text>
-            </Pressable>
-          ))}
         </ScrollView>
 
         <View className="flex-row items-center gap-1 pl-2">
@@ -226,7 +251,7 @@ export default function TripsBottomSheet({
             <Text className="text-center text-xs text-slate-400">해당 일자에 등록된 장소가 없습니다.</Text>
           </View>
         ) : (
-          places.map((place) => {
+          places.map((place, index) => {
             const isSelected = selectedPlaceId === place.id;
             const recordsCount = teamRecordCounts[place.id] || 0;
 
@@ -253,25 +278,44 @@ export default function TripsBottomSheet({
                       </View>
                     )}
 
-                    {/* 동그란 썸네일 */}
-                    <View className="h-13 w-13 overflow-hidden rounded-full border-2 border-pixel-navy bg-white p-0.5">
-                      <Image source={{ uri: place.thumbnail }} resizeMode="cover" className="h-full w-full rounded-full" />
-                    </View>
-
-                    {/* 장소명 + 태그 */}
+                    {/* 장소명 · 주소 · 시각 · 배지 (썸네일을 뺀 만큼 글자 영역을 넓게 쓴다) */}
                     <View className="min-w-0 flex-1">
-                      <Text className="text-xs font-extrabold leading-4 text-slate-900">{place.name}</Text>
+                      <Text numberOfLines={1} className="text-xs font-extrabold leading-4 text-slate-900">
+                        {place.name}
+                      </Text>
+                      {place.address ? (
+                        <Text numberOfLines={1} className="mt-0.5 text-[10px] font-semibold text-slate-500">
+                          {place.address}
+                        </Text>
+                      ) : null}
+
+                      {/* 여행할 시각. 누르면 고치고, 길게 누르면 지운다. */}
+                      <Pressable
+                        onPress={() => onEditTime(place)}
+                        accessibilityLabel={`${place.name} 시각 ${place.time ?? '추가'}`}
+                        className="mt-1 flex-row items-center gap-1 self-start"
+                      >
+                        <Text className="text-[10px]">🕑</Text>
+                        <Text
+                          className={`font-pixel text-[10px] ${place.time ? 'text-[#075953]' : 'text-slate-400'}`}
+                        >
+                          {place.time ?? '시각 추가'}
+                        </Text>
+                      </Pressable>
+
                       <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
                         <Text className="font-pixel text-[9px] text-amber-500">★ {place.rating}</Text>
                         <Text className="text-[10px] text-slate-300">·</Text>
-                        <View className="rounded bg-[#B4FAF0] px-1.5 py-0.5">
-                          <Text className="text-[9px] font-bold text-teal-800">{place.day}day</Text>
-                        </View>
-                        {place.time ? (
-                          <View className="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5">
-                            <Text className="font-pixel text-[8px] text-slate-600">{place.time}</Text>
-                          </View>
-                        ) : null}
+                        {/* 날짜를 안 정한 핀은 day 가 0 이라 "0day" 로 보이면 안 된다. */}
+                        <Pressable
+                          onPress={() => onAssignDay(place)}
+                          accessibilityLabel={`${place.name} 일자 지정`}
+                          className={`rounded px-1.5 py-0.5 ${place.day > 0 ? 'bg-[#B4FAF0]' : 'border border-dashed border-slate-400 bg-white'}`}
+                        >
+                          <Text className="text-[9px] font-bold text-teal-800">
+                            {place.day > 0 ? `${place.day}day` : '일자 지정'}
+                          </Text>
+                        </Pressable>
                         {isSelected && (
                           <View className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5">
                             <Text className="text-[8px] font-black text-rose-600">선택됨 ✓</Text>
@@ -280,6 +324,32 @@ export default function TripsBottomSheet({
                       </View>
                     </View>
                   </View>
+
+                  {/* 일자 안에서만 순서를 바꿀 수 있다. 전체에는 기준이 되는 일자가 없다. */}
+                  {selectedDay !== 'all' && (
+                    <View className="gap-1">
+                      <Pressable
+                        onPress={() => onMovePlace(place.id, -1)}
+                        disabled={index === 0}
+                        accessibilityLabel={`${place.name} 위로`}
+                        className={`h-7 w-7 items-center justify-center rounded-lg border-2 border-pixel-navy ${
+                          index === 0 ? 'bg-slate-100 opacity-40' : 'bg-white active:bg-slate-100'
+                        }`}
+                      >
+                        <Text className="text-[10px] font-black text-pixel-navy">▲</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => onMovePlace(place.id, 1)}
+                        disabled={index === places.length - 1}
+                        accessibilityLabel={`${place.name} 아래로`}
+                        className={`h-7 w-7 items-center justify-center rounded-lg border-2 border-pixel-navy ${
+                          index === places.length - 1 ? 'bg-slate-100 opacity-40' : 'bg-white active:bg-slate-100'
+                        }`}
+                      >
+                        <Text className="text-[10px] font-black text-pixel-navy">▼</Text>
+                      </Pressable>
+                    </View>
+                  )}
 
                   {/* 팀 기록 · 바로 촬영 */}
                   <View className="items-end gap-1">

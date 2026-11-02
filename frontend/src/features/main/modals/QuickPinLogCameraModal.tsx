@@ -6,20 +6,17 @@
  * setIsRecording(true) 자리에서 녹화를 시작하고, 끝나면 POST /files 로 올린 뒤
  * 받은 URL 을 onUpload 의 clip.videoUrl 로 넘기면 돼요.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Image, Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PixelBackArrow, PixelPinLogIcon } from '../../../components/pixel/PixelIcons';
 import { PixelPressable, PixelSelect } from '../../../components/pixel/Primitives';
 import { PlaceItem, PlaceRecord, TripFolder, toImageSource } from '../../../data/mockData';
+import RecordClipModal, { type RecordedClip } from './RecordClipModal';
 
 export type QuickClip = NonNullable<PlaceRecord['videoClip']>;
 
-/** 웹과 같은 2.8초 촬영: 56ms 마다 2%씩 → 100% */
-const TICK_MS = 56;
-const STEP = 2;
-const CLIP_SECONDS = 2.8;
 
 export default function QuickPinLogCameraModal({
   trip,
@@ -33,29 +30,14 @@ export default function QuickPinLogCameraModal({
   onUpload: (place: PlaceItem, clip: QuickClip) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [isRecording, setIsRecording] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [recorded, setRecorded] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  /** 실제로 찍은 클립. 장소를 고르면 이 값을 그대로 올린다. */
+  const [clip, setClip] = useState<RecordedClip | null>(null);
   const [placeId, setPlaceId] = useState<number | null>(places[0]?.id ?? null);
 
-  useEffect(() => {
-    if (!isRecording) {
-      return;
-    }
-    const timer = setInterval(() => {
-      setProgress((current) => {
-        const next = current + STEP;
-        if (next >= 100) {
-          clearInterval(timer);
-          setIsRecording(false);
-          setRecorded(true);
-          return 100;
-        }
-        return next;
-      });
-    }, TICK_MS);
-    return () => clearInterval(timer);
-  }, [isRecording]);
+  const recorded = clip !== null;
+  const isRecording = false;
+  const progress = recorded ? 100 : 0;
 
   const selectedPlace = places.find((place) => place.id === placeId);
   const viewfinder = selectedPlace?.thumbnail ? { uri: selectedPlace.thumbnail } : toImageSource(trip.image);
@@ -95,7 +77,7 @@ export default function QuickPinLogCameraModal({
 
           <View className="absolute left-4 top-4 rounded-xl bg-black/60 px-3 py-2">
             <Text className="text-xs font-black text-white">
-              {recorded ? '촬영 완료 · 장소를 지정해 주세요' : `${CLIP_SECONDS}초 자동 촬영`}
+              {recorded ? '촬영 완료 · 장소를 지정해 주세요' : '2~5초로 짧게 찍어요'}
             </Text>
           </View>
 
@@ -127,10 +109,12 @@ export default function QuickPinLogCameraModal({
               disabledClassName="h-12 w-full items-center justify-center rounded-xl border-2 border-white bg-slate-600"
               onPress={() =>
                 selectedPlace &&
+                clip &&
                 onUpload(selectedPlace, {
                   id: Date.now(),
-                  duration: CLIP_SECONDS,
+                  duration: clip.durationMs / 1000,
                   thumbnail: selectedPlace.thumbnail,
+                  videoUrl: clip.uri,
                   createdAt: '방금 전',
                 })
               }
@@ -143,11 +127,7 @@ export default function QuickPinLogCameraModal({
             {/* 웹의 0 0 0 6px 링 그림자는 바깥 테두리 View 로 표현 */}
             <View className="rounded-full bg-white/10 p-1.5">
               <Pressable
-                disabled={isRecording}
-                onPress={() => {
-                  setProgress(0);
-                  setIsRecording(true);
-                }}
+                onPress={() => setIsCameraOpen(true)}
                 accessibilityLabel="핀로그 영상 촬영 시작"
                 className={`h-20 w-20 items-center justify-center rounded-full border-4 border-white ${
                   isRecording ? 'bg-slate-600' : 'bg-rose-500'
@@ -159,6 +139,17 @@ export default function QuickPinLogCameraModal({
           </View>
         )}
       </View>
+
+      {isCameraOpen && (
+        <RecordClipModal
+          title={trip.title}
+          onClose={() => setIsCameraOpen(false)}
+          onRecorded={(recordedClip) => {
+            setClip(recordedClip);
+            setIsCameraOpen(false);
+          }}
+        />
+      )}
     </Modal>
   );
 }

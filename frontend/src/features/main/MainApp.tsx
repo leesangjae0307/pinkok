@@ -26,6 +26,9 @@ import AddPlaceModal from './modals/AddPlaceModal';
 import QuickPinLogCameraModal from './modals/QuickPinLogCameraModal';
 import CreateTripScreen from './screens/CreateTripScreen';
 import PinLogTripPickerModal from './modals/PinLogTripPickerModal';
+import DayPickerModal from './modals/DayPickerModal';
+import PlaceTimePicker from './modals/PlaceTimePicker';
+import DeleteAccountModal from './modals/DeleteAccountModal';
 import { AvatarPickerModal, ClipPlaybackModal, PasswordModal, ProfileDetailModal } from './modals/ProfileModals';
 
 function Toast() {
@@ -123,6 +126,16 @@ function GlobalModals() {
     isPinLogMakerOpen,
     isPinLogTripPickerOpen,
     setIsPinLogTripPickerOpen,
+    assigningPlace,
+    setAssigningPlace,
+    handleAssignDay,
+    tripDayNumbers,
+    editingTimePlace,
+    setEditingTimePlace,
+    handleSetPlaceTime,
+    isDeleteAccountOpen,
+    setIsDeleteAccountOpen,
+    handleDeleteAccount,
     trips,
     handleSynthesizeComplete,
     inviteTrip,
@@ -166,6 +179,30 @@ function GlobalModals() {
             setIsPlaceDetailModalOpen(false);
             setIsPinLogMakerOpen(true);
           }}
+        />
+      )}
+
+      {assigningPlace && (
+        <DayPickerModal
+          place={assigningPlace}
+          dayNumbers={tripDayNumbers}
+          onClose={() => setAssigningPlace(null)}
+          onSelect={(day) => handleAssignDay(assigningPlace.id, day)}
+        />
+      )}
+
+      {isDeleteAccountOpen && (
+        <DeleteAccountModal
+          onClose={() => setIsDeleteAccountOpen(false)}
+          onConfirm={handleDeleteAccount}
+        />
+      )}
+
+      {editingTimePlace && (
+        <PlaceTimePicker
+          place={editingTimePlace}
+          onClose={() => setEditingTimePlace(null)}
+          onSelect={(time) => handleSetPlaceTime(editingTimePlace.id, time)}
         />
       )}
 

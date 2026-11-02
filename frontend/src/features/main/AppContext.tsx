@@ -2,7 +2,7 @@
  * 메인 앱 전역 상태 (웹 App.tsx 의 useState / 핸들러를 그대로 옮긴 것)
  * 화면(탭)들이 props 대신 useApp() 으로 꺼내 써요.
  */
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 
@@ -13,7 +13,7 @@ import avatarMapPhone from '../../assets/images/avatar-map-phone.png';
 import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 import { Me, fetchAvatars, logout } from '../../api/authApi';
-import { selectAvatar, updateNickname, updateProfileImage } from '../../api/userApi';
+import { deleteAccount, selectAvatar, updateNickname, updateProfileImage } from '../../api/userApi';
 import { fileUrl, uploadFile, uploadFiles, type PickedFile } from '../../api/fileApi';
 import {
   createDiary,
@@ -37,10 +37,15 @@ import {
 import {
   createItineraryDay,
   createItineraryItem,
+  deleteItineraryDay,
+  moveItineraryItemToDay,
+  reorderItineraryItems,
+  updateItineraryItemTime,
   fetchItineraryDays,
   fetchItineraryItems,
   toPlaceItems,
 } from '../../api/itineraryApi';
+import type { ItineraryDay } from '../../api/itineraryApi';
 import type { PlaceSearchResult } from '../../api/placeApi';
 import { fetchTripStyles, replaceTripStyles } from '../../api/travelStyleApi';
 import { addDays } from '../../components/pixel/PixelCalendar';
@@ -280,7 +285,12 @@ function useAppState(me: Me, onLogout: () => void) {
   const [isMapPlacesLoading, setIsMapPlacesLoading] = useState(false);
   const [mapPlacesError, setMapPlacesError] = useState<string | null>(null);
   /** 이 여행에 실제로 있는 일자 번호 (1day, 2day ... 칩). */
-  const [tripDayNumbers, setTripDayNumbers] = useState<number[]>([]);
+  /** 일자 번호만으로는 삭제할 수 없어서(삭제는 id 로 한다) 받은 일자를 그대로 들고 있는다. */
+  const [itineraryDays, setItineraryDays] = useState<ItineraryDay[]>([]);
+  const tripDayNumbers = useMemo(
+    () => itineraryDays.map((d) => d.dayNumber).sort((a, b) => a - b),
+    [itineraryDays],
+  );
   const [isOptimizingRoute, setIsOptimizingRoute] = useState(false);
 
   // 바텀시트
@@ -468,22 +478,99 @@ function useAppState(me: Me, onLogout: () => void) {
   /**
    * 검색해서 고른 장소를 지금 보고 있는 여행에 핀으로 추가한다.
    *
-   * 검색 결과와 서버의 PlaceInput 은 필드가 같아서 그대로 넘긴다. 날짜는 정하지 않아
-   * "미배정 핀"으로 들어가고, 추가 뒤에는 일정을 다시 받아 지도에 반영한다.
+   * 검색 결과와 서버의 PlaceInput 은 필드가 같아서 그대로 넘긴다.
+   *
+   * 일자 탭을 보고 있을 때 추가하면 그 일자로 바로 넣는다. 전체를 보고 있으면
+   * 날짜를 정하지 않아 "미배정 핀"으로 들어간다. 추가 뒤에는 일정을 다시 받는다.
    */
   const handleAddPlace = async (place: PlaceSearchResult): Promise<boolean> => {
     if (!activeTrip) return false;
+    const targetDay =
+      selectedDayFilter === 'all'
+        ? undefined
+        : itineraryDays.find((d) => d.dayNumber === selectedDayFilter)?.id;
     try {
-      await createItineraryItem({ tripId: activeTrip.id, place });
+      await createItineraryItem({ tripId: activeTrip.id, place, dayId: targetDay });
       await loadItinerary(activeTrip.id);
       setTrips((cur) =>
         cur.map((t) => (t.id === activeTrip.id ? { ...t, placesCount: t.placesCount + 1 } : t)),
       );
-      showToast(`'${place.name}'을(를) 지도에 추가했어요.`);
+      showToast(
+        targetDay
+          ? `'${place.name}'을(를) ${selectedDayFilter}일차에 추가했어요.`
+          : `'${place.name}'을(를) 지도에 추가했어요.`,
+      );
       return true;
     } catch (e) {
       showToast(errorMessage(e, '장소를 추가하지 못했어요.'));
       return false;
+    }
+  };
+
+  /** 어떤 핀을 일자에 배정할지 고르는 중. null 이면 고르는 창이 닫혀 있다. */
+  const [assigningPlace, setAssigningPlace] = useState<PlaceItem | null>(null);
+
+  /** 어떤 핀의 시각을 고치는 중. null 이면 시간 선택기가 닫혀 있다. */
+  const [editingTimePlace, setEditingTimePlace] = useState<PlaceItem | null>(null);
+
+  /**
+   * 핀의 여행할 시각을 저장한다. 'HH:mm' 으로 보낸다.
+   *
+   * 지우는 건 안 된다. 서버가 plannedArrivalTime 이 비어 있으면 "바꾸지 말라"로 읽어서,
+   * 한 번 넣은 시각을 없애려면 서버 쪽 수정이 필요하다.
+   */
+  const handleSetPlaceTime = async (placeId: number, time: string) => {
+    if (!activeTrip) return;
+    setEditingTimePlace(null);
+    try {
+      await updateItineraryItemTime(placeId, time);
+      await loadItinerary(activeTrip.id);
+      showToast(`${time} 으로 정했어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '시각을 저장하지 못했어요.'));
+    }
+  };
+
+  /** 핀을 고른 일자로 옮긴다. 옮기면 그 일자의 맨 뒤 순서가 된다. */
+  const handleAssignDay = async (placeId: number, dayNumber: number) => {
+    if (!activeTrip) return;
+    const target = itineraryDays.find((d) => d.dayNumber === dayNumber);
+    if (!target) return;
+    setAssigningPlace(null);
+    try {
+      await moveItineraryItemToDay(placeId, target.id);
+      await loadItinerary(activeTrip.id);
+      showToast(`${dayNumber}일차로 옮겼어요.`);
+    } catch (e) {
+      showToast(errorMessage(e, '일자를 바꾸지 못했어요.'));
+    }
+  };
+
+  /**
+   * 일자 안에서 핀을 한 칸 위/아래로 옮긴다.
+   *
+   * 서버는 한 일자의 순서를 통째로 받으므로, 지금 보이는 순서에서 두 개를 바꿔
+   * 전체 목록을 다시 보낸다. 미배정 핀은 순서를 매기는 일자가 없어 바꿀 수 없다.
+   */
+  const handleMovePlace = async (placeId: number, direction: -1 | 1) => {
+    if (!activeTrip || selectedDayFilter === 'all') return;
+    const day = itineraryDays.find((d) => d.dayNumber === selectedDayFilter);
+    if (!day) return;
+
+    const ordered = mapPlaces
+      .filter((p) => p.day === selectedDayFilter)
+      .sort((a, b) => a.order - b.order);
+    const from = ordered.findIndex((p) => p.id === placeId);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= ordered.length) return;
+
+    const next = [...ordered];
+    [next[from], next[to]] = [next[to], next[from]];
+    try {
+      await reorderItineraryItems(day.id, next.map((p) => p.id));
+      await loadItinerary(activeTrip.id);
+    } catch (e) {
+      showToast(errorMessage(e, '순서를 바꾸지 못했어요.'));
     }
   };
 
@@ -516,6 +603,45 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   };
 
+  /**
+   * 일자를 지운다. 그 일자에 있던 핀은 삭제되지 않고 "미배정"으로 돌아가므로
+   * 전체 탭에서 계속 보인다.
+   *
+   * 뒤 일자의 번호는 그대로 둔다(3일차를 지워도 4일차는 4일차). 서버에 일자 번호를
+   * 고치는 API 가 없어서 다시 매길 방법이 없다.
+   */
+  const handleDeleteDay = (dayNumber: number) => {
+    if (!activeTrip) return;
+    const target = itineraryDays.find((d) => d.dayNumber === dayNumber);
+    if (!target) return;
+    const count = mapPlaces.filter((p) => p.day === dayNumber).length;
+
+    Alert.alert(
+      `${dayNumber}일차를 지울까요?`,
+      count > 0
+        ? `이 일자에 있던 장소 ${count}곳은 지워지지 않고 날짜 미배정으로 돌아갑니다.`
+        : '되돌릴 수 없습니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteItineraryDay(target.id);
+              // 지운 일자를 보고 있었으면 더 볼 것이 없으므로 전체로 돌린다.
+              setSelectedDayFilter((cur) => (cur === dayNumber ? 'all' : cur));
+              await loadItinerary(activeTrip.id);
+              showToast(`${dayNumber}일차를 지웠어요.`);
+            } catch (e) {
+              showToast(errorMessage(e, '일자를 지우지 못했어요.'));
+            }
+          },
+        },
+      ],
+    );
+  };
+
   /** 여행의 일자와 핀을 받아 지도·바텀시트에 올린다. */
   const loadItinerary = useCallback(async (tripId: number) => {
     setIsMapPlacesLoading(true);
@@ -531,12 +657,12 @@ function useAppState(me: Me, onLogout: () => void) {
       fetchTripDiaries(tripId)
         .then((diaries) => setPlaceRecords(diaries.map(toPlaceRecord)))
         .catch(() => setPlaceRecords([]));
-      setTripDayNumbers(days.map((d) => d.dayNumber).sort((a, b) => a - b));
+      setItineraryDays(days);
       // 핀을 고르기 전에도 상세 카드가 하나는 떠 있어야 해서 첫 핀을 잡아둔다.
       if (places.length > 0) setSelectedMapPin(places[0]);
     } catch (e) {
       setMapPlaces([]);
-      setTripDayNumbers([]);
+      setItineraryDays([]);
       setMapPlacesError(errorMessage(e, '일정을 불러오지 못했어요.'));
     } finally {
       setIsMapPlacesLoading(false);
@@ -584,6 +710,8 @@ function useAppState(me: Me, onLogout: () => void) {
             title: payload.title ?? t.title,
             date: tripDateLabel(payload.startDate ?? null, payload.endDate ?? null),
             dDay: tripDDayLabel(payload.startDate ?? null),
+            // 표지를 바꿨으면 목록·홈 카드도 바로 새 사진으로 바뀌어야 한다.
+            image: fileUrl(payload.coverImageUrl) ?? t.image,
           }
         : t;
     setTrips((cur) => cur.map(apply));
@@ -627,6 +755,31 @@ function useAppState(me: Me, onLogout: () => void) {
       showToast(errorMessage(e, '로그아웃 처리 중 문제가 있었지만 기기에서는 로그아웃했어요.'));
     }
     onLogout();
+  };
+
+  /** 회원 탈퇴 창이 열려 있는지 */
+  const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false);
+
+  /**
+   * 회원 탈퇴. 성공하면 null, 실패하면 창에 띄울 메시지를 돌려준다.
+   *
+   * 성공 뒤에는 로그아웃과 같은 길을 탄다 — onLogout 이 토큰을 비우고 로그인 화면으로
+   * 돌려보낸다.
+   */
+  const handleDeleteAccount = async (password: string): Promise<string | null> => {
+    try {
+      await deleteAccount(password);
+    } catch (e) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        return '직접 만든 여행이 남아 있어요. 먼저 여행을 삭제하거나 다른 팀원에게 넘긴 뒤 다시 시도해 주세요.';
+      }
+      if (status === 401 || status === 403) return '비밀번호가 맞지 않아요.';
+      return errorMessage(e, '탈퇴하지 못했어요.');
+    }
+    setIsDeleteAccountOpen(false);
+    onLogout();
+    return null;
   };
 
   // 장소 기록 저장 (1인 1기록 규칙)
@@ -1002,6 +1155,22 @@ function useAppState(me: Me, onLogout: () => void) {
       showToast('최적화하려면 장소가 두 곳 이상 필요해요.');
       return;
     }
+    // 최적화는 일자 배정과 순서를 다시 짠다. 직접 배정해 둔 게 있으면 먼저 묻는다.
+    const assigned = mapPlaces.filter((p) => p.day > 0).length;
+    if (assigned > 0) {
+      const ok = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          '동선을 다시 짤까요?',
+          `직접 일자를 정해 둔 장소 ${assigned}곳의 일자와 순서가 바뀔 수 있어요.`,
+          [
+            { text: '취소', style: 'cancel', onPress: () => resolve(false) },
+            { text: '계속', onPress: () => resolve(true) },
+          ],
+          { cancelable: true, onDismiss: () => resolve(false) },
+        );
+      });
+      if (!ok) return;
+    }
     setIsOptimizingRoute(true);
     showToast('AI가 이동 거리와 방문 시간을 계산하고 있어요.');
     try {
@@ -1104,6 +1273,13 @@ function useAppState(me: Me, onLogout: () => void) {
     setIsAddPlaceOpen,
     handleAddPlace,
     handleAddDay,
+    handleDeleteDay,
+    handleAssignDay,
+    handleMovePlace,
+    assigningPlace, setAssigningPlace,
+    editingTimePlace, setEditingTimePlace,
+    handleSetPlaceTime,
+    itineraryDays,
     isAddingDay,
     respondingInvitationId,
     reloadNotifications,
@@ -1198,6 +1374,8 @@ function useAppState(me: Me, onLogout: () => void) {
     handleOptimizeRoute,
     handleAiTripRecommendation,
     handleLogout,
+    isDeleteAccountOpen, setIsDeleteAccountOpen,
+    handleDeleteAccount,
   };
 }
 

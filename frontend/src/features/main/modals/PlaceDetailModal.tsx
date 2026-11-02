@@ -3,9 +3,9 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarSource, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
+import RecordClipModal from './RecordClipModal';
 import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
 
@@ -43,7 +43,6 @@ export default function PlaceDetailModal({
   currentUserName,
   startInCamera = false,
 }: PlaceDetailModalProps) {
-  const insets = useSafeAreaInsets();
   const myExistingRecord = records.find((r) => r.pinId === place.id && r.userId === currentUserId);
 
   const [isEditing, setIsEditing] = useState(startInCamera);
@@ -53,11 +52,8 @@ export default function PlaceDetailModal({
   const [videoClip, setVideoClip] = useState<PlaceRecord['videoClip'] | undefined>(myExistingRecord?.videoClip);
   const [memoFocused, setMemoFocused] = useState(false);
 
-  // 촬영 시뮬레이션
+  // 촬영
   const [isCameraActive, setIsCameraActive] = useState(startInCamera);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingProgress, setRecordingProgress] = useState(0);
-  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
 
   useEffect(() => {
     if (myExistingRecord) {
@@ -73,49 +69,6 @@ export default function PlaceDetailModal({
     }
   }, [myExistingRecord, place.id]);
 
-  // 2.8초 자동 종료 촬영
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | undefined;
-    if (isRecording) {
-      const step = 50;
-      const totalDuration = 2800;
-      timer = setInterval(() => {
-        setRecordingProgress((prev) => {
-          const next = prev + (step / totalDuration) * 100;
-          if (next >= 100) {
-            if (timer) clearInterval(timer);
-            setIsRecording(false);
-            setIsUploadingVideo(true);
-            const uploadResponse = {
-              id: Date.now(),
-              thumbnailUrl: place.thumbnail,
-              durationMs: 2800,
-            };
-            setTimeout(() => {
-              setVideoClip({
-                id: uploadResponse.id,
-                duration: uploadResponse.durationMs / 1000,
-                thumbnail: uploadResponse.thumbnailUrl,
-                createdAt: '방금 전',
-              });
-              setIsUploadingVideo(false);
-              setIsCameraActive(false);
-            }, 650);
-            return 100;
-          }
-          return next;
-        });
-      }, step);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [isRecording, place.id, place.thumbnail]);
-
-  const handleStartRecording = () => {
-    setRecordingProgress(0);
-    setIsRecording(true);
-  };
 
   const handleAddSamplePhoto = () => {
     const randomPhoto = SAMPLE_PHOTOS[Math.floor(Math.random() * SAMPLE_PHOTOS.length)];
@@ -147,62 +100,22 @@ export default function PlaceDetailModal({
 
   /* ------------------------------ 전체화면 카메라 ------------------------------ */
   if (isCameraActive) {
-    const busy = isRecording || isUploadingVideo;
     return (
-      <Modal visible animationType="slide" onRequestClose={() => setIsCameraActive(false)} statusBarTranslucent>
-        <View className="flex-1 bg-slate-950" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
-          <View className="flex-row items-center justify-between border-b border-white/15 px-4 py-3">
-            <Pressable
-              onPress={() => {
-                setIsCameraActive(false);
-                setIsRecording(false);
-              }}
-              accessibilityLabel="카메라 닫기"
-              className="h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/10"
-            >
-              <PixelBackArrow size={16} color="#FFFFFF" />
-            </Pressable>
-            <View className="items-center">
-              <Text className="font-pixel text-[9px] text-[#56EADD]">PINKOK CAMERA</Text>
-              <Text className="mt-1 text-sm font-black text-white">2~3초 앱 내 촬영</Text>
-            </View>
-            <Text className="w-10 text-right font-pixel text-[8px] text-rose-400">{isRecording ? 'REC' : 'READY'}</Text>
-          </View>
-
-          <View className="relative flex-1 overflow-hidden bg-black">
-            <Image source={{ uri: place.thumbnail }} resizeMode="cover" className="h-full w-full" />
-            {!isRecording && <View className="absolute inset-0 bg-black/25" />}
-            <View pointerEvents="none" className="absolute inset-5 items-center justify-center border border-white/35">
-              <View className="absolute h-px w-12 bg-white/70" />
-              <View className="absolute h-12 w-px bg-white/70" />
-            </View>
-            <View className="absolute left-4 top-4 rounded-xl bg-black/60 px-3 py-2">
-              <Text className="text-xs font-black text-white">{place.name}</Text>
-              <Text className="mt-1 text-[10px] text-white/70">최대 3초까지 촬영돼요</Text>
-            </View>
-            {busy && (
-              <View className="absolute bottom-0 left-0 right-0 h-2 bg-black/60">
-                <View className="h-full bg-rose-500" style={{ width: `${isUploadingVideo ? 100 : recordingProgress}%` }} />
-              </View>
-            )}
-          </View>
-
-          <View className="flex-row items-center justify-between bg-slate-950 px-5 py-5">
-            <Text className="w-20 text-[10px] font-bold text-slate-400">
-              {isUploadingVideo ? '업로드 중...' : isRecording ? '2.8초 자동 종료' : '준비 완료'}
-            </Text>
-            <Pressable
-              disabled={busy}
-              onPress={handleStartRecording}
-              accessibilityLabel="3초 영상 촬영 시작"
-              className={`h-20 w-20 items-center justify-center rounded-full border-4 border-white ${busy ? 'bg-slate-600' : 'bg-rose-500'}`}
-            >
-              <View className="h-10 w-10 rounded-full border-2 border-white bg-rose-600" />
-            </Pressable>
-            <Text className="w-20 text-right font-pixel text-[9px] text-[#56EADD]">{Math.round(recordingProgress)}%</Text>
-          </View>
-        </View>
-      </Modal>
+      <RecordClipModal
+        title={place.name}
+        onClose={() => setIsCameraActive(false)}
+        onRecorded={(clip) => {
+          // 업로드는 기록을 저장할 때 한 번에 한다(uploadRecordMedia 가 file:// 를 올린다).
+          setVideoClip({
+            id: Date.now(),
+            duration: clip.durationMs / 1000,
+            thumbnail: place.thumbnail,
+            videoUrl: clip.uri,
+            createdAt: '방금 전',
+          });
+          setIsCameraActive(false);
+        }}
+      />
     );
   }
 

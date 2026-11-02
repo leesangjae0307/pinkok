@@ -5,7 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { PixelBackArrow, PixelTripsIcon } from '../../../components/pixel/PixelIcons';
+import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import KakaoMapView, { type MapMarker } from '../../../components/map/KakaoMapView';
 import TripsBottomSheet from '../components/TripsBottomSheet';
 import { useApp } from '../AppContext';
@@ -24,6 +24,10 @@ export default function TripMapView() {
     reloadItinerary,
     handleAddDay,
     isAddingDay,
+    handleDeleteDay,
+    setAssigningPlace,
+    handleMovePlace,
+    setEditingTimePlace,
     selectedMapPin,
     setSelectedMapPin,
     setIsTripMapOpen,
@@ -85,16 +89,19 @@ export default function TripMapView() {
           >
             <PixelBackArrow size={16} />
           </Pressable>
-          <View className="flex-1 flex-row items-center justify-between rounded-2xl border border-[#82F0DC] bg-white/95 px-3.5 py-2 shadow-md">
-            <View className="min-w-0 flex-1 flex-row items-center gap-2">
-              <PixelTripsIcon size={20} active />
-              <Text numberOfLines={1} className="flex-1 text-xs font-bold text-slate-800">
-                {activeTrip?.title ?? "여행"}
-              </Text>
-            </View>
-            <View className="rounded border border-[#50E6DC] bg-[#56EADD] px-1.5 py-0.5">
+          {/*
+            이 알약은 고정폭 버튼 4개(뒤로·장소·팀원·PinLog)와 한 줄을 나눠 써서 남는 폭이
+            아주 좁다. 아이콘까지 넣으면 제목이 0 으로 눌리고도 모자라 아이콘이 배지 뒤로
+            밀려 깨졌다(RN 은 flexShrink 기본값이 0 이라 shrink 유틸로는 해결되지 않는다).
+            그래서 장식인 아이콘을 빼고 정보인 제목과 배지만 남긴다.
+          */}
+          <View className="min-w-0 flex-1 flex-row items-center justify-between rounded-2xl border border-[#82F0DC] bg-white/95 px-3 py-2 shadow-md">
+            <Text numberOfLines={1} className="min-w-0 flex-1 text-xs font-bold text-slate-800">
+              {activeTrip?.title ?? '여행'}
+            </Text>
+            <View className="ml-1.5 rounded border border-[#50E6DC] bg-[#56EADD] px-1.5 py-0.5">
               <Text className="font-pixel text-[9px] text-slate-900">
-                {selectedDayFilter === 'all' ? '전체' : `${selectedDayFilter}DAY`}
+                {selectedDayFilter === 'all' ? '전체' : `${selectedDayFilter}D`}
               </Text>
             </View>
           </View>
@@ -138,12 +145,17 @@ export default function TripMapView() {
           if (matching.length > 0) setSelectedMapPin(matching[0]);
         }}
         places={displayedMapPlaces}
+        totalCount={mapPlaces.length}
         dayNumbers={tripDayNumbers}
         isLoading={isMapPlacesLoading}
         loadError={mapPlacesError}
         onRetry={reloadItinerary}
         onAddDay={handleAddDay}
         isAddingDay={isAddingDay}
+        onDeleteDay={handleDeleteDay}
+        onAssignDay={setAssigningPlace}
+        onMovePlace={handleMovePlace}
+        onEditTime={setEditingTimePlace}
         selectedPlaceId={selectedMapPin?.id ?? -1}
         onSelectPlace={(place) => {
           setSelectedMapPin(place);

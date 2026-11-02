@@ -33,6 +33,7 @@ export default function SettingsScreen() {
     cacheSize,
     handleClearCache,
     handleLogout,
+    setIsDeleteAccountOpen,
     openProfileEditor,
     setIsPasswordModalOpen,
   } = useApp();
@@ -198,13 +199,20 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* 로그아웃 */}
-      <View className="items-center pb-6 pt-3">
+      {/* 로그아웃 · 회원 탈퇴 */}
+      <View className="items-center gap-2 pb-6 pt-3">
         <Pressable
           onPress={handleLogout}
           className="flex-row items-center gap-1.5 rounded-2xl border border-[#82F0DC] bg-white/80 px-6 py-2.5 active:scale-95 active:bg-white"
         >
           <Text className="text-xs font-bold text-slate-600">🚪 로그아웃</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setIsDeleteAccountOpen(true)}
+          accessibilityLabel="회원 탈퇴"
+          className="px-6 py-2 active:scale-95"
+        >
+          <Text className="text-[11px] font-bold text-slate-400 underline">회원 탈퇴</Text>
         </Pressable>
       </View>
     </FadeIn>

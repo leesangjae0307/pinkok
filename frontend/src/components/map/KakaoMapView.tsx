@@ -53,6 +53,11 @@ function buildHtml(): string {
       border-radius: 6px; font-size: 11px; font-weight: 700;
       white-space: nowrap; font-family: sans-serif;
     }
+    /* 번호만 찍는 이름표. 작고 동그래야 핀 위에서 덜 거슬린다. */
+    .label-num {
+      padding: 2px 0; width: 18px; border-radius: 9px;
+      text-align: center; font-size: 10px;
+    }
   </style>
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&autoload=false"></script>
 </head>
@@ -85,13 +90,15 @@ function buildHtml(): string {
         var marker = new kakao.maps.Marker({ position: pos, map: map });
         overlays.push(marker);
 
+        // 핀이 몰리면 이름표끼리 겹쳐서 아무것도 못 읽는다. 고른 핀만 이름을 보여주고
+        // 나머지는 번호만 찍는다.
         var selected = payload.selectedId === m.id;
+        var text = selected ? (m.order + '. ' + m.label) : String(m.order);
         var label = new kakao.maps.CustomOverlay({
           position: pos,
           yAnchor: 2.2,
-          content: '<div class="label" style="background:'
-            + (selected ? '#FF5A87' : '#0f172a') + '">'
-            + m.order + '. ' + m.label + '</div>',
+          content: '<div class="label' + (selected ? '' : ' label-num') + '" style="background:'
+            + (selected ? '#FF5A87' : '#0f172a') + '">' + text + '</div>',
           map: map,
         });
         overlays.push(label);

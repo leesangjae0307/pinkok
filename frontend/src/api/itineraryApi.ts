@@ -107,6 +107,36 @@ export async function createItineraryItem(payload: ItineraryItemCreatePayload): 
   return data;
 }
 
+/**
+ * 핀을 다른 일자로 옮긴다. 옮기면 그 일자의 맨 뒤 순서가 된다.
+ *
+ * 주의: dayId 를 비우면 서버는 "바꾸지 말라"로 읽는다. 그래서 이 API 로는 핀을
+ * 미배정으로 되돌릴 수 없다(그 일자를 통째로 지우는 수밖에 없다).
+ */
+export async function moveItineraryItemToDay(itemId: number, dayId: number): Promise<ItineraryItem> {
+  const { data } = await api.patch<ItineraryItem>(`/itinerary-items/${itemId}`, { dayId });
+  return data;
+}
+
+/**
+ * 핀의 여행할 시각을 정한다. time 은 'HH:mm'.
+ *
+ * 주의: 비워서 보내면 서버가 "바꾸지 말라"로 읽는다. 이 API 로는 한 번 넣은 시각을
+ * 지울 수 없다.
+ */
+export async function updateItineraryItemTime(itemId: number, time: string): Promise<ItineraryItem> {
+  const { data } = await api.patch<ItineraryItem>(`/itinerary-items/${itemId}`, {
+    plannedArrivalTime: time,
+  });
+  return data;
+}
+
+/** 한 일자 안의 핀 순서를 통째로 다시 정한다. itemIds 순서가 곧 방문 순서다. */
+export async function reorderItineraryItems(dayId: number, itemIds: number[]): Promise<ItineraryItem[]> {
+  const { data } = await api.patch<ItineraryItem[]>('/itinerary-items/order', { dayId, itemIds });
+  return data;
+}
+
 /** 핀 삭제. */
 export async function deleteItineraryItem(itemId: number): Promise<void> {
   await api.delete(`/itinerary-items/${itemId}`);

@@ -6,14 +6,16 @@
  * 그래서 열릴 때 GET /trips/{id} 로 원본을 받아 채운다.
  */
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import PixelCalendar, { nightsLabel, toYmd } from '../../../components/pixel/PixelCalendar';
 import { ModalBackdrop, PixelPressable } from '../../../components/pixel/Primitives';
 import { errorMessage } from '../../../api/axios';
 import { fetchTrip, updateTrip, type TripUpdatePayload } from '../../../api/tripApi';
-import { TripFolder } from '../../../data/mockData';
+import { fileUrl, uploadFile } from '../../../api/fileApi';
+import { TripFolder, toImageSource } from '../../../data/mockData';
 
 const TITLE_MAX = 20;
 
@@ -39,6 +41,9 @@ export default function EditTripModal({
   const [endDate, setEndDate] = useState(toYmd(new Date()));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [focused, setFocused] = useState<'title' | 'region' | null>(null);
+  /** 서버가 주는 상대 경로. 새로 고르면 업로드한 주소로 바뀐다. */
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +54,7 @@ export default function EditTripModal({
         setRegion(detail.region ?? '');
         if (detail.startDate) setStartDate(detail.startDate);
         if (detail.endDate) setEndDate(detail.endDate);
+        setCoverImageUrl(detail.coverImageUrl ?? null);
       })
       .catch((e) => {
         if (!cancelled) setLoadError(errorMessage(e, '여행 정보를 불러오지 못했어요.'));
@@ -74,6 +80,8 @@ export default function EditTripModal({
       startDate,
       endDate,
     };
+    // 표지를 안 건드렸으면 보내지 않는다. 보내지 않은 필드는 서버가 그대로 둔다.
+    if (coverImageUrl) payload.coverImageUrl = coverImageUrl;
     try {
       await updateTrip(trip.id, payload);
       onSaved(payload);
@@ -84,6 +92,28 @@ export default function EditTripModal({
       setIsSaving(false);
     }
   };
+
+  /** 갤러리에서 고른 사진을 올려 두기만 한다. 실제 반영은 저장할 때 한다. */
+  const pickCover = async () => {
+    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
+    const asset = res.assets?.[0];
+    if (res.didCancel || !asset?.uri) return;
+    setIsUploadingCover(true);
+    setSaveError(null);
+    try {
+      const uploaded = await uploadFile({ uri: asset.uri, fileName: asset.fileName, type: asset.type });
+      setCoverImageUrl(uploaded.url);
+    } catch (e) {
+      setSaveError(errorMessage(e, '사진을 올리지 못했어요.'));
+    } finally {
+      setIsUploadingCover(false);
+    }
+  };
+
+  // 새로 고른 사진이 있으면 그걸, 없으면 지금 카드에 쓰는 이미지를 보여준다.
+  const coverSource = coverImageUrl
+    ? { uri: fileUrl(coverImageUrl) ?? coverImageUrl }
+    : toImageSource(trip.image);
 
   const inputBorder = (key: typeof focused) => (focused === key ? 'border-[#56EADD]' : 'border-slate-200');
 
@@ -111,7 +141,7 @@ export default function EditTripModal({
         <View className="flex-row items-center justify-between border-b-2 border-pixel-navy bg-white px-4 py-3">
           <View className="flex-1 pr-2">
             <Text className="font-pixel text-[11px] text-[#075953]">여행 수정</Text>
-            <Text className="mt-2 text-[11px] font-bold text-slate-500">제목 · 지역 · 날짜를 바꿀 수 있어요.</Text>
+            <Text className="mt-2 text-[11px] font-bold text-slate-500">사진 · 제목 · 지역 · 날짜를 바꿀 수 있어요.</Text>
           </View>
           <Pressable
             onPress={onClose}
@@ -132,6 +162,30 @@ export default function EditTripModal({
           </View>
         ) : (
           <View className="gap-3 p-4">
+            {/* 대표 썸네일 */}
+            <View>
+              <Text className="text-[11px] font-black text-slate-700">대표 사진</Text>
+              <Pressable
+                onPress={pickCover}
+                disabled={isUploadingCover}
+                accessibilityLabel="대표 사진 바꾸기"
+                className="mt-1.5 h-28 overflow-hidden rounded-xl border-2 border-slate-200 bg-white active:border-[#56EADD]"
+              >
+                {isUploadingCover ? (
+                  <View className="flex-1 items-center justify-center">
+                    <ActivityIndicator color="#075953" />
+                  </View>
+                ) : (
+                  <>
+                    <Image source={coverSource} resizeMode="cover" className="h-full w-full" />
+                    <View className="absolute bottom-1.5 right-1.5 rounded-lg bg-slate-900/75 px-2 py-1">
+                      <Text className="text-[10px] font-black text-white">사진 바꾸기</Text>
+                    </View>
+                  </>
+                )}
+              </Pressable>
+            </View>
+
             <View>
               <View className="flex-row items-center justify-between">
                 <Text className="text-[11px] font-black text-slate-700">여행 제목</Text>

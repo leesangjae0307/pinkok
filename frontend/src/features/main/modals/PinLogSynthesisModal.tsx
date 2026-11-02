@@ -2,7 +2,7 @@
  * PinLog 합성 모달: 장소별 클립 선택 → 생성 요청 → 폴링 → 완성 영상 재생
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Video from 'react-native-video';
 
 import { AvatarSource, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
@@ -16,6 +16,7 @@ import {
   pinlogVideoUrl,
   type Pinlog,
 } from '../../../api/pinlogApi';
+import { GalleryPermissionError, saveVideoToGallery } from '../../../services/saveToGallery';
 
 interface PinLogSynthesisModalProps {
   places: PlaceItem[];
@@ -107,6 +108,26 @@ export default function PinLogSynthesisModal({
   const [pinLogId, setPinLogId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [result, setResult] = useState<SynthesizedVlog | null>(null);
+  const [isSavingToGallery, setIsSavingToGallery] = useState(false);
+
+  /** 완성 영상을 기기 갤러리로 내린다. 서버 주소라 먼저 받아온 뒤 저장한다. */
+  const handleSaveToGallery = async (videoUrl: string) => {
+    if (isSavingToGallery) return;
+    setIsSavingToGallery(true);
+    try {
+      await saveVideoToGallery(videoUrl, `pinkok-${Date.now()}`);
+      Alert.alert('저장했어요', '갤러리의 PinKok 앨범에서 볼 수 있어요.');
+    } catch (e) {
+      Alert.alert(
+        '저장하지 못했어요',
+        e instanceof GalleryPermissionError
+          ? '설정에서 갤러리 접근 권한을 허용해 주세요.'
+          : apiErrorMessage(e, '잠시 후 다시 시도해 주세요.'),
+      );
+    } finally {
+      setIsSavingToGallery(false);
+    }
+  };
 
   const selectedOptions = orderedPlaces
     .map((place) => {
@@ -289,6 +310,23 @@ export default function PinLogSynthesisModal({
                     <View className="h-2 w-16 rounded-sm bg-slate-700" />
                   </View>
                 </ShadowBox>
+
+                {result.videoUrl ? (
+                  <Pressable
+                    onPress={() => handleSaveToGallery(result.videoUrl!)}
+                    disabled={isSavingToGallery}
+                    accessibilityLabel="갤러리에 저장"
+                    className={`h-11 flex-row items-center justify-center gap-1.5 rounded-xl border-2 border-pixel-navy ${
+                      isSavingToGallery ? 'bg-slate-200' : 'bg-[#56EADD] active:translate-y-0.5'
+                    }`}
+                  >
+                    {isSavingToGallery ? (
+                      <ActivityIndicator color="#075953" />
+                    ) : (
+                      <Text className="text-xs font-black text-[#075953]">⬇ 갤러리에 저장</Text>
+                    )}
+                  </Pressable>
+                ) : null}
 
                 <View className="flex-row flex-wrap justify-between gap-y-2">
                   {result.clips.map((clip, index) => (

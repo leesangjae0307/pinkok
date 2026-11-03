@@ -2,11 +2,10 @@
  * 홈의 "핀로그 촬영" 카드로 여는 빠른 촬영 화면 (웹 QuickPinLogCameraModal.tsx 이관)
  *
  * 촬영 → 장소 지정 → 그 장소의 내 기록에 영상 추가.
- * 웹과 같이 촬영은 시뮬레이션이에요. 실제 카메라를 붙일 때는 촬영 버튼의
- * setIsRecording(true) 자리에서 녹화를 시작하고, 끝나면 POST /files 로 올린 뒤
- * 받은 URL 을 onUpload 의 clip.videoUrl 로 넘기면 돼요.
+ * 촬영은 RecordClipModal 이 실제 카메라로 한다. 여기서는 찍어 온 로컬 파일을
+ * 들고 있다가 장소를 고르면 넘긴다. 업로드는 기록을 저장할 때 한 번에 한다.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -34,6 +33,15 @@ export default function QuickPinLogCameraModal({
   /** 실제로 찍은 클립. 장소를 고르면 이 값을 그대로 올린다. */
   const [clip, setClip] = useState<RecordedClip | null>(null);
   const [placeId, setPlaceId] = useState<number | null>(places[0]?.id ?? null);
+
+  /**
+   * 이 창을 열 때 그 여행의 일정을 받아오므로, 열리는 순간에는 places 가 비어 있다가
+   * 조금 뒤에 채워진다. 처음 한 번만 잡는 초기값으로 두면 선택이 null 로 남아
+   * "이 장소에 영상 추가하기" 가 영영 눌리지 않는다.
+   */
+  useEffect(() => {
+    if (placeId == null && places.length > 0) setPlaceId(places[0].id);
+  }, [placeId, places]);
 
   const recorded = clip !== null;
   const isRecording = false;

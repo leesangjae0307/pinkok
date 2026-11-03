@@ -791,7 +791,12 @@ function useAppState(me: Me, onLogout: () => void) {
    * 끼운다. 그래야 다시 열었을 때와 같은 것을 보게 된다.
    */
   const handleSavePlaceRecord = async (record: PlaceRecord) => {
-    if (isSavingRecord) return;
+    // 저장이 겹치면 그냥 버리지 말고 알려준다. 조용히 빠져나가면 사용자는 눌렀는데
+    // 아무 일도 안 일어난 것으로 보인다.
+    if (isSavingRecord) {
+      showToast('아직 저장 중이에요. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
     setIsSavingRecord(true);
     try {
       const media = await uploadRecordMedia(record);

@@ -20,6 +20,22 @@ export interface PickedFile {
 }
 
 /**
+ * mime 타입에서 확장자를 뽑는다.
+ *
+ * 서버는 파일 이름의 확장자로 사진인지 영상인지 가른다. 이름이 없을 때 늘 .jpg 를
+ * 붙이면 영상도 사진으로 보고 10MB 제한에 걸려 400 으로 거절당한다
+ * (촬영한 영상이 기록에 안 붙던 원인).
+ */
+function extensionOf(type: string): string {
+  const sub = type.split('/')[1];
+  if (!sub) return 'bin';
+  // image/jpeg → jpg, video/quicktime → mov 처럼 흔한 것만 따로 맞춘다.
+  if (sub === 'jpeg') return 'jpg';
+  if (sub === 'quicktime') return 'mov';
+  return sub.split(';')[0];
+}
+
+/**
  * POST /files. 한 번에 1~10개까지 올린다.
  *
  * multipart 라 Content-Type 을 직접 지정하지 않는다. 경계 문자열(boundary)은
@@ -29,10 +45,11 @@ export interface PickedFile {
 export async function uploadFiles(files: PickedFile[]): Promise<UploadedFile[]> {
   const form = new FormData();
   files.forEach((file, index) => {
+    const type = file.type ?? 'image/jpeg';
     form.append('file', {
       uri: file.uri,
-      name: file.fileName ?? `upload-${Date.now()}-${index}.jpg`,
-      type: file.type ?? 'image/jpeg',
+      name: file.fileName ?? `upload-${Date.now()}-${index}.${extensionOf(type)}`,
+      type,
     } as unknown as Blob);
   });
   const { data } = await api.post<UploadedFile[]>('/files', form);

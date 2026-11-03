@@ -215,9 +215,10 @@ export default function TripsBottomSheet({
           <Pressable
             onPress={onOptimizeRoute}
             disabled={isOptimizingRoute}
-            className={`h-8 items-center justify-center rounded-lg border-2 border-pixel-navy bg-[#56EADD] px-2 ${
-              isOptimizingRoute ? 'opacity-60' : ''
-            }`}
+            // 조건부 className 으로 스타일 구조(opacity 유무)를 바꾸면 NativeWind 가
+            // 그 렌더를 날려버린다. 흐리게 하는 건 style 로 준다.
+            style={{ opacity: isOptimizingRoute ? 0.6 : 1 }}
+            className="h-8 items-center justify-center rounded-lg border-2 border-pixel-navy bg-[#56EADD] px-2"
           >
             <Text className="text-[9px] font-black text-pixel-navy">
               {isOptimizingRoute ? '최적화 중...' : '🪄 AI 동선 최적화'}
@@ -332,9 +333,11 @@ export default function TripsBottomSheet({
                         onPress={() => onMovePlace(place.id, -1)}
                         disabled={index === 0}
                         accessibilityLabel={`${place.name} 위로`}
-                        className={`h-7 w-7 items-center justify-center rounded-lg border-2 border-pixel-navy ${
-                          index === 0 ? 'bg-slate-100 opacity-40' : 'bg-white active:bg-slate-100'
-                        }`}
+                        style={{
+                          backgroundColor: index === 0 ? '#F1F5F9' : '#fff',
+                          opacity: index === 0 ? 0.4 : 1,
+                        }}
+                        className="h-7 w-7 items-center justify-center rounded-lg border-2 border-pixel-navy"
                       >
                         <Text className="text-[10px] font-black text-pixel-navy">▲</Text>
                       </Pressable>
@@ -342,9 +345,11 @@ export default function TripsBottomSheet({
                         onPress={() => onMovePlace(place.id, 1)}
                         disabled={index === places.length - 1}
                         accessibilityLabel={`${place.name} 아래로`}
-                        className={`h-7 w-7 items-center justify-center rounded-lg border-2 border-pixel-navy ${
-                          index === places.length - 1 ? 'bg-slate-100 opacity-40' : 'bg-white active:bg-slate-100'
-                        }`}
+                        style={{
+                          backgroundColor: index === places.length - 1 ? '#F1F5F9' : '#fff',
+                          opacity: index === places.length - 1 ? 0.4 : 1,
+                        }}
+                        className="h-7 w-7 items-center justify-center rounded-lg border-2 border-pixel-navy"
                       >
                         <Text className="text-[10px] font-black text-pixel-navy">▼</Text>
                       </Pressable>

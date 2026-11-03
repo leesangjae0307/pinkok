@@ -5,8 +5,8 @@
  * 안내 문구는 서버가 실제로 하는 일에 맞춘다 — 내가 팀장이던 여행은 남은 팀원에게
  * 넘어가고, 혼자 쓰던 여행은 함께 지워진다.
  */
-import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Keyboard, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ModalBackdrop } from '../../../components/pixel/Primitives';
@@ -23,6 +23,22 @@ export default function DeleteAccountModal({
   const [password, setPassword] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 안드로이드에서는 statusBarTranslucent 모달 안까지 adjustResize 가 닿지 않아,
+   * 키보드가 올라오면 탈퇴 버튼이 그대로 가려진다. 키보드 높이만큼 직접 띄운다.
+   */
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (e) =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const canSubmit = password.length > 0 && !isDeleting;
 
@@ -42,7 +58,7 @@ export default function DeleteAccountModal({
     <ModalBackdrop onRequestClose={onClose}>
       <View
         className="w-full overflow-hidden rounded-[28px] border-4 border-pixel-navy bg-[#B4FAF0]"
-        style={{ marginBottom: insets.bottom }}
+        style={{ marginBottom: keyboardHeight > 0 ? keyboardHeight : insets.bottom }}
       >
         <View className="flex-row items-center justify-between border-b-2 border-pixel-navy bg-white px-4 py-3">
           <View className="flex-1 pr-2">
@@ -94,14 +110,18 @@ export default function DeleteAccountModal({
             <Pressable
               onPress={submit}
               disabled={!canSubmit}
-              className={`h-11 flex-1 items-center justify-center rounded-xl border-2 border-pixel-navy ${
-                canSubmit ? 'bg-rose-500 active:translate-y-0.5' : 'bg-slate-200'
-              }`}
+              // 못 누르는 상태를 className 으로 바꾸면 NativeWind 가 스타일 구조가
+              // 바뀐 것으로 보고 그 렌더를 통째로 날려버린다(버튼이 계속 회색으로
+              // 남아 눌리지 않는다). 색은 style 로 준다.
+              style={{ backgroundColor: canSubmit ? '#F43F5E' : '#E2E8F0' }}
+              className="h-11 flex-1 items-center justify-center rounded-xl border-2 border-pixel-navy active:translate-y-0.5"
             >
               {isDeleting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-xs font-black text-white">탈퇴하기</Text>
+                <Text className="text-xs font-black" style={{ color: canSubmit ? '#fff' : '#94A3B8' }}>
+                  탈퇴하기
+                </Text>
               )}
             </Pressable>
           </View>

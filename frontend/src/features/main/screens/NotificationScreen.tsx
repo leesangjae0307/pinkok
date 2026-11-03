@@ -68,9 +68,10 @@ export default function NotificationScreen() {
             onPress={() => handleNotificationSelect(n)}
             // 읽음 여부로 shadow-* 클래스를 붙였다 떼면 NativeWind 가 업그레이드 경고를
             // 찍고, 그 경고가 props 직렬화에서 무한 재귀에 빠져 JS 스레드가 멈춘다.
-            style={n.read ? undefined : UNREAD_SHADOW}
+            // opacity 도 같은 이유로 className 에서 붙였다 뗄 수 없다.
+            style={n.read ? { opacity: 0.7 } : UNREAD_SHADOW}
             className={`relative w-full rounded-3xl border p-4 active:scale-[0.98] ${
-              n.read ? 'border-slate-200 bg-white/55 opacity-70' : 'border-[#56EADD] bg-white'
+              n.read ? 'border-slate-200 bg-white/55' : 'border-[#56EADD] bg-white'
             }`}
           >
             {!n.read && (

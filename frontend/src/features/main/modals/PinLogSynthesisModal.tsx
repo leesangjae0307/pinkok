@@ -16,7 +16,7 @@ import {
   pinlogVideoUrl,
   type Pinlog,
 } from '../../../api/pinlogApi';
-import { GalleryPermissionError, saveVideoToGallery } from '../../../services/saveToGallery';
+import { GalleryPermissionError, savePinlogToGallery } from '../../../services/saveToGallery';
 
 interface PinLogSynthesisModalProps {
   places: PlaceItem[];
@@ -109,13 +109,16 @@ export default function PinLogSynthesisModal({
   const [errorMessage, setErrorMessage] = useState('');
   const [result, setResult] = useState<SynthesizedVlog | null>(null);
   const [isSavingToGallery, setIsSavingToGallery] = useState(false);
+  /** 0~100. 서버가 Content-Length 를 주면 내려받는 동안 올라간다. */
+  const [saveProgress, setSaveProgress] = useState(0);
 
-  /** 완성 영상을 기기 갤러리로 내린다. 서버 주소라 먼저 받아온 뒤 저장한다. */
-  const handleSaveToGallery = async (videoUrl: string) => {
+  /** 완성 영상을 기기 갤러리로 내린다. 서버에서 받아온 뒤 갤러리에 복사한다. */
+  const handleSaveToGallery = async (pinlogId: number) => {
     if (isSavingToGallery) return;
     setIsSavingToGallery(true);
+    setSaveProgress(0);
     try {
-      await saveVideoToGallery(videoUrl, `pinkok-${Date.now()}`);
+      await savePinlogToGallery(pinlogId, ratio => setSaveProgress(Math.round(ratio * 100)));
       Alert.alert('저장했어요', '갤러리의 PinKok 앨범에서 볼 수 있어요.');
     } catch (e) {
       Alert.alert(
@@ -313,15 +316,21 @@ export default function PinLogSynthesisModal({
 
                 {result.videoUrl ? (
                   <Pressable
-                    onPress={() => handleSaveToGallery(result.videoUrl!)}
+                    onPress={() => handleSaveToGallery(result.id)}
                     disabled={isSavingToGallery}
                     accessibilityLabel="갤러리에 저장"
-                    className={`h-11 flex-row items-center justify-center gap-1.5 rounded-xl border-2 border-pixel-navy ${
-                      isSavingToGallery ? 'bg-slate-200' : 'bg-[#56EADD] active:translate-y-0.5'
-                    }`}
+                    // 못 누르는 상태를 className 으로 바꾸면 NativeWind 가 스타일 구조가
+                    // 바뀐 것으로 보고 그 렌더를 날려버린다. 색은 style 로 준다.
+                    style={{ backgroundColor: isSavingToGallery ? '#E2E8F0' : '#56EADD' }}
+                    className="h-11 flex-row items-center justify-center gap-1.5 rounded-xl border-2 border-pixel-navy active:translate-y-0.5"
                   >
                     {isSavingToGallery ? (
-                      <ActivityIndicator color="#075953" />
+                      <>
+                        <ActivityIndicator color="#075953" />
+                        <Text className="font-pixel text-[10px] text-[#075953]">
+                          {saveProgress > 0 ? `${saveProgress}%` : '받는 중'}
+                        </Text>
+                      </>
                     ) : (
                       <Text className="text-xs font-black text-[#075953]">⬇ 갤러리에 저장</Text>
                     )}

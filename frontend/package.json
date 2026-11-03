@@ -20,6 +20,7 @@
     "nativewind": "^4.2.7",
     "react": "19.0.0",
     "react-native": "0.79.6",
+    "react-native-blob-util": "^0.25.1",
     "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "^2.24.0",
     "react-native-image-picker": "^8.3.0",

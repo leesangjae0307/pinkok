@@ -669,6 +669,12 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   }, []);
 
+  // 핀로그로 고른 여행은 지도에서 열어둔 여행과 다를 수 있다.
+  // 합성 화면은 mapPlaces 를 그대로 쓰므로, 고른 여행의 일정을 여기서 받아둔다.
+  useEffect(() => {
+    if (pinLogTrip) loadItinerary(pinLogTrip.id);
+  }, [pinLogTrip, loadItinerary]);
+
   /**
    * 목록의 여행을 연다. 카드가 들고 있는 값으로 먼저 열어 두고,
    * GET /trips/{id} 로 받은 최신 값(장소 개수 등)으로 덮어쓴다.
@@ -771,10 +777,7 @@ function useAppState(me: Me, onLogout: () => void) {
       await deleteAccount(password);
     } catch (e) {
       const status = (e as { response?: { status?: number } })?.response?.status;
-      if (status === 409) {
-        return '직접 만든 여행이 남아 있어요. 먼저 여행을 삭제하거나 다른 팀원에게 넘긴 뒤 다시 시도해 주세요.';
-      }
-      if (status === 401 || status === 403) return '비밀번호가 맞지 않아요.';
+      if (status === 401) return '비밀번호가 맞지 않아요.';
       return errorMessage(e, '탈퇴하지 못했어요.');
     }
     setIsDeleteAccountOpen(false);

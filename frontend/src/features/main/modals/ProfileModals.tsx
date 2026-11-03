@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FadeIn, ModalBackdrop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
 import { PROFILE_AVATARS, useApp } from '../AppContext';
 import { fileUrl } from '../../../api/fileApi';
+import { GalleryPermissionError, savePinlogToGallery } from '../../../services/saveToGallery';
 
 function SheetHeader({
   eyebrow,
@@ -238,6 +239,31 @@ export function ProfileDetailModal() {
 
 export function ClipPlaybackModal() {
   const { activeClipModal, setActiveClipModal, showToast } = useApp();
+  const [isSaving, setIsSaving] = useState(false);
+  /** 0~100. 서버가 Content-Length 를 주면 내려받는 동안 올라간다. */
+  const [saveProgress, setSaveProgress] = useState(0);
+
+  /** 완성본을 기기 갤러리로 내린다. 합성 직후가 아니라 나중에 들어와도 저장할 수 있어야 한다. */
+  const saveToGallery = async (pinlogId: number) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    setSaveProgress(0);
+    try {
+      await savePinlogToGallery(pinlogId, (ratio) => setSaveProgress(Math.round(ratio * 100)));
+      showToast('갤러리의 PinKok 앨범에 저장했어요!');
+    } catch (e) {
+      showToast(
+        e instanceof GalleryPermissionError
+          ? '설정에서 갤러리 접근 권한을 허용해 주세요.'
+          : e instanceof Error
+            ? e.message
+            : '저장하지 못했어요.',
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!activeClipModal) return null;
 
   return (
@@ -274,13 +300,31 @@ export function ClipPlaybackModal() {
           </ShadowBox>
 
           <Pressable
-            onPress={() => {
-              setActiveClipModal(null);
-              showToast('클립이 정상 재생 완료되었습니다!');
-            }}
-            className="w-full items-center rounded-2xl border border-[#50E6DC] bg-[#56EADD] py-2.5 shadow-md"
+            onPress={() => saveToGallery(activeClipModal.id)}
+            disabled={isSaving}
+            accessibilityLabel="갤러리에 저장"
+            // 못 누르는 상태를 className 으로 바꾸면 NativeWind 가 스타일 구조가
+            // 바뀐 것으로 보고 그 렌더를 날려버린다. 색은 style 로 준다.
+            style={{ backgroundColor: isSaving ? '#E2E8F0' : '#56EADD' }}
+            className="h-11 w-full flex-row items-center justify-center gap-1.5 rounded-2xl border-2 border-pixel-navy"
           >
-            <Text className="text-xs font-bold text-slate-900">닫기</Text>
+            {isSaving ? (
+              <>
+                <ActivityIndicator color="#075953" />
+                <Text className="font-pixel text-[10px] text-[#075953]">
+                  {saveProgress > 0 ? `${saveProgress}%` : '받는 중'}
+                </Text>
+              </>
+            ) : (
+              <Text className="text-xs font-black text-[#075953]">⬇ 갤러리에 저장</Text>
+            )}
+          </Pressable>
+
+          <Pressable
+            onPress={() => setActiveClipModal(null)}
+            className="w-full items-center rounded-2xl border border-slate-300 bg-white py-2.5"
+          >
+            <Text className="text-xs font-bold text-slate-600">닫기</Text>
           </Pressable>
         </View>
       </FadeIn>

@@ -17,10 +17,9 @@ export async function updateProfileImage(profileImageUrl: string): Promise<Me> {
 }
 
 /**
- * 회원 탈퇴. 되돌릴 수 없어서 서버가 비밀번호를 한 번 더 확인한다.
+ * 회원 탈퇴. 되돌릴 수 없어서 서버가 비밀번호를 한 번 더 확인한다(틀리면 401).
  *
- * 계정과 개인정보만 지우고 남긴 기록·영상은 남긴다 — 여행을 함께 쓴 팀원의 화면과
- * PinLog 가 깨지지 않게 하기 위해서다. 내가 만든 여행이 남아 있으면 409 로 거절한다.
+ * 내가 팀장이던 여행은 남은 팀원에게 넘어가고, 혼자 쓰던 여행은 함께 지워진다.
  */
 export async function deleteAccount(password: string): Promise<void> {
   await api.delete('/users/me', { data: { password } });

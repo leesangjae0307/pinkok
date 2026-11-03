@@ -2,8 +2,8 @@
  * 회원 탈퇴 확인.
  *
  * 서버가 비밀번호를 한 번 더 확인하므로 확인 버튼만으로는 끝나지 않는다.
- * 안내 문구는 서버가 실제로 하는 일에 맞춘다 — 계정만 지우고 남긴 기록은 남으며,
- * 내가 만든 여행이 남아 있으면 409 로 거절한다.
+ * 안내 문구는 서버가 실제로 하는 일에 맞춘다 — 내가 팀장이던 여행은 남은 팀원에게
+ * 넘어가고, 혼자 쓰던 여행은 함께 지워진다.
  */
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
@@ -63,8 +63,8 @@ export default function DeleteAccountModal({
             <Text className="text-[11px] font-black text-rose-700">탈퇴하면</Text>
             <Text className="text-[11px] font-semibold leading-4 text-slate-700">
               · 계정과 프로필 정보가 지워지고 다시 로그인할 수 없어요.{'\n'}
-              · 함께 쓴 팀원의 화면과 PinLog 가 깨지지 않도록, 남기신 기록과 영상은 그대로 남아요.{'\n'}
-              · 직접 만든 여행이 남아 있으면 탈퇴할 수 없어요. 먼저 정리해 주세요.
+              · 혼자 만든 여행은 함께 삭제돼요.{'\n'}
+              · 팀원이 있는 여행은 다른 팀원에게 팀장 권한이 넘어가요.
             </Text>
           </View>
 

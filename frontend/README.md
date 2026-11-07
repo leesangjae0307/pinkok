@@ -37,19 +37,88 @@ cd pinkok/frontend
 npm install
 ```
 
-### 4. Metro Server 실행
+### 4. 서버 주소 설정 (`.env`)
+
+`.env.example` 을 복사해서 `.env` 를 만들고 값을 채웁니다. `.env` 는 커밋되지 않으므로 **각자 자기 PC 에서** 만듭니다.
+
+```bash
+cp .env.example .env
+```
+
+| 키 | 설명 |
+|---|---|
+| `API_BASE_URL` | 백엔드 서버 주소. **끝에 `/` 나 `/api` 를 붙이지 않습니다** (서버에 `/api` 접두사가 없어서 붙이면 전부 404). |
+| `KAKAO_JS_KEY` | 카카오 개발자 콘솔 > 내 애플리케이션 > 앱 키 > **JavaScript 키**. 서버가 쓰는 REST API 키와는 다른 키이고, 그쪽은 앱에 넣지 않습니다. |
+| `KAKAO_SDK_ORIGIN` | 콘솔의 [JavaScript 키 > JavaScript SDK 도메인] 에 등록한 주소 그대로. 포트까지 한 글자라도 다르면 지도가 뜨지 않습니다. |
+
+> **서버 주소를 적는 곳은 `.env` 한 곳뿐입니다.**
+> `src/api/axios.ts` 의 `BASE_URL` 은 `.env` 에 값이 없을 때만 쓰이는 폴백이라,
+> `.env` 가 있으면 그쪽을 고쳐도 아무 변화가 없습니다.
+
+#### 상황별 주소
+
+| 상황 | 값 |
+|---|---|
+| 백엔드가 **다른 사람 PC** 에서 cloudflared 터널로 열려 있을 때 | 담당자에게 받은 `https://....trycloudflare.com` |
+| 백엔드를 **내 PC** 에서 돌릴 때 | `adb reverse tcp:8080 tcp:8080` 을 걸고 `http://localhost:8080` |
+| 에뮬레이터에서 호스트 PC 로 직접 | `http://10.0.2.2:8080` |
+| 같은 와이파이의 실기기 | 서버 PC 의 LAN IP (예: `http://192.168.1.53:8080`) |
+
+⚠️ cloudflared 임시 터널 주소는 **터널을 재시작할 때마다 바뀝니다.** 내 PC 에서 서버를 돌릴 수 있다면 주소가 고정되는 `adb reverse` 쪽이 편합니다.
+
+#### `.env` 를 고친 뒤에는 Metro 를 다시 띄웁니다
+
+`.env` 값은 번들을 만들 때 코드에 박히기 때문에, 파일만 고쳐서는 실행 중인 앱에 반영되지 않습니다. **이걸 빼먹는 게 연동이 안 되는 가장 흔한 원인입니다.**
+
+```bash
+npx react-native start --reset-cache
+```
+
+그리고 앱을 리로드합니다 (Metro 터미널에서 `r`, 또는 에뮬레이터에서 `R` 두 번).
+Metro 로그에 `injected env (n) from .env` 가 찍히면 반영된 것입니다.
+
+### 5. Metro Server 실행
 
 ```bash
 npm start
 ```
 
-### 5. Android 실행
+### 6. Android 실행
 
 새 터미널에서
 
 ```bash
 npx react-native run-android
 ```
+
+로그인에 성공하면 토큰이 기기에 저장돼서 앱을 껐다 켜도 로그인이 유지되고, 이후 요청에는 `Authorization` 헤더가 자동으로 붙습니다. 토큰이 만료되면 `/auth/refresh` 로 알아서 갱신됩니다.
+
+---
+
+# 🧯 서버 연동이 안 될 때
+
+### 1. 서버가 살아 있는지 먼저 확인합니다
+
+`/avatars` 는 로그인 없이 호출할 수 있어서 확인용으로 쓰기 좋습니다.
+
+```bash
+curl <API_BASE_URL>/avatars
+```
+
+아바타 목록이 나오면 서버는 정상입니다. 응답이 없다면 (터널이라면) 주소가 만료된 것이므로 백엔드 담당자에게 새 주소를 받습니다. 이건 프론트에서 고칠 수 없습니다.
+
+### 2. 앱에 뜨는 메시지로 원인을 가릅니다
+
+| 메시지 | 원인 |
+|---|---|
+| 서버에 연결할 수 없습니다. 서버 주소(…)가 살아 있는지 확인해 주세요. | 서버에 닿지 못함 — 주소가 틀렸거나, 터널이 죽었거나, `.env` 가 반영되지 않음 |
+| 이메일 또는 비밀번호가 올바르지 않습니다. | 서버까지는 정상 도달. 계정 문제 |
+
+### 3. 그래도 안 되면
+
+- `.env` 의 주소 끝에 `/` 나 `/api` 가 붙어 있지 않은지 확인합니다.
+- Metro 를 `--reset-cache` 로 다시 띄웠는지 확인합니다.
+- `localhost` 주소를 쓰는 경우 `adb reverse --list` 에 `tcp:8080` 이 있는지 확인합니다.
 
 ---
 
@@ -139,12 +208,14 @@ Loading
 예시
 
 ```ts
-export const BASE_URL = "...";
+export const TRAVEL_STYLES = [...];
 
 export const COLORS = {
     PRIMARY: "#00C853",
 };
 ```
+
+※ 서버 주소는 여기가 아니라 `.env` 의 `API_BASE_URL` 에 둡니다.
 
 ---
 

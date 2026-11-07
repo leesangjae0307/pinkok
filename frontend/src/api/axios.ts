@@ -86,8 +86,13 @@ export function errorMessage(
   e: unknown,
   fallback = '잠시 후 다시 시도해 주세요.',
 ): string {
-  const data = (e as AxiosError<{message?: string; errors?: Record<string, string>}>)
-    ?.response?.data;
+  const err = e as AxiosError<{message?: string; errors?: Record<string, string>}>;
+  // 응답이 아예 없으면 서버에 닿지 못한 것이다. 이걸 fallback 으로 넘겨 버리면
+  // 터널이 죽었을 때도 "비밀번호를 확인해 주세요" 가 떠서 원인을 찾을 수 없다.
+  if (err?.isAxiosError && !err.response) {
+    return `서버에 연결할 수 없습니다. 서버 주소(${BASE_URL})가 살아 있는지 확인해 주세요.`;
+  }
+  const data = err?.response?.data;
   const fields = Object.values(data?.errors ?? {}).filter(Boolean);
   if (fields.length > 0) return fields.join('\n');
   return data?.message ?? fallback;

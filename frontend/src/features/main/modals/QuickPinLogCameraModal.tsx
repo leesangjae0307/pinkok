@@ -121,7 +121,9 @@ export default function QuickPinLogCameraModal({
                 onUpload(selectedPlace, {
                   id: Date.now(),
                   duration: clip.durationMs / 1000,
-                  thumbnail: selectedPlace.thumbnail,
+                  // 썸네일은 올린 뒤 서버가 첫 장면으로 만들어 준다. 장소 사진을
+                  // 넣으면 영상과 다른 그림이 클립 표지로 남는다.
+                  thumbnail: '',
                   videoUrl: clip.uri,
                   createdAt: '방금 전',
                 })

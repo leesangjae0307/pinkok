@@ -6,7 +6,16 @@
  * 넘어가고, 혼자 쓰던 여행은 함께 지워진다.
  */
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Keyboard, Pressable, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ModalBackdrop } from '../../../components/pixel/Primitives';
@@ -20,6 +29,7 @@ export default function DeleteAccountModal({
   onConfirm: (password: string) => Promise<string | null>;
 }) {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const [password, setPassword] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +50,16 @@ export default function DeleteAccountModal({
     };
   }, []);
 
+  /**
+   * 키보드 위에 들어갈 수 있는 창의 최대 높이.
+   *
+   * 창을 키보드 높이만큼 띄우기만 하면(marginBottom) 내용이 그대로라서 위쪽이
+   * 화면 밖으로 밀려 잘렸다 — 바텀시트라 아래를 기준으로 쌓이기 때문이다.
+   * 그래서 남는 높이를 계산해 그 안에 맞추고, 모자라면 본문을 스크롤하게 한다.
+   */
+  const availableHeight =
+    windowHeight - (keyboardHeight > 0 ? keyboardHeight : insets.bottom) - insets.top - 24;
+
   const canSubmit = password.length > 0 && !isDeleting;
 
   const submit = async () => {
@@ -58,7 +78,10 @@ export default function DeleteAccountModal({
     <ModalBackdrop onRequestClose={onClose}>
       <View
         className="w-full overflow-hidden rounded-[28px] border-4 border-pixel-navy bg-[#B4FAF0]"
-        style={{ marginBottom: keyboardHeight > 0 ? keyboardHeight : insets.bottom }}
+        style={{
+          marginBottom: keyboardHeight > 0 ? keyboardHeight : insets.bottom,
+          maxHeight: Math.max(240, availableHeight),
+        }}
       >
         <View className="flex-row items-center justify-between border-b-2 border-pixel-navy bg-white px-4 py-3">
           <View className="flex-1 pr-2">
@@ -74,7 +97,12 @@ export default function DeleteAccountModal({
           </Pressable>
         </View>
 
-        <View className="gap-3 p-4">
+        {/* 키보드가 올라오면 자리가 좁아진다. 본문은 스크롤하고 버튼은 늘 보이게 둔다. */}
+        <ScrollView
+          contentContainerStyle={{ padding: 16, gap: 12 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View className="gap-2 rounded-2xl border-2 border-rose-200 bg-rose-50 p-3">
             <Text className="text-[11px] font-black text-rose-700">탈퇴하면</Text>
             <Text className="text-[11px] font-semibold leading-4 text-slate-700">
@@ -98,8 +126,10 @@ export default function DeleteAccountModal({
           </View>
 
           {error ? <Text className="text-[11px] font-bold text-rose-600">{error}</Text> : null}
+        </ScrollView>
 
-          <View className="flex-row gap-2 pt-1">
+        <View className="border-t-2 border-pixel-navy bg-white p-3">
+          <View className="flex-row gap-2">
             <Pressable
               onPress={onClose}
               disabled={isDeleting}

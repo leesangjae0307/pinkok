@@ -1,5 +1,6 @@
 import api from './axios';
 import { fileUrl } from './fileApi';
+import { personAvatarSource } from './avatarCatalog';
 import { PlaceRecord } from '../data/mockData';
 
 export interface DiaryAuthor {
@@ -106,8 +107,9 @@ export function toPlaceRecord(diary: Diary): PlaceRecord {
     pinId: diary.itineraryItemId,
     userId: diary.author.userId,
     authorName: diary.author.nickname,
-    authorAvatar:
-      fileUrl(diary.author.avatarImageUrl ?? diary.author.profileImageUrl) ?? '🙂',
+    // 아바타는 코드를 알면 앱 에셋으로 그린다. 서버 주소만 믿으면 그 파일이 없는
+    // 계정의 얼굴이 비어 보인다.
+    authorAvatar: personAvatarSource(diary.author),
     createdAt: dateLabel(diary.createdAt),
     rating: diary.rating ?? 0,
     memo: diary.content ?? '',

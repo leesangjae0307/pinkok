@@ -61,6 +61,8 @@ export interface VlogClip {
   time: string;
   location: string;
   thumbnail: string;
+  /** 완성본 재생 주소. 합성이 끝나지 않았으면 없다. */
+  videoUrl?: string;
   selected: boolean;
 }
 

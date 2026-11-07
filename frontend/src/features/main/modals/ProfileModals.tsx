@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Video from 'react-native-video';
 
 import { FadeIn, ModalBackdrop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
 import { PROFILE_AVATARS, useApp } from '../AppContext';
@@ -170,21 +171,25 @@ export function AvatarPickerModal() {
   );
 }
 
-const REGIONS = ['제주', '부산', '서울', '강릉', '도쿄', '오사카', '교토', '후쿠오카', '타이베이', '다낭', '파리', '뉴욕'];
-
 export function ProfileDetailModal() {
   const insets = useSafeAreaInsets();
-  const { profileDetailModal, setProfileDetailModal, mapPlaces, placeRecords, me } = useApp();
+  const { profileDetailModal, setProfileDetailModal, profileStats, isProfileStatsLoading } = useApp();
   if (!profileDetailModal) return null;
 
   const title =
     profileDetailModal === 'visited' ? '방문한 장소' : profileDetailModal === 'saved' ? '저장한 장소' : '다녀온 지역';
   /**
-   * 방문·저장 장소를 따로 주는 API 가 없어서 지금 열어 둔 여행의 자료로 보여준다.
-   * 방문한 곳은 내가 기록을 남긴 핀이고, 저장한 곳은 일정에 담아 둔 핀이다.
+   * 방문·저장 장소를 따로 주는 API 가 없어서 내 여행 전체를 모아 센 값을 쓴다
+   * (AppContext 의 profileStats). 방문한 곳은 내가 기록을 남긴 핀이고, 저장한 곳은
+   * 일정에 담아 둔 핀이다. 지역은 여행에 적어 둔 지역이다.
    */
-  const visitedPinIds = new Set(placeRecords.filter((r) => r.userId === me.id).map((r) => r.pinId));
-  const list = profileDetailModal === 'visited' ? mapPlaces.filter((p) => visitedPinIds.has(p.id)) : mapPlaces;
+  const list = profileDetailModal === 'visited' ? profileStats.visited : profileStats.saved;
+  const emptyMessage =
+    profileDetailModal === 'visited'
+      ? '아직 기록을 남긴 장소가 없어요.\n지도에서 장소를 열고 기록을 써 보세요.'
+      : profileDetailModal === 'saved'
+        ? '아직 일정에 담아 둔 장소가 없어요.'
+        : '아직 지역을 적어 둔 여행이 없어요.\n여행 정보에서 지역을 적으면 모여요.';
 
   return (
     <ModalBackdrop onRequestClose={() => setProfileDetailModal(null)}>
@@ -196,34 +201,59 @@ export function ProfileDetailModal() {
           closeLabel="상세 내역 닫기"
         />
         <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
-          {profileDetailModal === 'regions' ? (
-            <View className="flex-row flex-wrap justify-between gap-y-2">
-              {REGIONS.map((region, index) => (
-                <View
-                  key={region}
-                  className="items-center rounded-2xl border-2 border-[#82F0DC] bg-white p-3 shadow-sm"
-                  style={{ width: '31.5%' }}
-                >
-                  <Text className="text-xl">{index < 4 ? '🇰🇷' : index < 8 ? '🇯🇵' : '📍'}</Text>
-                  <Text className="mt-2 text-xs font-black text-slate-700">{region}</Text>
-                </View>
-              ))}
+          {isProfileStatsLoading ? (
+            <View className="items-center py-10">
+              <ActivityIndicator color="#075953" />
+            </View>
+          ) : profileDetailModal === 'regions' ? (
+            profileStats.regions.length === 0 ? (
+              <View className="rounded-2xl border-2 border-dashed border-white bg-white/70 p-6">
+                <Text className="text-center text-[11px] font-bold text-slate-500">{emptyMessage}</Text>
+              </View>
+            ) : (
+              <View className="flex-row flex-wrap gap-2">
+                {profileStats.regions.map((region) => (
+                  <View
+                    key={region.name}
+                    className="items-center rounded-2xl border-2 border-[#82F0DC] bg-white p-3 shadow-sm"
+                    style={{ width: '31.5%' }}
+                  >
+                    <Text className="text-xl">📍</Text>
+                    <Text numberOfLines={1} className="mt-2 text-xs font-black text-slate-700">
+                      {region.name}
+                    </Text>
+                    <Text className="mt-0.5 font-pixel text-[8px] text-slate-500">{region.tripCount} TRIP</Text>
+                  </View>
+                ))}
+              </View>
+            )
+          ) : list.length === 0 ? (
+            <View className="rounded-2xl border-2 border-dashed border-white bg-white/70 p-6">
+              <Text className="text-center text-[11px] font-bold text-slate-500">{emptyMessage}</Text>
             </View>
           ) : (
             <View className="gap-2">
+              {/*
+                썸네일은 두지 않는다. 서버가 핀 사진을 주지 않아 늘 같은 샘플 사진이
+                들어갔다. 대신 어느 여행의 장소인지를 보여준다.
+              */}
               {list.map((place) => (
-                <View key={place.id} className="flex-row items-center gap-3 rounded-2xl border border-[#82F0DC] bg-white p-3 shadow-sm">
-                  <Image source={{ uri: place.thumbnail }} resizeMode="cover" className="h-14 w-14 rounded-xl" />
+                <View
+                  key={place.key}
+                  className="flex-row items-center gap-3 rounded-2xl border border-[#82F0DC] bg-white p-3 shadow-sm"
+                >
                   <View className="min-w-0 flex-1">
                     <Text numberOfLines={1} className="text-xs font-black text-slate-800">
                       {place.name}
                     </Text>
-                    <Text numberOfLines={1} className="mt-1 text-[10px] font-semibold text-slate-500">
-                      {place.category}
-                    </Text>
+                    {place.detail ? (
+                      <Text numberOfLines={1} className="mt-1 text-[10px] font-semibold text-slate-500">
+                        {place.detail}
+                      </Text>
+                    ) : null}
                     <View className="mt-1 self-start rounded-md bg-[#B4FAF0] px-1.5 py-0.5">
-                      <Text className="text-[9px] font-bold text-[#075953]">
-                        {profileDetailModal === 'visited' ? '다이어리 기록 완료' : 'AI 추출 · 저장됨'}
+                      <Text numberOfLines={1} className="text-[9px] font-bold text-[#075953]">
+                        🗺️ {place.tripTitle}
                       </Text>
                     </View>
                   </View>
@@ -282,14 +312,41 @@ export function ClipPlaybackModal() {
               <Text className="font-pixel text-[8px] text-[#56EADD]">1280 × 720</Text>
               <Text className="font-pixel text-[8px] text-[#FFC837]">PINKOK TAPE</Text>
             </View>
+            {/*
+              전에는 썸네일 그림만 띄워서 "플레이중" 이라고 적어 놓고 실제로는 아무것도
+              재생되지 않았다. 완성본 주소가 있으면 그대로 재생한다.
+            */}
             <View className="relative aspect-video overflow-hidden rounded-lg border-2 border-slate-600 bg-black">
-              <Image source={{ uri: activeClipModal.thumbnail }} resizeMode="cover" className="h-full w-full" />
-              <View className="absolute left-2 top-2 rounded bg-slate-900/80 px-2 py-0.5">
-                <Text className="font-pixel text-[9px] text-[#56EADD]">1.0초 플레이중</Text>
-              </View>
-              <View className="absolute bottom-3 left-3 right-3 rounded-xl bg-black/60 p-2">
+              {activeClipModal.videoUrl ? (
+                <Video
+                  source={{ uri: activeClipModal.videoUrl }}
+                  poster={
+                    activeClipModal.thumbnail
+                      ? { source: { uri: activeClipModal.thumbnail }, resizeMode: 'cover' }
+                      : undefined
+                  }
+                  controls
+                  repeat
+                  resizeMode="contain"
+                  style={{ width: '100%', height: '100%' }}
+                />
+              ) : (
+                <>
+                  {activeClipModal.thumbnail ? (
+                    <Image source={{ uri: activeClipModal.thumbnail }} resizeMode="cover" className="h-full w-full" />
+                  ) : null}
+                  <View className="absolute bottom-0 left-0 right-0 top-0 items-center justify-center bg-black/50 px-4">
+                    <Text className="text-center text-[11px] font-bold text-slate-200">
+                      재생할 영상이 아직 없어요. 합성이 끝나면 여기서 바로 볼 수 있어요.
+                    </Text>
+                  </View>
+                </>
+              )}
+              <View pointerEvents="none" className="absolute bottom-3 left-3 right-3 rounded-xl bg-black/60 p-2">
                 <Text className="font-pixel text-[10px] text-[#FFC837]">{activeClipModal.time}</Text>
-                <Text className="text-xs font-bold text-white">📍 {activeClipModal.location}</Text>
+                <Text numberOfLines={1} className="text-xs font-bold text-white">
+                  📍 {activeClipModal.location}
+                </Text>
               </View>
             </View>
             <View className="mt-2 flex-row justify-center gap-2">

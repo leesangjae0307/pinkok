@@ -3,9 +3,11 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
 
 import { AvatarSource, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
 import RecordClipModal from './RecordClipModal';
+import ClipPreviewModal, { type ClipPreview } from './ClipPreviewModal';
 import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
 
@@ -24,12 +26,11 @@ interface PlaceDetailModalProps {
   startInCamera?: boolean;
 }
 
-const SAMPLE_PHOTOS = [
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80',
-  'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=400&q=80',
-  'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80',
-  'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80',
-];
+/** 서버에 이미 올라간 주소인지. file://·content:// 는 아직 안 올린 로컬 파일이다. */
+const isRemoteUrl = (url: string) => /^https?:\/\//.test(url);
+
+/** POST /files 가 한 번에 받는 수. 저장할 때 새 사진을 한 번에 올리므로 여기서 막는다. */
+const MAX_PHOTOS = 10;
 
 export default function PlaceDetailModal({
   place,
@@ -70,9 +71,62 @@ export default function PlaceDetailModal({
   }, [myExistingRecord, place.id]);
 
 
-  const handleAddSamplePhoto = () => {
-    const randomPhoto = SAMPLE_PHOTOS[Math.floor(Math.random() * SAMPLE_PHOTOS.length)];
-    setPhotos((prev) => [...prev, randomPhoto]);
+  /** 미리보기로 재생 중인 클립. null 이면 닫혀 있다. */
+  const [previewClip, setPreviewClip] = useState<ClipPreview | null>(null);
+
+  /**
+   * 갤러리에서 사진을 고른다.
+   *
+   * 고른 파일의 로컬 주소(file:// 또는 content://)를 그대로 photos 에 담아 둔다.
+   * 업로드는 기록을 저장할 때 uploadRecordMedia 가 한 번에 한다 — 쓰다 만 기록의
+   * 사진이 서버에 쌓이지 않게 하려는 것이다.
+   */
+  const handlePickPhotos = async () => {
+    try {
+      const room = MAX_PHOTOS - photos.length;
+      if (room <= 0) {
+        Alert.alert('PINKOK', `사진은 ${MAX_PHOTOS}장까지 넣을 수 있어요.`);
+        return;
+      }
+      const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: room });
+      if (res.didCancel) return;
+      const picked = (res.assets ?? [])
+        .map((asset) => asset.uri)
+        .filter((uri): uri is string => !!uri)
+        .slice(0, room);
+      if (picked.length === 0) {
+        if (res.errorCode) Alert.alert('PINKOK', '갤러리를 열지 못했어요. 사진 접근 권한을 확인해 주세요.');
+        return;
+      }
+      setPhotos((prev) => [...prev, ...picked].slice(0, MAX_PHOTOS));
+    } catch {
+      Alert.alert('PINKOK', '갤러리를 열지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
+  };
+
+  /** 갤러리에서 PinLog 용 영상을 고른다. 합성에 쓰이므로 장소마다 한 개만 둔다. */
+  const handlePickVideo = async () => {
+    try {
+      const res = await launchImageLibrary({ mediaType: 'video', selectionLimit: 1 });
+      const asset = res.assets?.[0];
+      if (res.didCancel || !asset?.uri) {
+        if (!res.didCancel && res.errorCode) {
+          Alert.alert('PINKOK', '갤러리를 열지 못했어요. 사진 접근 권한을 확인해 주세요.');
+        }
+        return;
+      }
+      setVideoClip({
+        id: Date.now(),
+        // 서버가 길이를 모르는 영상도 있어서 0 이면 저장할 때 실제 값으로 채워진다.
+        duration: asset.duration ? Math.round(asset.duration * 10) / 10 : 0,
+        // 썸네일은 올린 뒤 서버가 첫 장면으로 만들어 준다. 지금은 비워 둔다.
+        thumbnail: '',
+        videoUrl: asset.uri,
+        createdAt: '방금 전',
+      });
+    } catch {
+      Alert.alert('PINKOK', '갤러리를 열지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
   };
 
   const handleSave = () => {
@@ -109,7 +163,8 @@ export default function PlaceDetailModal({
           setVideoClip({
             id: Date.now(),
             duration: clip.durationMs / 1000,
-            thumbnail: place.thumbnail,
+            // 썸네일은 올린 뒤 서버가 첫 장면으로 만들어 준다.
+            thumbnail: '',
             videoUrl: clip.uri,
             createdAt: '방금 전',
           });
@@ -155,8 +210,11 @@ export default function PlaceDetailModal({
           {/* 본문 */}
           <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
             {/* 장소 요약 */}
+            {/*
+              썸네일은 뺀다. 서버가 핀 사진을 주지 않아 늘 같은 샘플 사진이 들어갔고,
+              장소와 아무 상관 없는 그림이 정보처럼 보였다. 그 자리는 글자에 쓴다.
+            */}
             <View className="flex-row items-center gap-3 rounded-2xl border-2 border-pixel-navy bg-white p-3 shadow-md">
-              <Image source={{ uri: place.thumbnail }} resizeMode="cover" className="h-16 w-16 rounded-xl border border-slate-200" />
               <View className="min-w-0 flex-1">
                 <View className="self-start rounded-md bg-[#B4FAF0] px-2 py-0.5">
                   <Text className="text-[10px] font-bold text-teal-800">{place.category}</Text>
@@ -276,20 +334,24 @@ export default function PlaceDetailModal({
                   {/* 사진 */}
                   <View>
                     <View className="mb-1.5 flex-row items-center justify-between">
-                      <Text className="text-xs font-black text-slate-700">사진 첨부 (복수 등록 가능)</Text>
+                      <Text className="text-xs font-black text-slate-700">
+                        사진 첨부 ({photos.length}/{MAX_PHOTOS})
+                      </Text>
                       <Pressable
-                        onPress={handleAddSamplePhoto}
+                        onPress={handlePickPhotos}
+                        accessibilityLabel="갤러리에서 사진 고르기"
                         className="rounded-lg border border-teal-300 bg-[#B4FAF0] px-2 py-0.5 active:bg-teal-200"
                       >
-                        <Text className="text-[10px] font-extrabold text-teal-900">+ 사진 추가</Text>
+                        <Text className="text-[10px] font-extrabold text-teal-900">+ 갤러리에서 추가</Text>
                       </Pressable>
                     </View>
                     {photos.length === 0 ? (
                       <Pressable
-                        onPress={handleAddSamplePhoto}
+                        onPress={handlePickPhotos}
+                        accessibilityLabel="갤러리에서 사진 고르기"
                         className="w-full items-center justify-center rounded-xl border-2 border-dashed border-slate-300 py-4"
                       >
-                        <Text className="text-xs text-slate-400">📷 사진을 추가해주세요 (클릭)</Text>
+                        <Text className="text-xs text-slate-400">📷 갤러리에서 사진 고르기</Text>
                       </Pressable>
                     ) : (
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
@@ -325,14 +387,8 @@ export default function PlaceDetailModal({
                           <Text className="text-[10px] font-black text-white">🔴 앱 내 바로 촬영</Text>
                         </Pressable>
                         <Pressable
-                          onPress={() =>
-                            setVideoClip({
-                              id: Date.now(),
-                              duration: 2.5,
-                              thumbnail: place.thumbnail,
-                              createdAt: '방금 전',
-                            })
-                          }
+                          onPress={handlePickVideo}
+                          accessibilityLabel="갤러리에서 영상 고르기"
                           className="rounded-lg border border-slate-300 bg-slate-100 px-2 py-1 active:bg-slate-200"
                         >
                           <Text className="text-[10px] font-bold text-slate-700">갤러리</Text>
@@ -342,22 +398,43 @@ export default function PlaceDetailModal({
 
                     {videoClip && (
                       <View className="relative flex-row items-center gap-3 overflow-hidden rounded-2xl border-2 border-pixel-navy bg-slate-900 p-2.5">
-                        <View className="relative h-16 w-16 overflow-hidden rounded-xl border border-white/20">
-                          <Image source={{ uri: videoClip.thumbnail }} resizeMode="cover" className="h-full w-full" />
-                          <View className="absolute inset-0 items-center justify-center bg-black/30">
+                        {/* 저장 전에도 방금 찍은 영상을 확인할 수 있어야 한다. 눌러서 재생한다. */}
+                        <Pressable
+                          onPress={() =>
+                            videoClip.videoUrl &&
+                            setPreviewClip({
+                              videoUrl: videoClip.videoUrl,
+                              title: place.name,
+                              authorName: currentUserName,
+                              duration: videoClip.duration || undefined,
+                              local: !isRemoteUrl(videoClip.videoUrl),
+                            })
+                          }
+                          disabled={!videoClip.videoUrl}
+                          accessibilityLabel="내 영상 재생"
+                          className="relative h-16 w-16 overflow-hidden rounded-xl border border-white/20 bg-black active:opacity-80"
+                        >
+                          {videoClip.thumbnail ? (
+                            <Image source={{ uri: videoClip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+                          ) : null}
+                          <View className="absolute bottom-0 left-0 right-0 top-0 items-center justify-center bg-black/30">
                             <Text className="text-base text-white">▶</Text>
                           </View>
-                        </View>
+                        </Pressable>
                         <View className="min-w-0 flex-1">
                           <View className="flex-row items-center gap-1.5">
-                            <View className="rounded bg-rose-500 px-1.5 py-0.5">
-                              <Text className="font-pixel text-[9px] text-white">{videoClip.duration}s</Text>
-                            </View>
+                            {videoClip.duration > 0 && (
+                              <View className="rounded bg-rose-500 px-1.5 py-0.5">
+                                <Text className="font-pixel text-[9px] text-white">{videoClip.duration}s</Text>
+                              </View>
+                            )}
                             <Text numberOfLines={1} className="text-xs font-extrabold text-white">
                               PinLog 전용 영상
                             </Text>
                           </View>
-                          <Text className="mt-0.5 text-[10px] text-slate-300">합성 시 1장소 1영상으로 쓰여요</Text>
+                          <Text className="mt-0.5 text-[10px] text-slate-300">
+                            {videoClip.videoUrl ? '눌러서 미리보기 · 1장소 1영상으로 쓰여요' : '합성 시 1장소 1영상으로 쓰여요'}
+                          </Text>
                         </View>
                         <Pressable onPress={() => setVideoClip(undefined)} className="p-1">
                           <Text className="text-xs text-slate-400">✕ 삭제</Text>
@@ -477,26 +554,47 @@ export default function PlaceDetailModal({
                       )}
 
                       {record.videoClip && (
-                        <View className="flex-row items-center justify-between rounded-2xl border border-white/20 bg-slate-900 p-2.5">
+                        <Pressable
+                          onPress={() => {
+                            const url = record.videoClip?.videoUrl;
+                            if (!url) return;
+                            setPreviewClip({
+                              videoUrl: url,
+                              title: place.name,
+                              authorName: record.authorName,
+                              duration: record.videoClip?.duration || undefined,
+                            });
+                          }}
+                          disabled={!record.videoClip.videoUrl}
+                          accessibilityLabel={`${record.authorName} 영상 재생`}
+                          className="flex-row items-center justify-between rounded-2xl border border-white/20 bg-slate-900 p-2.5 active:opacity-80"
+                        >
                           <View className="flex-row items-center gap-2.5">
-                            <View className="relative h-12 w-12 overflow-hidden rounded-lg border border-white/20">
-                              <Image source={{ uri: record.videoClip.thumbnail }} resizeMode="cover" className="h-full w-full" />
-                              <View className="absolute inset-0 items-center justify-center bg-black/40">
+                            <View className="relative h-12 w-12 overflow-hidden rounded-lg border border-white/20 bg-black">
+                              {record.videoClip.thumbnail ? (
+                                <Image source={{ uri: record.videoClip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+                              ) : null}
+                              <View className="absolute bottom-0 left-0 right-0 top-0 items-center justify-center bg-black/40">
                                 <Text className="text-xs text-white">▶</Text>
                               </View>
                             </View>
                             <View>
                               <View className="flex-row items-center gap-1.5">
-                                <View className="rounded bg-rose-500 px-1">
-                                  <Text className="font-pixel text-[8px] text-white">{record.videoClip.duration}s</Text>
-                                </View>
-                                <Text className="text-xs font-bold text-white">2~3초 동영상</Text>
+                                {record.videoClip.duration > 0 && (
+                                  <View className="rounded bg-rose-500 px-1">
+                                    <Text className="font-pixel text-[8px] text-white">{record.videoClip.duration}s</Text>
+                                  </View>
+                                )}
+                                <Text className="text-xs font-bold text-white">PinLog 클립</Text>
                               </View>
-                              <Text className="text-[10px] text-slate-400">PinLog 브이로그 후보</Text>
+                              {/* 합성 전에도 눌러서 확인할 수 있다. */}
+                              <Text className="text-[10px] text-slate-400">
+                                {record.videoClip.videoUrl ? '눌러서 재생' : 'PinLog 브이로그 후보'}
+                              </Text>
                             </View>
                           </View>
-                          <Text className="font-pixel text-[9px] text-[#56EADD]">READY ✓</Text>
-                        </View>
+                          <Text className="font-pixel text-[9px] text-[#56EADD]">▶ PLAY</Text>
+                        </Pressable>
                       )}
                     </View>
                   );
@@ -522,6 +620,8 @@ export default function PlaceDetailModal({
           </View>
         </View>
       </View>
+
+      {previewClip && <ClipPreviewModal clip={previewClip} onClose={() => setPreviewClip(null)} />}
     </Modal>
   );
 }

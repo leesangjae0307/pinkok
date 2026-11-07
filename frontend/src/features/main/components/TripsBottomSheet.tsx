@@ -57,6 +57,10 @@ interface TripsBottomSheetProps {
   onMovePlace: (placeId: number, direction: -1 | 1) => void;
   /** 여행할 시각을 고르는 창을 연다. */
   onEditTime: (place: PlaceItem) => void;
+  /** 핀을 지운다. 확인은 호출부(Alert)가 받는다. */
+  onDeletePlace: (place: PlaceItem) => void;
+  /** 지금 지우는 중인 핀. 그 줄의 삭제 버튼만 돌아간다. */
+  deletingPlaceId: number | null;
 }
 
 function DashedVLine() {
@@ -94,6 +98,8 @@ export default function TripsBottomSheet({
   onAssignDay,
   onMovePlace,
   onEditTime,
+  onDeletePlace,
+  deletingPlaceId,
 }: TripsBottomSheetProps) {
   // PanResponder 콜백 안에서 최신 값을 읽기 위한 ref
   const heightRef = useRef(sheetHeightPercent);
@@ -189,7 +195,12 @@ export default function TripsBottomSheet({
                 selectedDay === d ? 'border-pixel-navy bg-mint-primary' : 'border-slate-200 bg-slate-100'
               }`}
             >
-              <Text className={`font-pixel text-[10px] ${selectedDay === d ? 'text-pixel-navy' : 'text-slate-600'}`}>{d}day</Text>
+              {/*
+                font-pixel(Press Start 2P) 에는 한글 글자가 없어서 "전체" 는 시스템 폰트로
+                대체되고 "1day" 만 픽셀 폰트로 나왔다 — 같은 줄의 칩끼리 글씨체가 달라 보인
+                원인이다. 그래서 일자 칩도 본문 폰트로 맞춘다.
+              */}
+              <Text className={`text-xs font-black ${selectedDay === d ? 'text-pixel-navy' : 'text-slate-600'}`}>{d}day</Text>
               {selectedDay === d && (
                 <Text className="text-[10px] font-black text-pixel-navy/50">✕</Text>
               )}
@@ -255,6 +266,7 @@ export default function TripsBottomSheet({
           places.map((place, index) => {
             const isSelected = selectedPlaceId === place.id;
             const recordsCount = teamRecordCounts[place.id] || 0;
+            const isDeleting = deletingPlaceId === place.id;
 
             return (
               <React.Fragment key={place.id}>
@@ -317,11 +329,6 @@ export default function TripsBottomSheet({
                             {place.day > 0 ? `${place.day}day` : '일자 지정'}
                           </Text>
                         </Pressable>
-                        {isSelected && (
-                          <View className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5">
-                            <Text className="text-[8px] font-black text-rose-600">선택됨 ✓</Text>
-                          </View>
-                        )}
                       </View>
                     </View>
                   </View>
@@ -356,19 +363,34 @@ export default function TripsBottomSheet({
                     </View>
                   )}
 
-                  {/* 팀 기록 · 바로 촬영 */}
+                  {/* 팀 기록 · 삭제 · 바로 촬영 */}
                   <View className="items-end gap-1">
-                    <Pressable
-                      onPress={() => onOpenTeamRecord(place)}
-                      className="flex-row items-center gap-1 rounded-xl border border-teal-600 bg-white px-2.5 py-1.5 active:translate-y-0.5 active:bg-teal-50"
-                    >
-                      <Text className="text-[10px] font-black text-teal-900">👥 기록</Text>
-                      {recordsCount > 0 && (
-                        <View className="rounded-full bg-teal-700 px-1">
-                          <Text className="font-pixel text-[8px] text-white">{recordsCount}</Text>
-                        </View>
-                      )}
-                    </Pressable>
+                    <View className="flex-row items-center gap-1">
+                      <Pressable
+                        onPress={() => onOpenTeamRecord(place)}
+                        className="flex-row items-center gap-1 rounded-xl border border-teal-600 bg-white px-2.5 py-1.5 active:translate-y-0.5 active:bg-teal-50"
+                      >
+                        <Text className="text-[10px] font-black text-teal-900">👥 기록</Text>
+                        {recordsCount > 0 && (
+                          <View className="rounded-full bg-teal-700 px-1">
+                            <Text className="font-pixel text-[8px] text-white">{recordsCount}</Text>
+                          </View>
+                        )}
+                      </Pressable>
+                      {/* 한 번 꽂은 핀을 지울 방법이 없었다. 삭제는 확인을 받은 뒤에 한다. */}
+                      <Pressable
+                        onPress={() => onDeletePlace(place)}
+                        disabled={isDeleting}
+                        accessibilityLabel={`${place.name} 삭제`}
+                        className="h-7 w-7 items-center justify-center rounded-xl border border-rose-300 bg-rose-50 active:translate-y-0.5 active:bg-rose-100"
+                      >
+                        {isDeleting ? (
+                          <ActivityIndicator size="small" color="#e11d48" />
+                        ) : (
+                          <Text className="text-[10px]">🗑️</Text>
+                        )}
+                      </Pressable>
+                    </View>
                     <PixelPressable
                       shadowColor="#075953"
                       offset={2}

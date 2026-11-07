@@ -6,7 +6,7 @@ import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { ModalBackdrop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
 import { AvatarSource, isImageAvatar, toImageSource } from '../../../data/mockData';
 import { errorMessage } from '../../../api/axios';
-import { fileUrl } from '../../../api/fileApi';
+import { personAvatarSource } from '../../../api/avatarCatalog';
 import {
   fetchTripMembers,
   leaveTrip,
@@ -80,7 +80,7 @@ export default function TeamInviteModal({
             nickname: m.me ? currentNickname : m.nickname,
             avatar: m.me
               ? currentAvatarUrl
-              : fileUrl(m.avatarImageUrl ?? m.profileImageUrl) ?? '🙂',
+              : personAvatarSource(m),
           })),
         );
         const owner = list.find((m) => m.role === 'OWNER');
@@ -315,7 +315,7 @@ export default function TeamInviteModal({
                 // 이미 팀원이거나 답을 기다리는 중이면 다시 초대할 수 없다.
                 const invited = invitedLoginIds.includes(user.username) || user.alreadyInvited;
                 const disabled = invited || user.alreadyMember;
-                const avatar = fileUrl(user.avatarImageUrl ?? user.profileImageUrl) ?? '🙂';
+                const avatar = personAvatarSource(user);
                 return (
                   <View key={user.username} className="flex-row items-center gap-3 rounded-2xl border border-[#82F0DC] bg-white p-3 shadow-sm">
                     <ShadowBox

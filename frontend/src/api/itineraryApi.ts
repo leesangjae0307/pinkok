@@ -147,10 +147,6 @@ export async function fetchItineraryItems(tripId: number): Promise<ItineraryItem
   return data;
 }
 
-/** 썸네일이 없는 핀에 쓰는 기본 이미지 */
-const FALLBACK_THUMBNAIL =
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80';
-
 const TRANSIT_BY_MODE: Record<string, { type: TransitInfo['type']; label: string }> = {
   CAR: { type: 'car', label: '차량 이동' },
   WALK: { type: 'walk', label: '도보 이동' },
@@ -184,7 +180,9 @@ export function toPlaceItems(items: ItineraryItem[]): PlaceItem[] {
       rating: item.rating ?? 0,
       reviewsCount: item.reviewsCount,
       address: item.place.roadAddress ?? item.place.lotAddress ?? '',
-      thumbnail: fileUrl(item.thumbnailUrl) ?? FALLBACK_THUMBNAIL,
+      // 서버가 핀 사진을 주지 않으면 비워 둔다. 전에는 아무 샘플 사진을 넣어서
+      // 장소와 상관없는 그림이 정보처럼 보였다.
+      thumbnail: fileUrl(item.thumbnailUrl) ?? '',
       lat: item.place.latitude,
       lng: item.place.longitude,
       // 날짜를 안 정한 핀은 visitOrder 가 없다. 화면에는 순번이 꼭 필요하므로

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 
 import { PixelExtractIcon, PixelStar } from '../../../components/pixel/PixelIcons';
@@ -194,27 +194,34 @@ export default function ExtractTab() {
                         <Text className="text-[10px] font-bold text-slate-400">정확도 {place.confidence}%</Text>
                       </View>
 
-                      <View className="flex-row gap-3">
-                        <View className="relative h-20 w-20 overflow-hidden rounded-2xl border border-slate-100">
-                          <Image source={{ uri: place.thumbnail }} resizeMode="cover" className="h-full w-full" />
-                          <View className="absolute bottom-1 right-1 rounded-md bg-slate-900/80 px-1.5 py-0.5">
+                      {/*
+                        썸네일 칸은 뺀다. AI 추출 후보에는 사진이 없어서(thumbnail 이 빈
+                        문자열) 늘 빈 네모가 들어갔다. 순번은 작은 배지로 옮기고 남는
+                        폭은 장소 이름과 주소에 쓴다.
+                      */}
+                      <View className="min-w-0">
+                        <View className="flex-row items-center gap-1.5">
+                          <View className="rounded-md bg-slate-900/80 px-1.5 py-0.5">
                             <Text className="font-pixel text-[7px] text-white">PIN {place.order}</Text>
                           </View>
-                        </View>
-                        <View className="min-w-0 flex-1">
                           <Text className="text-[9px] font-bold text-[#08736d]">{place.category}</Text>
-                          <Text numberOfLines={1} className="mt-0.5 text-sm font-extrabold text-slate-800">
-                            {place.name}
-                          </Text>
+                        </View>
+                        <Text numberOfLines={1} className="mt-1 text-sm font-extrabold text-slate-800">
+                          {place.name}
+                        </Text>
+                        {/* 별점·리뷰는 서버가 줄 때만 보여준다. 0 을 띄우면 "평점 0점" 으로 읽힌다. */}
+                        {place.rating > 0 || place.reviewsCount > 0 ? (
                           <View className="mt-1 flex-row items-center gap-1.5">
                             <PixelStar size={12} />
                             <Text className="text-[10px] font-bold text-slate-700">{place.rating}</Text>
                             <Text className="text-[10px] text-slate-400">리뷰 {place.reviewsCount}</Text>
                           </View>
-                          <Text numberOfLines={1} className="mt-1 text-[10px] text-slate-500">
+                        ) : null}
+                        {place.address ? (
+                          <Text numberOfLines={2} className="mt-1 text-[10px] text-slate-500">
                             {place.address}
                           </Text>
-                        </View>
+                        ) : null}
                       </View>
 
                       {place.note ? (

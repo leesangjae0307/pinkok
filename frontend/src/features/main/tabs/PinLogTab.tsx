@@ -21,7 +21,10 @@ function ClipCard({ clip, onPress, showDots }: { clip: VlogClip; onPress: () => 
         <Text className="font-pixel text-[8px] text-[#FFC837]">{clip.time}</Text>
       </View>
       <View className="relative aspect-video overflow-hidden rounded-lg border-2 border-slate-600 bg-black">
-        <Image source={{ uri: clip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+        {/* 서버가 썸네일을 만들지 못한 완성본도 있다. 그때는 검은 화면에 ▶ 만 둔다. */}
+        {clip.thumbnail ? (
+          <Image source={{ uri: clip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+        ) : null}
         <View className="absolute inset-0 items-center justify-center bg-black/20">
           <View className="h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-black/55">
             <Text className="text-sm text-white">▶</Text>

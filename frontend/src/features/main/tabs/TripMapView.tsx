@@ -5,7 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
+import { PixelBackArrow, PixelTripMapIcon } from '../../../components/pixel/PixelIcons';
 import KakaoMapView, { type MapMarker } from '../../../components/map/KakaoMapView';
 import TripsBottomSheet from '../components/TripsBottomSheet';
 import { useApp } from '../AppContext';
@@ -25,6 +25,8 @@ export default function TripMapView() {
     handleAddDay,
     isAddingDay,
     handleDeleteDay,
+    handleDeletePlace,
+    deletingPlaceId,
     setAssigningPlace,
     handleMovePlace,
     setEditingTimePlace,
@@ -90,21 +92,30 @@ export default function TripMapView() {
             <PixelBackArrow size={16} />
           </Pressable>
           {/*
-            이 알약은 고정폭 버튼 4개(뒤로·장소·팀원·PinLog)와 한 줄을 나눠 써서 남는 폭이
-            아주 좁다. 아이콘까지 넣으면 제목이 0 으로 눌리고도 모자라 아이콘이 배지 뒤로
-            밀려 깨졌다(RN 은 flexShrink 기본값이 0 이라 shrink 유틸로는 해결되지 않는다).
-            그래서 장식인 아이콘을 빼고 정보인 제목과 배지만 남긴다.
+            이 줄은 고정폭 버튼 4개(뒤로·장소·팀원·PinLog)와 폭을 나눠 써서 제목에 남는
+            자리가 아주 좁다. 제목을 넣으면 거의 모든 여행 이름이 한두 글자에서 잘려
+            읽을 수 없었다(RN 은 flexShrink 기본값이 0 이라 shrink 유틸로도 안 늘어난다).
+            그래서 제목은 아이콘으로 돌리고, 전체 이름은 길게 눌러 토스트로 보여준다.
           */}
-          <View className="min-w-0 flex-1 flex-row items-center justify-between rounded-2xl border border-[#82F0DC] bg-white/95 px-3 py-2 shadow-md">
-            <Text numberOfLines={1} className="min-w-0 flex-1 text-xs font-bold text-slate-800">
-              {activeTrip?.title ?? '여행'}
-            </Text>
-            <View className="ml-1.5 rounded border border-[#50E6DC] bg-[#56EADD] px-1.5 py-0.5">
-              <Text className="font-pixel text-[9px] text-slate-900">
+          <Pressable
+            onLongPress={() => showToast(`🗺️ ${activeTrip?.title ?? '여행'}`)}
+            accessibilityLabel={`여행 ${activeTrip?.title ?? ''}. 길게 누르면 전체 이름을 봅니다`}
+            className="h-9 flex-row items-center gap-1.5 rounded-2xl border border-[#82F0DC] bg-white/95 px-2 shadow-md active:scale-95"
+          >
+            <PixelTripMapIcon size={20} active />
+            {/*
+              font-pixel(Press Start 2P) 에는 한글 글자가 없어서 "전체" 만 시스템 폰트로
+              대체되고 "1D" 는 픽셀 폰트로 나왔다 — 같은 자리의 글씨체가 달라 보인 원인이다.
+              그래서 이 배지는 옆 버튼들과 같은 본문 폰트로 맞춘다.
+            */}
+            <View className="rounded border border-[#50E6DC] bg-[#56EADD] px-1.5 py-0.5">
+              <Text className="text-[10px] font-black text-slate-900">
                 {selectedDayFilter === 'all' ? '전체' : `${selectedDayFilter}D`}
               </Text>
             </View>
-          </View>
+          </Pressable>
+          {/* 제목이 빠진 자리는 비워 둬서 지도가 더 보이게 한다. */}
+          <View className="flex-1" />
           <Pressable
             onPress={() => setIsAddPlaceOpen(true)}
             accessibilityLabel="장소 추가"
@@ -156,6 +167,8 @@ export default function TripMapView() {
         onAssignDay={setAssigningPlace}
         onMovePlace={handleMovePlace}
         onEditTime={setEditingTimePlace}
+        onDeletePlace={handleDeletePlace}
+        deletingPlaceId={deletingPlaceId}
         selectedPlaceId={selectedMapPin?.id ?? -1}
         onSelectPlace={(place) => {
           setSelectedMapPin(place);

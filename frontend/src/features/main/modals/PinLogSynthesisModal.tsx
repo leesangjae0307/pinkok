@@ -17,6 +17,7 @@ import {
   type Pinlog,
 } from '../../../api/pinlogApi';
 import { GalleryPermissionError, savePinlogToGallery } from '../../../services/saveToGallery';
+import ClipPreviewModal, { type ClipPreview } from './ClipPreviewModal';
 
 interface PinLogSynthesisModalProps {
   places: PlaceItem[];
@@ -38,6 +39,8 @@ interface ClipOption {
   diaryMediaId: number;
   placeId: number;
   thumbnailUrl: string;
+  /** 재생할 주소. 아직 저장하지 않은 기록이면 없을 수 있다. */
+  videoUrl?: string;
   durationMs: number;
   author: { nickname: string; avatar: AvatarSource };
   mine: boolean;
@@ -81,6 +84,7 @@ export default function PinLogSynthesisModal({
                 diaryMediaId: record.videoClip.id,
                 placeId: record.pinId,
                 thumbnailUrl: record.videoClip.thumbnail,
+                videoUrl: record.videoClip.videoUrl,
                 durationMs: Math.round(record.videoClip.duration * 1000),
                 author: {
                   nickname: record.authorName,
@@ -109,6 +113,8 @@ export default function PinLogSynthesisModal({
   const [errorMessage, setErrorMessage] = useState('');
   const [result, setResult] = useState<SynthesizedVlog | null>(null);
   const [isSavingToGallery, setIsSavingToGallery] = useState(false);
+  /** 합성 전에 확인해 보는 클립. null 이면 닫혀 있다. */
+  const [previewClip, setPreviewClip] = useState<ClipPreview | null>(null);
   /** 0~100. 서버가 Content-Length 를 주면 내려받는 동안 올라간다. */
   const [saveProgress, setSaveProgress] = useState(0);
 
@@ -296,7 +302,11 @@ export default function PinLogSynthesisModal({
                     {result.videoUrl ? (
                       <Video
                         source={{ uri: result.videoUrl }}
-                        poster={result.clips[0] ? { source: { uri: result.clips[0].thumbnail }, resizeMode: 'cover' } : undefined}
+                        poster={
+                          result.clips[0]?.thumbnail
+                            ? { source: { uri: result.clips[0].thumbnail }, resizeMode: 'cover' }
+                            : undefined
+                        }
                         controls
                         paused
                         resizeMode="cover"
@@ -346,8 +356,10 @@ export default function PinLogSynthesisModal({
                     >
                       {/* 비율은 감싸는 View 의 style 로 잡는다. Image 의 aspect-* 클래스는
                           적용되지 않아 높이가 잡히지 않는다(아바타에서 확인). */}
-                      <View style={{ width: '100%', aspectRatio: 16 / 9 }}>
-                        <Image source={{ uri: clip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+                      <View style={{ width: '100%', aspectRatio: 16 / 9 }} className="bg-black">
+                        {clip.thumbnail ? (
+                          <Image source={{ uri: clip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+                        ) : null}
                       </View>
                       <View className="p-2">
                         <Text numberOfLines={1} className="text-[9px] font-black text-slate-800">
@@ -423,6 +435,7 @@ export default function PinLogSynthesisModal({
                   </View>
                   <Text className="mt-2 text-xs font-semibold leading-5 text-slate-600">
                     장소마다 영상 하나를 선택하세요. 선택 순서대로 가로형 PinLog가 생성됩니다.
+                    썸네일의 ▶ 를 누르면 합성 전에 그 영상만 따로 재생해 볼 수 있어요.
                   </Text>
                 </View>
 
@@ -452,9 +465,33 @@ export default function PinLogSynthesisModal({
                                 >
                                   <View className="relative">
                                     {/* 비율은 감싸는 View 의 style 로 잡는다(위와 같은 이유). */}
-                                    <View style={{ width: '100%', aspectRatio: 16 / 9 }}>
-                                      <Image source={{ uri: option.thumbnailUrl }} resizeMode="cover" className="h-full w-full" />
+                                    <View style={{ width: '100%', aspectRatio: 16 / 9 }} className="bg-black">
+                                      {option.thumbnailUrl ? (
+                                        <Image source={{ uri: option.thumbnailUrl }} resizeMode="cover" className="h-full w-full" />
+                                      ) : null}
                                     </View>
+                                    {/*
+                                      합성을 걸기 전에 어떤 영상인지 봐야 고를 수 있다.
+                                      카드를 누르면 "선택", 이 버튼을 누르면 "재생" 이다.
+                                    */}
+                                    {option.videoUrl ? (
+                                      <Pressable
+                                        onPress={() =>
+                                          setPreviewClip({
+                                            videoUrl: option.videoUrl as string,
+                                            title: place.name,
+                                            authorName: option.author.nickname,
+                                            duration: option.durationMs / 1000,
+                                          })
+                                        }
+                                        accessibilityLabel={`${option.author.nickname} 영상 재생`}
+                                        className="absolute bottom-0 left-0 right-0 top-0 items-center justify-center active:opacity-70"
+                                      >
+                                        <View className="h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-black/55">
+                                          <Text className="text-[11px] text-white">▶</Text>
+                                        </View>
+                                      </Pressable>
+                                    ) : null}
                                     <View className="absolute bottom-1 right-1 rounded bg-black/75 px-1">
                                       <Text className="font-pixel text-[7px] text-white">{(option.durationMs / 1000).toFixed(1)}s</Text>
                                     </View>
@@ -505,6 +542,8 @@ export default function PinLogSynthesisModal({
           )}
         </View>
       </View>
+
+      {previewClip && <ClipPreviewModal clip={previewClip} onClose={() => setPreviewClip(null)} />}
     </Modal>
   );
 }

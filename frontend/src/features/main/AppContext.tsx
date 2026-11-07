@@ -6,12 +6,12 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Alert } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 
-import avatarBookWinter from '../../assets/images/avatar-book-winter.png';
-import avatarSilverBucket from '../../assets/images/avatar-silver-bucket.png';
-import avatarPinkCamera from '../../assets/images/avatar-pink-camera.png';
-import avatarMapPhone from '../../assets/images/avatar-map-phone.png';
-import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
-import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
+import {
+  AVATAR_ASSETS,
+  AVATAR_IMAGE_BY_CODE,
+  avatarSilverBucket,
+} from '../../assets/images/avatars';
+import { loadAvatarCatalog, personAvatarSource } from '../../api/avatarCatalog';
 import { Me, fetchAvatars, logout } from '../../api/authApi';
 import { deleteAccount, selectAvatar, updateNickname, updateProfileImage } from '../../api/userApi';
 import { fileUrl, uploadFile, uploadFiles, type PickedFile } from '../../api/fileApi';
@@ -38,6 +38,7 @@ import {
   createItineraryDay,
   createItineraryItem,
   deleteItineraryDay,
+  deleteItineraryItem,
   moveItineraryItemToDay,
   reorderItineraryItems,
   updateItineraryItemTime,
@@ -111,7 +112,8 @@ export interface NotificationItem {
 export interface TripInvitation {
   id: number;
   inviterName: string;
-  inviterAvatar: string;
+  /** 앱 에셋(number) 이거나 절대 주소, 아바타가 없으면 이모지 */
+  inviterAvatar: AvatarSource;
   tripTitle: string;
   date: string;
 }
@@ -120,6 +122,69 @@ export interface ExtractedPlace extends PlaceItem {
   extractionStatus: 'success' | 'review';
   confidence: number;
 }
+
+/** 프로필 상세(방문·저장 장소) 목록의 한 줄 */
+export interface ProfilePlaceEntry {
+  /** 여행이 달라도 겹치지 않는 키 */
+  key: string;
+  name: string;
+  tripTitle: string;
+  /** 주소나 날짜처럼 한 줄 더 보여줄 값 */
+  detail: string;
+}
+
+export interface ProfileRegionEntry {
+  name: string;
+  /** 그 지역을 다녀온 여행 수 */
+  tripCount: number;
+}
+
+export interface ProfileTasteEntry {
+  code: string;
+  label: string;
+  icon: string;
+  color: string;
+  /** 내 여행들이 이 테마를 고른 횟수 */
+  count: number;
+  /** 전체 테마 선택 중 비율(%) */
+  percent: number;
+}
+
+/**
+ * 프로필 화면이 쓰는 내 여행 집계.
+ *
+ * 서버에 "내 통계" API 가 없어서 내 여행들을 모아 직접 센다. 그래서 화면에 보이는
+ * 값은 모두 실제 내 자료다 — 지어낸 숫자를 쓰지 않는다.
+ */
+export interface ProfileStats {
+  /** 내가 기록(다이어리)을 남긴 핀 */
+  visited: ProfilePlaceEntry[];
+  /** 내 여행 일정에 담아 둔 핀 */
+  saved: ProfilePlaceEntry[];
+  /** 내 여행의 지역 */
+  regions: ProfileRegionEntry[];
+  /** 내 여행들이 고른 테마 비율 */
+  tastes: ProfileTasteEntry[];
+  /** 내 여행에서 완성된 PinLog */
+  pinlogs: VlogClip[];
+}
+
+const EMPTY_PROFILE_STATS: ProfileStats = {
+  visited: [],
+  saved: [],
+  regions: [],
+  tastes: [],
+  pinlogs: [],
+};
+
+/** 테마 코드별 표시용 아이콘·색. 코드는 constants 의 TRAVEL_STYLES 와 같다. */
+const TASTE_LOOK: Record<string, { icon: string; color: string }> = {
+  FOOD: { icon: '🍜', color: 'bg-[#56EADD]' },
+  CAFE: { icon: '☕', color: 'bg-[#82F0DC]' },
+  NATURE: { icon: '🌲', color: 'bg-emerald-300' },
+  SIGHT: { icon: '🏯', color: 'bg-violet-300' },
+  SHOPPING: { icon: '🛍️', color: 'bg-amber-300' },
+};
 
 export interface ProfileAvatar {
   id: string;
@@ -132,37 +197,9 @@ export interface ProfileAvatar {
 }
 
 
-export const PROFILE_AVATARS: ProfileAvatar[] = [
-  { id: 'book-winter', image: avatarBookWinter, label: '책 읽는 겨울 여행가', code: 'F1' },
-  { id: 'silver-bucket', image: avatarSilverBucket, label: '은발 버킷햇 여행가', code: 'F2' },
-  { id: 'pink-camera', image: avatarPinkCamera, label: '핑크 카메라 여행가', code: 'F3' },
-  { id: 'map-phone', image: avatarMapPhone, label: '지도 보는 도시 여행가', code: 'M1' },
-  { id: 'headphone-wink', image: avatarHeadphoneWink, label: '윙크 헤드폰 여행가', code: 'M2' },
-  { id: 'sunglasses', image: avatarSunglasses, label: '선글라스 로컬 여행가', code: 'M3' },
-];
-
-export const TRAVEL_TASTES = [
-  { label: '맛집', icon: '🍜', percent: 45, color: 'bg-[#56EADD]' },
-  { label: '카페', icon: '☕', percent: 25, color: 'bg-[#82F0DC]' },
-  { label: '자연', icon: '🌲', percent: 20, color: 'bg-emerald-300' },
-  { label: '야경', icon: '🌙', percent: 10, color: 'bg-violet-300' },
-];
+export const PROFILE_AVATARS: ProfileAvatar[] = AVATAR_ASSETS;
 
 export { avatarSilverBucket };
-
-/**
- * 서버 아바타 코드를 앱에 들어 있는 픽셀 에셋으로 바꾼다. 서버가 주는
- * imageUrl 은 상대 경로라 그대로는 못 쓰고, 같은 그림이 앱에도 있어서
- * 네트워크 없이 바로 그릴 수 있다. 모르는 코드면 null.
- */
-const AVATAR_IMAGE_BY_SERVER_CODE: Record<string, number | undefined> = {
-  F1: avatarBookWinter,
-  F2: avatarSilverBucket,
-  F3: avatarPinkCamera,
-  M1: avatarMapPhone,
-  M2: avatarHeadphoneWink,
-  M3: avatarSunglasses,
-};
 
 /**
  * 로그인한 사용자의 프로필 표시값. 서버는 아바타와 사진 중 하나만 들고 있다.
@@ -210,9 +247,14 @@ export function toExtractedPlace(candidate: PlaceCandidate): ExtractedPlace {
   };
 }
 
+/**
+ * 서버 아바타 코드를 앱에 들어 있는 픽셀 에셋으로 바꾼다. 서버가 주는
+ * imageUrl 은 상대 경로라 그대로는 못 쓰고, 같은 그림이 앱에도 있어서
+ * 네트워크 없이 바로 그릴 수 있다. 모르는 코드면 null.
+ */
 export function avatarImageForCode(code: string | undefined | null): number | null {
   if (!code) return null;
-  return AVATAR_IMAGE_BY_SERVER_CODE[code] ?? null;
+  return AVATAR_IMAGE_BY_CODE[code] ?? null;
 }
 
 function useAppState(me: Me, onLogout: () => void) {
@@ -255,7 +297,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [cacheSize, setCacheSize] = useState('12.4 MB');
 
   // 추출 탭
-  const [inputUrl, setInputUrl] = useState('https://instagram.com/p/C_jeju_cafe_art');
+  // 예시 링크를 미리 채워 두면 사용자가 지우고 쓰게 된다. 빈칸으로 시작한다.
+  const [inputUrl, setInputUrl] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedPlaces, setExtractedPlaces] = useState<ExtractedPlace[]>([]);
   /** 맞춤 추천 결과. 아직 수락·거절하지 않은 것만 담는다. */
@@ -309,6 +352,9 @@ function useAppState(me: Me, onLogout: () => void) {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isPinLogTripPickerOpen, setIsPinLogTripPickerOpen] = useState(false);
   const [profileDetailModal, setProfileDetailModal] = useState<'visited' | 'saved' | 'regions' | null>(null);
+  const [profileStats, setProfileStats] = useState<ProfileStats>(EMPTY_PROFILE_STATS);
+  const [isProfileStatsLoading, setIsProfileStatsLoading] = useState(false);
+  const [profileStatsError, setProfileStatsError] = useState<string | null>(null);
 
   const openProfileEditor = () => {
     setPendingProfileAvatar(selectedProfileAvatar);
@@ -430,7 +476,9 @@ function useAppState(me: Me, onLogout: () => void) {
           .map((i) => ({
             id: i.id,
             inviterName: i.inviter.nickname,
-            inviterAvatar: i.inviter.avatarImageUrl ?? i.inviter.profileImageUrl ?? '🎀',
+            // 상대 경로를 그대로 넘기면 Image 가 못 불러오고, 글자로 그리면 주소가
+            // 그대로 보인다. 아바타 코드를 아는 것은 앱 에셋으로 바꿔 그린다.
+            inviterAvatar: personAvatarSource(i.inviter),
             tripTitle: i.tripTitle,
             date: invitationDateLabel(i.startDate, i.endDate),
           })),
@@ -452,7 +500,9 @@ function useAppState(me: Me, onLogout: () => void) {
             id: p.id,
             time: p.createdAt.slice(0, 10).replace(/-/g, '.'),
             location: p.title ?? 'PinLog',
-            thumbnail: pinlogThumbnailUrl(p) ?? pinlogVideoUrl(p) ?? '',
+            thumbnail: pinlogThumbnailUrl(p) ?? '',
+            // 썸네일만 들고 있으면 재생할 수 없다. 완성본 주소를 같이 둔다.
+            videoUrl: pinlogVideoUrl(p) ?? undefined,
             selected: false,
           })),
       );
@@ -463,7 +513,126 @@ function useAppState(me: Me, onLogout: () => void) {
     }
   }, []);
 
+  /**
+   * 프로필 화면에 쓸 내 여행 집계를 모은다.
+   *
+   * 서버에 "내 통계" API 가 없어서 내 여행 목록을 받고 여행마다
+   * 일정(저장한 장소) · 기록(방문한 장소) · 테마 · 완성 PinLog 를 받아 직접 센다.
+   * 여행 수만큼 요청이 늘어나므로 프로필 탭을 열 때만 부른다.
+   *
+   * 일부 여행에서 실패해도 받은 것만으로 보여준다 — 한 여행 때문에 화면 전체가
+   * 비는 것보다 낫다.
+   */
+  const reloadProfileStats = useCallback(async () => {
+    setIsProfileStatsLoading(true);
+    setProfileStatsError(null);
+    try {
+      // 목록(trips 상태)에는 지역이 없어서 여기서 다시 받는다.
+      const myTrips = await fetchTrips();
+
+      const perTrip = await Promise.all(
+        myTrips.map(async (trip) => {
+          const [items, diaries, styles, pinlogs] = await Promise.all([
+            fetchItineraryItems(trip.id).catch(() => []),
+            fetchTripDiaries(trip.id).catch(() => []),
+            fetchTripStyles(trip.id).catch(() => []),
+            fetchPinlogs(trip.id).catch(() => []),
+          ]);
+          return { trip, items, diaries, styles, pinlogs };
+        }),
+      );
+
+      const saved: ProfilePlaceEntry[] = [];
+      const visited: ProfilePlaceEntry[] = [];
+      const regionCount = new Map<string, number>();
+      const tasteCount = new Map<string, { label: string; count: number }>();
+      const pinlogs: VlogClip[] = [];
+
+      perTrip.forEach(({ trip, items, diaries, styles, pinlogs: tripPinlogs }) => {
+        items.forEach((item) => {
+          saved.push({
+            key: `${trip.id}-${item.id}`,
+            name: item.place.name,
+            tripTitle: trip.title,
+            detail: item.place.roadAddress ?? item.place.lotAddress ?? item.place.categoryName ?? '',
+          });
+        });
+
+        // 방문한 곳은 "내가 기록을 남긴 핀" 이다. 같은 핀에 기록은 하나뿐이다.
+        diaries
+          .filter((d) => d.mine)
+          .forEach((d) => {
+            visited.push({
+              key: `${trip.id}-${d.itineraryItemId}`,
+              name: d.placeName,
+              tripTitle: trip.title,
+              detail: d.createdAt.slice(0, 10).replace(/-/g, '.'),
+            });
+          });
+
+        const region = trip.region?.trim();
+        if (region) regionCount.set(region, (regionCount.get(region) ?? 0) + 1);
+
+        styles.forEach((style) => {
+          const cur = tasteCount.get(style.code);
+          tasteCount.set(style.code, {
+            label: style.name || travelStyleLabel(style.code),
+            count: (cur?.count ?? 0) + 1,
+          });
+        });
+
+        tripPinlogs
+          .filter((pinlog) => pinlog.status === 'DONE')
+          .forEach((pinlog) => {
+            pinlogs.push({
+              id: pinlog.id,
+              time: pinlog.createdAt.slice(0, 10).replace(/-/g, '.'),
+              location: pinlog.title ?? `${trip.title} PinLog`,
+              thumbnail: pinlogThumbnailUrl(pinlog) ?? '',
+              videoUrl: pinlogVideoUrl(pinlog) ?? undefined,
+              selected: false,
+            });
+          });
+      });
+
+      const totalTastePicks = [...tasteCount.values()].reduce((sum, t) => sum + t.count, 0);
+      const tastes: ProfileTasteEntry[] = [...tasteCount.entries()]
+        .map(([code, { label, count }]) => ({
+          code,
+          label,
+          icon: TASTE_LOOK[code]?.icon ?? '📍',
+          color: TASTE_LOOK[code]?.color ?? 'bg-slate-300',
+          count,
+          percent: totalTastePicks > 0 ? Math.round((count / totalTastePicks) * 100) : 0,
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      setProfileStats({
+        visited,
+        saved,
+        regions: [...regionCount.entries()]
+          .map(([name, tripCount]) => ({ name, tripCount }))
+          .sort((a, b) => b.tripCount - a.tripCount || a.name.localeCompare(b.name)),
+        tastes,
+        // 최근에 만든 것이 앞으로 온다.
+        pinlogs: pinlogs.sort((a, b) => b.time.localeCompare(a.time)),
+      });
+    } catch (e) {
+      setProfileStats(EMPTY_PROFILE_STATS);
+      setProfileStatsError(errorMessage(e, '내 여행 기록을 불러오지 못했어요.'));
+    } finally {
+      setIsProfileStatsLoading(false);
+    }
+  }, []);
+
+  // 프로필 탭을 열 때만 모은다(여행 수만큼 요청이 늘어난다).
   useEffect(() => {
+    if (activeTab === 'profile') reloadProfileStats();
+  }, [activeTab, reloadProfileStats]);
+
+  useEffect(() => {
+    // 아바타 표는 남의 얼굴을 그릴 때 쓴다. 한 번만 받아 두면 된다.
+    loadAvatarCatalog();
     reloadTrips();
     reloadNotifications();
     reloadInvitations();
@@ -635,6 +804,53 @@ function useAppState(me: Me, onLogout: () => void) {
               showToast(`${dayNumber}일차를 지웠어요.`);
             } catch (e) {
               showToast(errorMessage(e, '일자를 지우지 못했어요.'));
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  /** 지우는 중인 핀. 버튼을 두 번 누르거나 지워진 핀을 또 지우지 않게 한다. */
+  const [deletingPlaceId, setDeletingPlaceId] = useState<number | null>(null);
+
+  /**
+   * 지도에서 핀을 지운다. DELETE /itinerary-items/{id}.
+   *
+   * 핀에 달린 팀원 기록도 서버에서 함께 사라지므로 먼저 확인을 받는다. 지운 핀을
+   * 보고 있었으면 상세 카드가 빈 핀을 가리키지 않게 선택을 옮긴다.
+   */
+  const handleDeletePlace = (place: PlaceItem) => {
+    if (!activeTrip || deletingPlaceId !== null) return;
+    const records = placeRecords.filter((r) => r.pinId === place.id).length;
+
+    Alert.alert(
+      '장소 삭제',
+      records > 0
+        ? `'${place.name}'을(를) 지도에서 지울까요?\n이 장소에 남긴 팀원 기록 ${records}개와 영상도 함께 지워져요.`
+        : `'${place.name}'을(를) 지도에서 지울까요?\n되돌릴 수 없어요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingPlaceId(place.id);
+            try {
+              await deleteItineraryItem(place.id);
+              // 지운 핀을 보고 있었으면 선택을 비운다. loadItinerary 가 남은 첫 핀을 잡는다.
+              setSelectedMapPin((cur) => (cur?.id === place.id ? null : cur));
+              setTrips((cur) =>
+                cur.map((t) =>
+                  t.id === activeTrip.id ? { ...t, placesCount: Math.max(0, t.placesCount - 1) } : t,
+                ),
+              );
+              await loadItinerary(activeTrip.id);
+              showToast(`'${place.name}'을(를) 지웠어요.`);
+            } catch (e) {
+              showToast(errorMessage(e, '장소를 지우지 못했어요.'));
+            } finally {
+              setDeletingPlaceId(null);
             }
           },
         },
@@ -853,7 +1069,9 @@ function useAppState(me: Me, onLogout: () => void) {
     if (isUploaded(clip.videoUrl)) {
       return [...photos, { fileUrl: toServerPath(clip.videoUrl), durationMs: Math.round(clip.duration * 1000) }];
     }
-    const video = await uploadFile({ uri: clip.videoUrl, type: 'video/mp4' });
+    // 영상임을 알려 주기만 한다. 실제 형식은 fileApi 가 확장자에서 읽고,
+    // 확장자가 없을 때만 mp4 로 가정한다(사진으로 올라가 거절당하던 문제).
+    const video = await uploadFile({ uri: clip.videoUrl, mediaHint: 'VIDEO' });
     return [...photos, { fileUrl: video.url, durationMs: video.durationMs ?? Math.round(clip.duration * 1000) }];
   };
 
@@ -1290,6 +1508,8 @@ function useAppState(me: Me, onLogout: () => void) {
     handleAddDay,
     handleDeleteDay,
     handleAssignDay,
+    handleDeletePlace,
+    deletingPlaceId,
     handleMovePlace,
     assigningPlace, setAssigningPlace,
     editingTimePlace, setEditingTimePlace,
@@ -1362,6 +1582,10 @@ function useAppState(me: Me, onLogout: () => void) {
     pickProfilePhoto,
     isUploadingProfilePhoto,
     profileDetailModal, setProfileDetailModal,
+    profileStats,
+    isProfileStatsLoading,
+    profileStatsError,
+    reloadProfileStats,
     // 파생값
     displayedMapPlaces,
     filteredTrips,

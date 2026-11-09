@@ -3,11 +3,14 @@ package com.example.pinkok_backend.kakao;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.time.Duration;
 
 /**
  * 카카오 Local API(키워드 장소 검색) 호출만 담당하는 얇은 클라이언트.
@@ -23,8 +26,14 @@ public class KakaoLocalApiClient {
 
     public KakaoLocalApiClient(
             @Value("${kakao.local-api-base-url}") String baseUrl,
-            @Value("${kakao.rest-api-key}") String restApiKey) {
-        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+            @Value("${kakao.rest-api-key}") String restApiKey,
+            @Value("${kakao.connect-timeout-ms:3000}") long connectTimeoutMs,
+            @Value("${kakao.read-timeout-ms:10000}") long readTimeoutMs) {
+        // 장소 후보는 장소마다 카카오를 부르므로, 한 번이 멈추면 추출 전체가 PROCESSING 에 멈춘다
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
+        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
+        this.restClient = RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
         this.restApiKey = restApiKey;
     }
 

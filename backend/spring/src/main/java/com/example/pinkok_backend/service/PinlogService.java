@@ -243,7 +243,7 @@ public class PinlogService {
     // ------------------------------------------------------------------
 
     void compose(Long pinlogId) {
-        Pinlog pinlog = pinlogRepository.findById(pinlogId).orElse(null);
+        Pinlog pinlog = pinlogRepository.findWithTripAndUserById(pinlogId).orElse(null);
         if (pinlog == null) {
             log.warn("PinLog 를 찾지 못해 합성을 건너뛴다 (id={})", pinlogId);
             return;
@@ -275,32 +275,99 @@ public class PinlogService {
             pinlog.setCompletedAt(LocalDateTime.now());
             pinlogRepository.save(pinlog);
 
-            // 합성은 수십 초가 걸려서 그 사이 앱을 꺼뒀을 수 있다. 다 됐다고 알려준다.
-            notificationService.notify(pinlog.getUser(),
-                    NotificationService.TYPE_PINLOG_DONE,
-                    "PinLog 영상이 완성됐어요",
-                    titleOf(pinlog) + " 영상을 확인해보세요.",
-                    NotificationService.TARGET_PINLOG,
-                    pinlog.getId());
-
         } catch (Exception e) {
             // 실패해도 흔적을 남긴다. 아무 기록 없이 멈춰 있으면 원인을 찾을 수 없다.
             log.warn("PinLog 합성 실패 (id={})", pinlogId, e);
-            pinlog.setStatus(STATUS_FAILED);
-            pinlog.setErrorMessage(truncate(e.getMessage(), 500));
-            pinlog.setCompletedAt(LocalDateTime.now());
-            pinlogRepository.save(pinlog);
-
-            // 실패도 알려줘야 한다. 안 그러면 사용자는 영영 기다린다.
-            notificationService.notify(pinlog.getUser(),
-                    NotificationService.TYPE_PINLOG_DONE,
-                    "PinLog 영상을 만들지 못했어요",
-                    titleOf(pinlog) + " 영상 합성에 실패했어요. 다시 시도해주세요.",
-                    NotificationService.TARGET_PINLOG,
-                    pinlog.getId());
+            markFailed(pinlog, e.getMessage());
+            return;
 
         } finally {
             deleteQuietly(workDir);
+        }
+
+        // 알림은 합성이 다 끝난 뒤 따로 보낸다. 알림에서 문제가 생겨도 이미 만든 영상을 실패로 덮어쓰면 안 된다.
+        // 합성은 수십 초가 걸려서 그 사이 앱을 꺼뒀을 수 있다. 다 됐다고 알려준다.
+        notifyQuietly(pinlog, "PinLog 영상이 완성됐어요", " 영상을 확인해보세요.");
+    }
+
+    private void markFailed(Pinlog pinlog, String errorMessage) {
+        pinlog.setStatus(STATUS_FAILED);
+        pinlog.setErrorMessage(truncate(errorMessage, 500));
+        pinlog.setCompletedAt(LocalDateTime.now());
+        pinlogRepository.save(pinlog);
+
+        // 실패도 알려줘야 한다. 안 그러면 사용자는 영영 기다린다.
+        notifyQuietly(pinlog, "PinLog 영상을 만들지 못했어요", " 영상 합성에 실패했어요. 다시 시도해주세요.");
+    }
+
+    /** 알림 문구를 만들다 실패해도(여행 정보를 못 읽는 등) 합성 결과에는 영향을 주지 않는다. */
+    private void notifyQuietly(Pinlog pinlog, String title, String bodySuffix) {
+        try {
+            notificationService.notify(pinlog.getUser(),
+                    NotificationService.TYPE_PINLOG_DONE,
+                    title,
+                    titleOf(pinlog) + bodySuffix,
+                    NotificationService.TARGET_PINLOG,
+                    pinlog.getId());
+        } catch (RuntimeException e) {
+            log.warn("PinLog 알림을 보내지 못했다 (id={})", pinlog.getId(), e);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 다시 시도 · 서버 재시작 복구
+    // ------------------------------------------------------------------
+
+    /**
+     * 실패한 PinLog 를 같은 클립으로 다시 합성한다. 앱의 "다시 시도" 버튼용. 만든 사람만 할 수 있다.
+     */
+    @Transactional
+    public PinlogResponse retry(Long pinlogId, Long userId) {
+        Pinlog pinlog = getOrThrow(pinlogId);
+        tripAccessGuard.requireMember(pinlog.getTrip().getId(), userId);
+        if (!pinlog.getUser().getId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "본인이 만든 PinLog만 다시 시도할 수 있습니다.");
+        }
+        if (!STATUS_FAILED.equals(pinlog.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "실패한 PinLog만 다시 시도할 수 있습니다. (status=" + pinlog.getStatus() + ")");
+        }
+
+        pinlog.setStatus(STATUS_QUEUED);
+        pinlog.setErrorMessage(null);
+        pinlog.setCompletedAt(null);
+        pinlogRepository.save(pinlog);
+
+        startAfterCommit(pinlog.getId());
+        return PinlogResponse.of(pinlog, pinlogClipRepository.findAllByPinlogId(pinlogId), userId);
+    }
+
+    /**
+     * 서버가 꺼지면서 끝내지 못한 PinLog 를 정리한다. 그대로 두면 앱이 영원히 기다린다.
+     *
+     * <ul>
+     *   <li>QUEUED — 합성을 시작도 안 했으므로 다시 줄을 세운다.</li>
+     *   <li>PROCESSING — 실패로 끝내고 "다시 시도"를 안내한다. 자동으로 다시 돌리지 않는 이유는,
+     *       합성 자체가 서버를 죽인 경우(메모리 부족 등) 켜질 때마다 다시 죽기 때문이다.</li>
+     * </ul>
+     *
+     * @param createdBefore 이 시각 이전에 만든 PinLog 만 본다. 서버가 켜진 뒤 만든 것은 건드리면 안 된다.
+     */
+    public void recoverInterrupted(LocalDateTime createdBefore) {
+        List<Pinlog> interrupted = pinlogRepository.findAllByStatusInAndCreatedAtBefore(
+                List.of(STATUS_QUEUED, STATUS_PROCESSING), createdBefore);
+
+        for (Pinlog pinlog : interrupted) {
+            try {
+                if (STATUS_QUEUED.equals(pinlog.getStatus())) {
+                    Long id = pinlog.getId();
+                    pinlogTaskExecutor.execute(() -> compose(id));
+                } else {
+                    markFailed(pinlog, "서버가 다시 시작돼서 합성이 중단됐어요. 다시 시도해주세요.");
+                }
+            } catch (RuntimeException e) {
+                log.warn("중단된 PinLog 를 복구하지 못했다 (id={})", pinlog.getId(), e);
+            }
         }
     }
 

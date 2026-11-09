@@ -41,15 +41,18 @@ public class GeminiJobRunner {
     private final GeminiClient geminiClient;
     private final int maxRetries;
     private final long retryBaseDelayMs;
+    private final long totalTimeoutMs;
 
     public GeminiJobRunner(AiRequestRepository aiRequestRepository,
                            GeminiClient geminiClient,
                            @Value("${gemini.max-retries}") int maxRetries,
-                           @Value("${gemini.retry-base-delay-ms:1000}") long retryBaseDelayMs) {
+                           @Value("${gemini.retry-base-delay-ms:1000}") long retryBaseDelayMs,
+                           @Value("${gemini.total-timeout-ms:300000}") long totalTimeoutMs) {
         this.aiRequestRepository = aiRequestRepository;
         this.geminiClient = geminiClient;
         this.maxRetries = maxRetries;
         this.retryBaseDelayMs = retryBaseDelayMs;
+        this.totalTimeoutMs = totalTimeoutMs;
     }
 
     /**
@@ -69,6 +72,7 @@ public class GeminiJobRunner {
         GeminiGenerateRequest geminiRequest =
                 GeminiGenerateRequest.of(content, new GeminiGenerateRequest.GenerationConfig());
 
+        long startedAt = System.currentTimeMillis();
         int attempt = 0;
         while (true) {
             try {
@@ -76,8 +80,11 @@ public class GeminiJobRunner {
                 recordResponse(aiRequest, response, attempt);
                 return true;
             } catch (GeminiCallException e) {
-                if (attempt >= maxRetries) {
-                    markFailed(aiRequest, attempt, "GEMINI_CALL_FAILED: " + rootMessage(e));
+                // 재시도까지 합친 전체 시간도 제한한다. 한 번에 3분씩 4번이면 앱이 12분을 기다리게 된다.
+                boolean outOfTime = System.currentTimeMillis() - startedAt >= totalTimeoutMs;
+                if (attempt >= maxRetries || outOfTime) {
+                    String reason = isTimeout(e) || outOfTime ? "GEMINI_TIMEOUT: " : "GEMINI_CALL_FAILED: ";
+                    markFailed(aiRequest, attempt, reason + rootMessage(e));
                     return false;
                 }
                 waitBeforeRetry(aiRequest.getId(), attempt);
@@ -159,6 +166,17 @@ public class GeminiJobRunner {
             }
         }
         return sb.toString();
+    }
+
+    /** 응답을 기다리다 시간이 다 된 경우인지. 앱에 "다시 시도" 를 안내할 근거가 된다. */
+    private boolean isTimeout(Throwable e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+            if (cause instanceof java.net.SocketTimeoutException
+                    || cause instanceof java.net.http.HttpTimeoutException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String rootMessage(Throwable e) {

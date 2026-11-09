@@ -1,5 +1,6 @@
 package com.example.pinkok_backend.ai;
 
+import com.example.pinkok_backend.gemini.GeminiCallException;
 import com.example.pinkok_backend.gemini.GeminiClient;
 import com.example.pinkok_backend.gemini.GeminiGenerateResponse;
 import com.example.pinkok_backend.kakao.KakaoKeywordSearchResponse;
@@ -469,6 +470,45 @@ class PlaceCandidateTest {
         AiRequest recovered = aiRequestRepository.findById(aiRequestId).orElseThrow();
         assertThat(recovered.getStatus()).isEqualTo("FAILED");
         assertThat(recovered.getErrorCode()).isEqualTo("SERVER_RESTARTED");
+    }
+
+    @Test
+    @DisplayName("실패한 추출은 다시 시도할 수 있고, 같은 입력으로 다시 돌아 후보까지 만들어진다")
+    void retryFailedExtraction() throws Exception {
+        String token = signupAndLogin("cand20@pinkok.com", "cand20");
+        String stranger = signupAndLogin("cand20other@pinkok.com", "cand20other");
+        Mockito.when(geminiClient.generate(Mockito.any())).thenThrow(new GeminiCallException("503 Service Unavailable"));
+
+        MvcResult created = mockMvc.perform(post("/ai-requests")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inputType\":\"TEXT\",\"sourceText\":\"협재 해수욕장 다녀왔어요\"}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andReturn();
+        Long aiRequestId = ((Number) JsonPath.read(created.getResponse().getContentAsString(), "$.id")).longValue();
+
+        // 남의 요청은 다시 시도할 수 없다
+        mockMvc.perform(post("/ai-requests/" + aiRequestId + "/retry").header("Authorization", "Bearer " + stranger))
+                .andExpect(status().isForbidden());
+
+        // Gemini 가 살아나면 다시 시도로 성공한다
+        Mockito.reset(geminiClient);
+        Mockito.when(geminiClient.modelName()).thenReturn("gemini-2.5-flash-test");
+        geminiExtracts(place("협재해수욕장", "제주시"));
+        kakaoFinds("26338954", "협재해수욕장", "126.23", "33.39");
+
+        mockMvc.perform(post("/ai-requests/" + aiRequestId + "/retry").header("Authorization", "Bearer " + token))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.id").value(aiRequestId))
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.errorCode").doesNotExist())
+                .andExpect(jsonPath("$.candidatesReady").value(true));
+        assertThat((List<?>) JsonPath.read(candidates(token, aiRequestId), "$")).hasSize(1);
+
+        // 성공한 요청은 다시 시도할 수 없다
+        mockMvc.perform(post("/ai-requests/" + aiRequestId + "/retry").header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
     }
 
     @Test

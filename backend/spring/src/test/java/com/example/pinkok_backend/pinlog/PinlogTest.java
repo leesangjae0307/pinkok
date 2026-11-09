@@ -6,6 +6,7 @@ import com.example.pinkok_backend.entity.User;
 import com.example.pinkok_backend.repository.TripMemberRepository;
 import com.example.pinkok_backend.repository.TripRepository;
 import com.example.pinkok_backend.repository.UserRepository;
+import com.example.pinkok_backend.service.PinlogService;
 import com.example.pinkok_backend.support.DatabaseCleaner;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
@@ -18,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -69,6 +71,12 @@ class PinlogTest {
 
     @Autowired
     TestVideoComposerConfig.FakeVideoComposer fakeVideoComposer;
+
+    @Autowired
+    PinlogService pinlogService;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @Autowired
     UserRepository userRepository;
@@ -447,6 +455,99 @@ class PinlogTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/pinlogs/" + pinlogId + "/download"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("실패한 PinLog 는 만든 사람이 다시 시도할 수 있고, 같은 클립으로 다시 합성된다")
+    void retryFailedPinlog() throws Exception {
+        String owner = signupAndLogin("pinlogretry@pinkok.com", "pinlogretry");
+        String mate = signupAndLogin("pinlogretry2@pinkok.com", "pinlogretry2");
+        Long tripId = createTrip(owner);
+        joinTrip(tripId, "pinlogretry2@pinkok.com");
+        Long dayId = createDay(owner, tripId, 1);
+        writeDiaryWithMedia(owner, addPin(owner, tripId, dayId, "협재"), uploadVideo(owner));
+
+        fakeVideoComposer.failNextWith("일부러 실패");
+        MvcResult created = createPinlog(owner, String.format("{\"tripId\":%d}", tripId));
+        Long pinlogId = ((Number) JsonPath.read(created.getResponse().getContentAsString(), "$.id")).longValue();
+        assertThat((String) JsonPath.read(awaitFinalStatus(owner, pinlogId), "$.status")).isEqualTo("FAILED");
+
+        // 팀원이어도 남이 만든 건 다시 시도할 수 없다
+        mockMvc.perform(post("/pinlogs/" + pinlogId + "/retry").header("Authorization", "Bearer " + mate))
+                .andExpect(status().isForbidden());
+
+        fakeVideoComposer.reset();
+        mockMvc.perform(post("/pinlogs/" + pinlogId + "/retry").header("Authorization", "Bearer " + owner))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.errorMessage").doesNotExist());
+
+        String json = awaitFinalStatus(owner, pinlogId);
+        assertThat((String) JsonPath.read(json, "$.status")).isEqualTo("DONE");
+        assertThat((String) JsonPath.read(json, "$.videoUrl")).endsWith(".mp4");
+
+        // 완성된 건 다시 시도할 수 없다
+        mockMvc.perform(post("/pinlogs/" + pinlogId + "/retry").header("Authorization", "Bearer " + owner))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("서버 재시작 복구 - 대기 중이던 PinLog 는 다시 합성하고, 합성 중이던 것은 실패로 끝낸다")
+    void recoverInterruptedPinlogs() throws Exception {
+        String token = signupAndLogin("pinlogrecover@pinkok.com", "pinlogrecover");
+        Long tripId = createTrip(token);
+        Long dayId = createDay(token, tripId, 1);
+        writeDiaryWithMedia(token, addPin(token, tripId, dayId, "협재"), uploadVideo(token));
+
+        Long queued = ((Number) JsonPath.read(createPinlog(token, String.format("{\"tripId\":%d}", tripId))
+                .getResponse().getContentAsString(), "$.id")).longValue();
+        Long processing = ((Number) JsonPath.read(createPinlog(token, String.format("{\"tripId\":%d}", tripId))
+                .getResponse().getContentAsString(), "$.id")).longValue();
+        awaitFinalStatus(token, queued);
+        awaitFinalStatus(token, processing);
+
+        // 서버가 꺼질 때의 상태를 만든다
+        jdbcTemplate.update("update pinlogs set status = 'QUEUED', video_url = null, completed_at = null where id = ?", queued);
+        jdbcTemplate.update("update pinlogs set status = 'PROCESSING', video_url = null, completed_at = null where id = ?", processing);
+
+        pinlogService.recoverInterrupted(LocalDateTime.now().plusSeconds(1));
+
+        assertThat((String) JsonPath.read(awaitFinalStatus(token, queued), "$.status")).isEqualTo("DONE");
+        String failed = awaitFinalStatus(token, processing);
+        assertThat((String) JsonPath.read(failed, "$.status")).isEqualTo("FAILED");
+        assertThat((String) JsonPath.read(failed, "$.errorMessage")).contains("다시 시작");
+    }
+
+    @Test
+    @DisplayName("제목 없이 만든 PinLog 도 완성 알림까지 보낸 뒤 DONE 으로 남는다 (알림이 결과를 FAILED 로 덮어쓰던 문제)")
+    void pinlogWithoutTitleStaysDone() throws Exception {
+        String token = signupAndLogin("pinlognotitle@pinkok.com", "pinlognotitle");
+        Long tripId = createTrip(token);
+        Long dayId = createDay(token, tripId, 1);
+        writeDiaryWithMedia(token, addPin(token, tripId, dayId, "협재"), uploadVideo(token));
+
+        MvcResult created = createPinlog(token, String.format("{\"tripId\":%d}", tripId));
+        Long pinlogId = ((Number) JsonPath.read(created.getResponse().getContentAsString(), "$.id")).longValue();
+        awaitFinalStatus(token, pinlogId);
+
+        // 완성 알림은 DONE 저장 뒤에 나간다. 알림이 와 있다면 합성 흐름이 끝까지 끝난 것이다.
+        String notification = null;
+        for (int i = 0; i < 100 && notification == null; i++) {
+            String json = mockMvc.perform(get("/notifications").header("Authorization", "Bearer " + token))
+                    .andReturn().getResponse().getContentAsString();
+            if (((List<?>) JsonPath.read(json, "$")).size() > 0) {
+                notification = json;
+            } else {
+                Thread.sleep(50);
+            }
+        }
+        assertThat(notification).isNotNull();
+        assertThat((String) JsonPath.read(notification, "$[0].title")).isEqualTo("PinLog 영상이 완성됐어요");
+        // 제목이 없으면 여행 이름으로 대신한다
+        assertThat((String) JsonPath.read(notification, "$[0].body")).contains("제주도 여행");
+
+        mockMvc.perform(get("/pinlogs/" + pinlogId).header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.status").value("DONE"));
     }
 
     @Test

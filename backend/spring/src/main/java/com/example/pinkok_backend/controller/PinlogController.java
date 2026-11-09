@@ -66,6 +66,12 @@ public class PinlogController {
         return pinlogService.get(pinlogId, userId);
     }
 
+    /** 실패한 PinLog 를 같은 클립으로 다시 합성한다 (만든 사람만). 이후는 처음과 똑같이 폴링한다. */
+    @PostMapping("/{pinlogId}/retry")
+    public ResponseEntity<PinlogResponse> retry(@CurrentUserId Long userId, @PathVariable Long pinlogId) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(pinlogService.retry(pinlogId, userId));
+    }
+
     @GetMapping
     public List<PinlogResponse> list(@CurrentUserId Long userId, @RequestParam Long tripId) {
         return pinlogService.list(tripId, userId);

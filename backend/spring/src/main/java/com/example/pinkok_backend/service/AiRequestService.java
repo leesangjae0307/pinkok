@@ -157,6 +157,36 @@ public class AiRequestService {
                 .toList();
     }
 
+    /**
+     * 실패한 장소 추출을 같은 입력(링크·글·스크린샷)으로 다시 돌린다. 앱의 "다시 시도" 버튼용.
+     *
+     * <p>새 요청을 만들지 않고 같은 요청을 되살리는 이유는, 스크린샷을 다시 올리지 않아도 되기 때문이다
+     * (올린 이미지는 ai_request_images 에 남아 있다).
+     * 맞춤 추천은 요청 조건이 따로 저장되지 않아 다시 돌릴 수 없으므로, 추천은 새로 요청하면 된다.
+     */
+    public AiRequestResponse retry(Long id, Long userId) {
+        AiRequest aiRequest = getOwnedOrThrow(id, userId);
+        if (!REQUEST_TYPE_PLACE_EXTRACT.equals(aiRequest.getRequestType())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장소 추출 요청만 다시 시도할 수 있습니다.");
+        }
+        if (!GeminiJobRunner.STATUS_FAILED.equals(aiRequest.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "실패한 요청만 다시 시도할 수 있습니다. (status=" + aiRequest.getStatus() + ")");
+        }
+
+        aiRequest.setStatus(STATUS_PENDING);
+        aiRequest.setErrorCode(null);
+        aiRequest.setRetryCount(0);
+        aiRequest.setRawResponse(null);
+        aiRequest.setCompletedAt(null);
+        aiRequestRepository.save(aiRequest);
+
+        aiTaskExecutor.execute(() -> process(id));
+
+        // 테스트처럼 동기 실행 환경이면 이미 끝나 있을 수 있어 최신 상태를 다시 읽는다.
+        return toResponse(aiRequestRepository.findById(id).orElse(aiRequest));
+    }
+
     private AiRequestResponse toResponse(AiRequest aiRequest) {
         AiExtractionResult result = parseResult(aiRequest);
         if (result == null) {

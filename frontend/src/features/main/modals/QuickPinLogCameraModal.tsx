@@ -6,12 +6,13 @@
  * 들고 있다가 장소를 고르면 넘긴다. 업로드는 기록을 저장할 때 한 번에 한다.
  */
 import React, { useEffect, useState } from 'react';
-import { Image, Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PixelBackArrow, PixelPinLogIcon } from '../../../components/pixel/PixelIcons';
 import { PixelPressable, PixelSelect } from '../../../components/pixel/Primitives';
-import { PlaceItem, PlaceRecord, TripFolder, toImageSource } from '../../../data/mockData';
+import { PlaceItem, PlaceRecord, TripFolder } from '../../../data/mockData';
+import Video from 'react-native-video';
 import RecordClipModal, { type RecordedClip } from './RecordClipModal';
 
 export type QuickClip = NonNullable<PlaceRecord['videoClip']>;
@@ -44,11 +45,10 @@ export default function QuickPinLogCameraModal({
   }, [placeId, places]);
 
   const recorded = clip !== null;
-  const isRecording = false;
-  const progress = recorded ? 100 : 0;
+  /** 찍어 온 클립을 미리보기에서 재생 중인지. */
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const selectedPlace = places.find((place) => place.id === placeId);
-  const viewfinder = selectedPlace?.thumbnail ? { uri: selectedPlace.thumbnail } : toImageSource(trip.image);
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose} statusBarTranslucent>
@@ -71,29 +71,66 @@ export default function QuickPinLogCameraModal({
           <PixelPinLogIcon size={34} active />
         </View>
 
-        {/* 뷰파인더 */}
+        {/*
+          촬영은 아래 버튼을 누르면 열리는 RecordClipModal 이 한다. 그래서 여기는
+          카메라 화면이 아니다. 전에는 장소 사진을 깔고 가이드 프레임과 십자선을
+          얹어 뷰파인더인 척했는데, 실제로 보이는 장면과 아무 상관이 없는 그림이라
+          걷어냈다. 찍기 전에는 안내만, 찍은 뒤에는 그 영상을 그대로 보여준다.
+        */}
         <View className="relative flex-1 overflow-hidden bg-black">
-          <Image source={viewfinder} resizeMode="cover" className="h-full w-full" />
-          {/* 웹의 brightness-75 / brightness-110 대신 어두운 레이어로 표현 */}
-          {!isRecording && <View pointerEvents="none" className="absolute inset-0 bg-black/25" />}
+          {recorded && clip ? (
+            <>
+              <Pressable
+                onPress={() => setIsPlaying((p) => !p)}
+                accessibilityLabel={isPlaying ? '영상 일시정지' : '영상 재생'}
+                className="h-full w-full"
+              >
+                {/* Video 는 네이티브 뷰라 터치를 먹는다. 감싼 Pressable 로 흘려보낸다. */}
+                <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                  <Video
+                    source={{ uri: clip.uri }}
+                    paused={!isPlaying}
+                    repeat
+                    muted={!isPlaying}
+                    resizeMode="contain"
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                </View>
+                {!isPlaying && (
+                  <View
+                    pointerEvents="none"
+                    style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}
+                  >
+                    <View className="h-16 w-16 items-center justify-center rounded-full border-2 border-white/80 bg-black/50">
+                      <Text className="text-xl text-white">▶</Text>
+                    </View>
+                  </View>
+                )}
+              </Pressable>
 
-          {/* 가이드 프레임 + 십자선 */}
-          <View pointerEvents="none" className="absolute inset-5 items-center justify-center border border-white/35">
-            <View className="absolute h-px w-12 bg-white/70" />
-            <View className="absolute h-12 w-px bg-white/70" />
-          </View>
+              <View className="absolute bottom-4 right-4 rounded-lg bg-black/75 px-2 py-1">
+                <Text className="font-pixel text-[9px] text-white">
+                  {(clip.durationMs / 1000).toFixed(1)}s
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View className="flex-1 items-center justify-center gap-3 px-10">
+              <PixelPinLogIcon size={52} active />
+              <Text className="text-center text-sm font-black text-white">
+                아래 버튼을 누르면 카메라가 열려요
+              </Text>
+              <Text className="text-center text-[11px] font-semibold text-white/60">
+                최대 2초로 짧게 찍으면 돼요.{'\n'}가로로 들고 찍으면 PinLog 에 그대로 쓰여요.
+              </Text>
+            </View>
+          )}
 
           <View className="absolute left-4 top-4 rounded-xl bg-black/60 px-3 py-2">
             <Text className="text-xs font-black text-white">
-              {recorded ? '촬영 완료 · 장소를 지정해 주세요' : '최대 2초로 짧게 찍어요'}
+              {recorded ? '촬영 완료 · 장소를 지정해 주세요' : '아직 찍은 영상이 없어요'}
             </Text>
           </View>
-
-          {(isRecording || recorded) && (
-            <View className="absolute bottom-0 left-0 right-0 h-2 bg-black/60">
-              <View className="h-full bg-rose-500" style={{ width: `${progress}%` }} />
-            </View>
-          )}
         </View>
 
         {/* 하단 컨트롤 */}
@@ -121,7 +158,9 @@ export default function QuickPinLogCameraModal({
                 onUpload(selectedPlace, {
                   id: Date.now(),
                   duration: clip.durationMs / 1000,
-                  thumbnail: selectedPlace.thumbnail,
+                  // 썸네일은 올린 뒤 서버가 실제 첫 프레임으로 만들어 준다.
+                  // 장소 사진을 넣어두면 영상과 상관없는 그림이 잠깐 보인다.
+                  thumbnail: '',
                   videoUrl: clip.uri,
                   createdAt: '방금 전',
                 })
@@ -137,9 +176,7 @@ export default function QuickPinLogCameraModal({
               <Pressable
                 onPress={() => setIsCameraOpen(true)}
                 accessibilityLabel="핀로그 영상 촬영 시작"
-                className={`h-20 w-20 items-center justify-center rounded-full border-4 border-white ${
-                  isRecording ? 'bg-slate-600' : 'bg-rose-500'
-                }`}
+                className="h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-rose-500"
               >
                 <View className="h-10 w-10 rounded-full border-2 border-white bg-rose-600" />
               </Pressable>

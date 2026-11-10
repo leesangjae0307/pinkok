@@ -156,7 +156,8 @@ export default function PlaceDetailModal({
           setVideoClip({
             id: Date.now(),
             duration: clip.durationMs / 1000,
-            thumbnail: place.thumbnail,
+            // 서버가 올린 뒤 실제 첫 프레임으로 썸네일을 만들어 준다.
+            thumbnail: '',
             videoUrl: clip.uri,
             createdAt: '방금 전',
           });

@@ -7,7 +7,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, PermissionsAndroid, Platform, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, useCameraDevice, type VideoFile } from 'react-native-vision-camera';
+import {
+  Camera,
+  useCameraDevice,
+  useCameraFormat,
+  type Orientation,
+  type VideoFile,
+} from 'react-native-vision-camera';
 
 /** 너무 짧으면 이어붙여도 보이지 않는다. */
 const MIN_MS = 2000;
@@ -33,6 +39,17 @@ export default function RecordClipModal({
   const insets = useSafeAreaInsets();
   const camera = useRef<Camera | null>(null);
   const device = useCameraDevice('back');
+  /**
+   * PinLog 는 1280×720 가로 영상으로 합성되므로, 센서도 같은 비율로 담는다.
+   * 미리보기만 16:9 로 보이게 하는 게 아니라 저장되는 파일 자체가 16:9 가 된다.
+   */
+  const format = useCameraFormat(device, [
+    { videoAspectRatio: 16 / 9 },
+    { videoResolution: { width: 1280, height: 720 } },
+  ]);
+  /** 휴대폰을 어느 방향으로 들고 있는지. 가로 촬영을 안내하는 데 쓴다. */
+  const [deviceOrientation, setDeviceOrientation] = useState<Orientation>('portrait');
+  const isLandscape = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right';
 
   const [isRecording, setIsRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -166,9 +183,19 @@ export default function RecordClipModal({
               <Camera
                 ref={camera}
                 device={device}
+                format={format}
                 isActive
                 video
                 audio
+                /*
+                 * 'device' 는 화면이 세로로 고정돼 있어도 휴대폰을 돌린 방향 그대로
+                 * 저장한다. 그래서 가로로 들고 찍으면 진짜 가로 영상이 나온다.
+                 * 'preview' 로 두면 화면을 따라가 세로로만 저장된다.
+                 */
+                outputOrientation="device"
+                onOutputOrientationChanged={setDeviceOrientation}
+                // 담기는 16:9 화면을 잘라내지 않고 그대로 보여준다(위아래는 빈 칸).
+                resizeMode="contain"
                 style={{ flex: 1 }}
               />
               {/* 진행 막대 — 5초가 가득 */}
@@ -184,6 +211,13 @@ export default function RecordClipModal({
 
         <View className="items-center gap-3 px-6 pb-8 pt-4" style={{ paddingBottom: insets.bottom + 24 }}>
           {notice ? <Text className="text-center text-[11px] font-bold text-[#FFC837]">{notice}</Text> : null}
+          {/*
+            PinLog 는 가로형이라 세로로 찍으면 양옆이 비어 보인다. 화면은 세로로
+            고정돼 있으니(버튼이 움직이지 않게) 들고 있는 방향만 보고 안내한다.
+          */}
+          <Text className="text-center text-[11px] font-bold text-[#56EADD]">
+            {isLandscape ? '↔ 가로로 촬영 중이에요' : '📱 휴대폰을 옆으로 돌려 가로로 찍어주세요'}
+          </Text>
           <Text className="font-pixel text-[10px] text-white/70">
             {isRecording ? `${(elapsed / 1000).toFixed(1)}초 / 5초` : '2~5초로 짧게 찍어주세요'}
           </Text>

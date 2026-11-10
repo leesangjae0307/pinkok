@@ -90,6 +90,16 @@ export async function deletePinlog(pinlogId: number): Promise<void> {
 }
 
 /**
+ * 실패한 합성을 다시 돌린다. 만든 사람만(mine) 할 수 있다.
+ * 202 로 바로 끝나고, 그다음은 처음처럼 폴링하면 된다.
+ * 실패 상태가 아닐 때 부르면 409 가 온다.
+ */
+export async function retryPinlog(pinlogId: number): Promise<Pinlog> {
+  const { data } = await api.post<Pinlog>(`/pinlogs/${pinlogId}/retry`);
+  return data;
+}
+
+/**
  * DONE 이나 FAILED 가 될 때까지 다시 조회한다.
  *
  * 서버가 완성을 알려주지 않으므로 앱이 주기적으로 물어보는 수밖에 없다. 2초 간격에

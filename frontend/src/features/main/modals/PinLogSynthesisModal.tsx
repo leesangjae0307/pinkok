@@ -12,6 +12,7 @@ import { errorMessage as apiErrorMessage } from '../../../api/axios';
 import {
   createPinlog,
   deletePinlog,
+  retryPinlog,
   fetchPinlog,
   pinlogVideoUrl,
   type Pinlog,
@@ -33,6 +34,9 @@ interface PinLogSynthesisModalProps {
 }
 
 type PinLogStatus = 'IDLE' | 'QUEUED' | 'PROCESSING' | 'DONE' | 'FAILED';
+
+/** 2.4초 간격이라 150번이면 약 6분. 서버가 아예 죽어 응답이 없을 때 쓰는 한계다. */
+const MAX_POLLS = 150;
 
 interface ClipOption {
   diaryMediaId: number;
@@ -108,6 +112,8 @@ export default function PinLogSynthesisModal({
   });
   const [status, setStatus] = useState<PinLogStatus>('IDLE');
   const [pollCount, setPollCount] = useState(0);
+  /** 실패했을 때 '다시 시도' 를 보여줄지. 만든 사람만 가능하다. */
+  const [canRetry, setCanRetry] = useState(false);
   const [pinLogId, setPinLogId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [result, setResult] = useState<SynthesizedVlog | null>(null);
@@ -175,6 +181,14 @@ export default function PinLogSynthesisModal({
    */
   useEffect(() => {
     if ((status !== 'QUEUED' && status !== 'PROCESSING') || pinLogId === null) return;
+
+    // 서버가 꺼져 응답이 아예 없을 때를 대비한 안전장치. 2.4초 × 150 ≈ 6분.
+    if (pollCount >= MAX_POLLS) {
+      setErrorMessage('시간이 너무 오래 걸려 멈췄어요. 다시 시도해 주세요.');
+      setStatus('FAILED');
+      return;
+    }
+
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
@@ -186,6 +200,8 @@ export default function PinLogSynthesisModal({
         }
         if (latest.status === 'FAILED') {
           setErrorMessage(latest.errorMessage ?? 'PinLog 합성에 실패했습니다.');
+          // 다시 시도는 만든 사람만 할 수 있다.
+          setCanRetry(latest.mine);
           setStatus('FAILED');
           return;
         }
@@ -204,9 +220,25 @@ export default function PinLogSynthesisModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, pollCount, pinLogId]);
 
+  /** 실패한 합성을 서버가 다시 돌리게 한다. 끝나는 건 똑같이 폴링으로 확인한다. */
+  const handleRetryPinLog = async () => {
+    if (pinLogId === null) return;
+    setErrorMessage('');
+    setPollCount(0);
+    setStatus('QUEUED');
+    try {
+      await retryPinlog(pinLogId);
+    } catch (e) {
+      // 실패 상태가 아니면 409 가 온다. 그때는 지금 상태를 다시 읽어 맞춘다.
+      setErrorMessage(apiErrorMessage(e, '다시 시도하지 못했어요.'));
+      setStatus('FAILED');
+    }
+  };
+
   const handleCreatePinLog = async () => {
     if (selectedOptions.length === 0) {
       setErrorMessage('선택된 클립이 없어 PinLog를 생성할 수 없습니다.');
+      setCanRetry(false);
       setStatus('FAILED');
       return;
     }
@@ -410,11 +442,20 @@ export default function PinLogSynthesisModal({
                     {errorMessage || '영상 렌더링 서버에서 오류가 발생했습니다.'}
                   </Text>
                 </View>
+                {/* 같은 클립으로 서버만 다시 돌리면 되는 경우다. 만든 사람만 할 수 있다. */}
+                {canRetry && pinLogId !== null && (
+                  <Pressable
+                    onPress={handleRetryPinLog}
+                    className="mt-4 h-11 w-full items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD]"
+                  >
+                    <Text className="text-xs font-black text-slate-900">다시 시도</Text>
+                  </Pressable>
+                )}
                 <Pressable
                   onPress={() => setStatus('IDLE')}
-                  className="mt-4 h-11 w-full items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD]"
+                  className="mt-2 h-11 w-full items-center justify-center rounded-xl border-2 border-slate-300 bg-white"
                 >
-                  <Text className="text-xs font-black text-slate-900">클립 다시 선택하기</Text>
+                  <Text className="text-xs font-black text-slate-600">클립 다시 선택하기</Text>
                 </Pressable>
               </View>
             ) : (

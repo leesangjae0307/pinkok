@@ -54,8 +54,11 @@ import { fetchPinlogs, pinlogThumbnailUrl, pinlogVideoUrl } from '../../api/pinl
 import {
   addCandidatesToTrip,
   createAiRequest,
-  fetchPlaceCandidates,
+  fetchAiRequest,
+  loadPlaceCandidates,
+  retryAiRequest,
   waitForAiRequest,
+  type AiRequest,
   type PlaceCandidate,
 } from '../../api/aiRequestApi';
 import {
@@ -211,6 +214,18 @@ export function profileAvatarSource(avatar: ProfileAvatar): AvatarSource {
  * 올라가는 건 여행에 추가한 뒤 GET /itinerary-items 로 다시 받은 핀이고, 그때
  * 좌표가 제대로 투영된다.
  */
+/** 서버가 준 errorCode 를 사람이 읽을 문장으로 바꾼다. 모르는 코드는 그대로 덧붙인다. */
+export function aiErrorMessage(code: string | null): string {
+  switch (code) {
+    case 'GEMINI_TIMEOUT':
+      return 'AI 응답이 너무 오래 걸려 멈췄어요. 다시 시도해 주세요.';
+    case 'SERVER_RESTARTED':
+      return '처리 중에 서버가 다시 시작됐어요. 다시 시도해 주세요.';
+    default:
+      return code ? `추출에 실패했어요. (${code})` : '추출에 실패했어요. 다시 시도해 주세요.';
+  }
+}
+
 export function toExtractedPlace(candidate: PlaceCandidate): ExtractedPlace {
   return {
     id: candidate.id,
@@ -279,6 +294,10 @@ function useAppState(me: Me, onLogout: () => void) {
   const [inputUrl, setInputUrl] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedPlaces, setExtractedPlaces] = useState<ExtractedPlace[]>([]);
+  /** 추출이 실패했을 때 보여줄 문구. 성공하면 null 로 돌아간다. */
+  const [extractError, setExtractError] = useState<string | null>(null);
+  /** 마지막으로 보낸 추출 요청. 실패했을 때 이것만 있으면 다시 돌릴 수 있다. */
+  const [lastAiRequestId, setLastAiRequestId] = useState<number | null>(null);
   /** 맞춤 추천 결과. 아직 수락·거절하지 않은 것만 담는다. */
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [selectedExtractedPlaceIds, setSelectedExtractedPlaceIds] = useState<number[]>(
@@ -1072,10 +1091,41 @@ function useAppState(me: Me, onLogout: () => void) {
    * SUCCESS 가 되면 후보 목록을 읽는다. 좌표를 못 찾은 후보(mapped=false)는 핀으로
    * 추가할 수 없어서 기본 선택에서 빼둔다.
    */
+  /** 실패한 추출 요청을 끝까지 따라가 결과를 화면에 올린다. 성공하면 true. */
+  const consumeAiRequest = async (request: AiRequest): Promise<boolean> => {
+    setLastAiRequestId(request.id);
+    const finished = await waitForAiRequest(request.id);
+
+    if (finished.status !== 'SUCCESS') {
+      setExtractError(
+        finished.status === 'FAILED'
+          ? aiErrorMessage(finished.errorCode)
+          : '시간이 너무 오래 걸려 멈췄어요. 다시 시도해 주세요.',
+      );
+      return false;
+    }
+
+    // candidatesReady 가 false 면 후보 저장이 실패한 것이라 다시 만들어야 한다.
+    const candidates = await loadPlaceCandidates(finished);
+    setExtractedPlaces(candidates.map(toExtractedPlace));
+    setSelectedExtractedPlaceIds(candidates.filter((c) => c.mapped).map((c) => c.id));
+    setIsTripPickerOpen(false);
+
+    if (candidates.length === 0) {
+      // 서버가 끝까지 돌았는데 0곳이면 AI 가 장소를 못 찾은 것이다. 실패가 아니다.
+      showToast('링크에서 장소를 찾지 못했어요.');
+    } else {
+      showToast(`AI가 장소 ${candidates.length}곳을 추출했습니다!`);
+    }
+    return true;
+  };
+
   const handleExtractSubmit = async () => {
     if (isExtracting) return;
     if (!inputUrl.trim() && extractImages.length === 0) return;
     setIsExtracting(true);
+    setExtractError(null);
+    setExtractedPlaces([]);
     try {
       const request =
         extractImages.length > 0
@@ -1085,24 +1135,31 @@ function useAppState(me: Me, onLogout: () => void) {
             })
           : await createAiRequest({ inputType: 'LINK', sourceUrl: inputUrl.trim() });
 
-      const finished = await waitForAiRequest(request.id);
-      if (finished.status !== 'SUCCESS') {
-        showToast(
-          finished.status === 'FAILED'
-            ? `추출에 실패했어요. (${finished.errorCode ?? '알 수 없는 오류'})`
-            : '추출이 아직 끝나지 않았어요. 잠시 후 다시 확인해 주세요.',
-        );
+      await consumeAiRequest(request);
+    } catch (e) {
+      setExtractError(errorMessage(e, '추출 요청을 보내지 못했어요.'));
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  /**
+   * 실패한 추출을 다시 돌린다. 링크·스크린샷을 다시 넣을 필요가 없다.
+   * 후보 저장만 실패한 경우는 추출을 처음부터 돌리지 않고 후보만 다시 만든다.
+   */
+  const handleRetryExtract = async () => {
+    if (isExtracting || lastAiRequestId === null) return;
+    setIsExtracting(true);
+    setExtractError(null);
+    try {
+      const current = await fetchAiRequest(lastAiRequestId);
+      if (current.status === 'SUCCESS') {
+        await consumeAiRequest(current);
         return;
       }
-
-      const candidates = await fetchPlaceCandidates(finished.id);
-      const places = candidates.map(toExtractedPlace);
-      setExtractedPlaces(places);
-      setSelectedExtractedPlaceIds(candidates.filter((c) => c.mapped).map((c) => c.id));
-      setIsTripPickerOpen(false);
-      showToast(`AI가 장소 ${places.length}곳을 추출했습니다!`);
+      await consumeAiRequest(await retryAiRequest(lastAiRequestId));
     } catch (e) {
-      showToast(errorMessage(e, '추출 요청을 보내지 못했어요.'));
+      setExtractError(errorMessage(e, '다시 시도하지 못했어요.'));
     } finally {
       setIsExtracting(false);
     }
@@ -1299,6 +1356,7 @@ function useAppState(me: Me, onLogout: () => void) {
       return;
     }
     setIsExtracting(true);
+    setExtractError(null);
     setActiveTab('extract');
     setInputUrl(
       `${recommendationPeople}명 · ${recommendationRegion} · ${travelStyleLabel(recommendationStyle)} 여행 추천`,
@@ -1310,7 +1368,12 @@ function useAppState(me: Me, onLogout: () => void) {
       });
       const finished = await waitForAiRequest(request.id);
       if (finished.status !== 'SUCCESS') {
-        showToast(`추천을 받지 못했어요. (${finished.errorCode ?? '잠시 후 다시 시도해 주세요'})`);
+        // 추천에는 다시 시도 API 가 없다. 실패하면 처음부터 새로 요청해야 한다.
+        setExtractError(
+          finished.status === 'FAILED'
+            ? `${aiErrorMessage(finished.errorCode)} (추천은 다시 요청해 주세요)`
+            : '추천이 너무 오래 걸려 멈췄어요. 다시 요청해 주세요.',
+        );
         return;
       }
       const list = await fetchRecommendations(trip.id);
@@ -1401,6 +1464,9 @@ function useAppState(me: Me, onLogout: () => void) {
     cacheSize,
     inputUrl, setInputUrl,
     isExtracting,
+    extractError,
+    handleRetryExtract,
+    lastAiRequestId,
     extractedPlaces,
     selectedExtractedPlaceIds,
     isTripPickerOpen, setIsTripPickerOpen,

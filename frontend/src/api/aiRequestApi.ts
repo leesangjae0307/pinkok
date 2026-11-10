@@ -23,6 +23,14 @@ export interface AiRequest {
   /** SUCCESS 일 때만 온다. */
   title: string | null;
   places: ExtractedPlaceRaw[] | null;
+  /**
+   * 후보 저장까지 끝났는지. 장소 추출이 SUCCESS 일 때만 오고 그 외에는 null 이다.
+   *
+   * - true  : 바로 GET /place-candidates 로 받아오면 된다(0곳이면 AI 가 못 찾은 것).
+   * - false : 장소는 찾았는데 후보 저장이 실패했다(카카오맵 장애 등).
+   *           POST /place-candidates 로 다시 만들어야 한다.
+   */
+  candidatesReady: boolean | null;
 }
 
 export interface AiRequestCreatePayload {
@@ -101,16 +109,22 @@ export function candidateImageUrl(candidate: PlaceCandidate): string | null {
   return fileUrl(candidate.sourceImageUrl);
 }
 
+/** 실패한 요청을 서버가 처음부터 다시 돌린다. 스크린샷을 다시 올릴 필요는 없다. */
+export async function retryAiRequest(id: number): Promise<AiRequest> {
+  const { data } = await api.post<AiRequest>(`/ai-requests/${id}/retry`);
+  return data;
+}
+
 /**
  * SUCCESS 나 FAILED 가 될 때까지 다시 조회한다.
  *
- * Gemini 호출이라 몇 초에서 수십 초까지 걸린다. 2초 간격에 최대 2분까지만 기다리고,
- * 그 안에 안 끝나면 마지막 상태를 그대로 돌려준다 — 화면이 영원히 매달려 있으면
- * 멈춘 것처럼 보이기 때문이다.
+ * 서버가 늦어도 5분 안에 FAILED(GEMINI_TIMEOUT) 로 끝내준다. 그런데 서버가 아예
+ * 꺼져 응답이 없으면 그 보장도 소용이 없으므로, 앱에서도 6분을 넘기면 포기한다.
+ * 끝나지 않은 채 돌려준 상태는 부른 쪽에서 실패로 처리한다.
  */
 export async function waitForAiRequest(id: number): Promise<AiRequest> {
   const INTERVAL_MS = 2000;
-  const MAX_ATTEMPTS = 60;
+  const MAX_ATTEMPTS = 180;
   let latest = await fetchAiRequest(id);
   for (let i = 0; i < MAX_ATTEMPTS; i += 1) {
     if (latest.status === 'SUCCESS' || latest.status === 'FAILED') return latest;
@@ -118,4 +132,16 @@ export async function waitForAiRequest(id: number): Promise<AiRequest> {
     latest = await fetchAiRequest(id);
   }
   return latest;
+}
+
+/**
+ * 추출이 끝난 요청에서 후보 목록을 가져온다.
+ *
+ * 보통은 서버가 미리 만들어 둬서 그대로 받으면 되는데(candidatesReady=true),
+ * 후보 저장이 실패했으면(false) 여기서 다시 만든다. SUCCESS 이전에 만들기를
+ * 부르면 서버가 400 으로 거절하므로 이 함수는 끝난 요청에만 쓴다.
+ */
+export async function loadPlaceCandidates(request: AiRequest): Promise<PlaceCandidate[]> {
+  if (request.candidatesReady === false) return createPlaceCandidates(request.id);
+  return fetchPlaceCandidates(request.id);
 }

@@ -13,6 +13,9 @@ export default function ExtractTab() {
     inputUrl,
     setInputUrl,
     isExtracting,
+    extractError,
+    handleRetryExtract,
+    lastAiRequestId,
     extractedPlaces,
     selectedExtractedPlaceIds,
     isTripPickerOpen,
@@ -143,6 +146,35 @@ export default function ExtractTab() {
                 링크 속 위도/경도 및 감성 키워드를 분석하여{'\n'}8비트 핀으로 변환하고 있어요.
               </Text>
             </View>
+          </View>
+        </FadeIn>
+      ) : extractError ? (
+        /* 서버가 늦어도 5분 안에 끝내주고, 앱도 6분이면 포기한다. 어느 쪽이든 여기로 온다. */
+        <FadeIn>
+          <View className="my-4 items-center gap-3 rounded-3xl border-2 border-rose-200 bg-white p-8 shadow-md">
+            <Text className="text-3xl">😵</Text>
+            <Text className="text-sm font-extrabold text-slate-800">추출하지 못했어요</Text>
+            <Text className="text-center text-[11px] font-semibold text-slate-500">{extractError}</Text>
+            <PixelPressable
+              shadowColor="#075953"
+              offset={3}
+              radius={14}
+              onPress={handleRetryExtract}
+              className="mt-1 h-11 items-center justify-center rounded-2xl border-2 border-pixel-navy bg-mint-primary px-6"
+            >
+              <Text className="text-xs font-black text-pixel-navy">다시 시도</Text>
+            </PixelPressable>
+          </View>
+        </FadeIn>
+      ) : extractedPlaces.length === 0 && lastAiRequestId !== null ? (
+        /* 서버가 끝까지 돌았는데 0곳이면 AI 가 장소를 못 찾은 것이다. 실패와 구분해서 보여준다. */
+        <FadeIn>
+          <View className="my-4 items-center gap-2 rounded-3xl border-2 border-dashed border-[#82F0DC] bg-white/70 p-8">
+            <Text className="text-3xl">🔍</Text>
+            <Text className="text-sm font-extrabold text-slate-800">찾은 장소가 없어요</Text>
+            <Text className="text-center text-[11px] font-semibold text-slate-500">
+              장소 이름이 드러나는 링크나 스크린샷이면 더 잘 찾아요.
+            </Text>
           </View>
         </FadeIn>
       ) : (

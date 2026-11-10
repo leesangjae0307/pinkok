@@ -1,5 +1,5 @@
 /**
- * 장소별 팀 다이어리 모달 (1인 1기록 규칙 · 앱 내 2~3초 촬영 · 팀원 피드)
+ * 장소별 팀 다이어리 모달 (1인 1기록 규칙 · 앱 내 최대 2초 촬영 · 팀원 피드)
  */
 import React, { useEffect, useState } from 'react';
 import {
@@ -241,7 +241,7 @@ export default function PlaceDetailModal({
                     <Text className="text-[10px] font-bold text-teal-800">·</Text>
                     <Text className="text-[10px] font-bold text-teal-800">🖼️ 사진 복수</Text>
                     <Text className="text-[10px] font-bold text-teal-800">·</Text>
-                    <Text className="text-[10px] font-bold text-teal-800">🎥 2~3s 영상 최대 1개</Text>
+                    <Text className="text-[10px] font-bold text-teal-800">🎥 최대 2s 영상 1개</Text>
                   </View>
                 </View>
               </View>
@@ -359,7 +359,7 @@ export default function PlaceDetailModal({
                   <View>
                     <View className="mb-1.5 flex-row items-center justify-between">
                       <View className="flex-row items-center gap-1">
-                        <Text className="text-xs font-black text-slate-700">PinLog용 2~3초 영상</Text>
+                        <Text className="text-xs font-black text-slate-700">PinLog용 2초 영상</Text>
                         <View className="rounded bg-rose-100 px-1">
                           <Text className="font-pixel text-[8px] text-rose-700">최대 1개</Text>
                         </View>
@@ -554,7 +554,7 @@ export default function PlaceDetailModal({
                                 <View className="rounded bg-rose-500 px-1">
                                   <Text className="font-pixel text-[8px] text-white">{record.videoClip.duration}s</Text>
                                 </View>
-                                <Text className="text-xs font-bold text-white">2~3초 동영상</Text>
+                                <Text className="text-xs font-bold text-white">최대 2초 동영상</Text>
                               </View>
                               <Text className="text-[10px] text-slate-400">PinLog 브이로그 후보</Text>
                             </View>

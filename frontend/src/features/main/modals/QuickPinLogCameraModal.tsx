@@ -85,7 +85,7 @@ export default function QuickPinLogCameraModal({
 
           <View className="absolute left-4 top-4 rounded-xl bg-black/60 px-3 py-2">
             <Text className="text-xs font-black text-white">
-              {recorded ? '촬영 완료 · 장소를 지정해 주세요' : '2~5초로 짧게 찍어요'}
+              {recorded ? '촬영 완료 · 장소를 지정해 주세요' : '최대 2초로 짧게 찍어요'}
             </Text>
           </View>
 

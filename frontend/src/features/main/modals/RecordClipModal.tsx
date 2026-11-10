@@ -2,7 +2,7 @@
  * 장소 기록용 짧은 영상 촬영.
  *
  * PinLog 는 장소별 클립을 동선 순서대로 이어붙이는 것이라 클립이 길면 안 된다.
- * 5초가 되면 자동으로 멈추고, 2초가 안 되면 쓰지 않고 다시 찍게 한다.
+ * 2초가 되면 자동으로 멈추고, 1초가 안 되면 쓰지 않고 다시 찍게 한다.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, PermissionsAndroid, Platform, Pressable, Text, View } from 'react-native';
@@ -15,10 +15,14 @@ import {
   type VideoFile,
 } from 'react-native-vision-camera';
 
-/** 너무 짧으면 이어붙여도 보이지 않는다. */
-const MIN_MS = 2000;
+/**
+ * 너무 짧으면 이어붙여도 보이지 않는다.
+ * 최대가 2초라 최소는 그보다 낮아야 한다(같으면 자동 정지 시점의 오차 때문에
+ * 멀쩡히 찍은 클립도 "짧다"며 버려진다).
+ */
+const MIN_MS = 1000;
 /** 이 길이가 되면 알아서 멈춘다. */
-const MAX_MS = 5000;
+const MAX_MS = 2000;
 
 export interface RecordedClip {
   /** file:// 로 시작하는 로컬 경로. 업로드는 저장할 때 한다. */
@@ -43,10 +47,17 @@ export default function RecordClipModal({
    * PinLog 는 1280×720 가로 영상으로 합성되므로, 센서도 같은 비율로 담는다.
    * 미리보기만 16:9 로 보이게 하는 게 아니라 저장되는 파일 자체가 16:9 가 된다.
    */
-  const format = useCameraFormat(device, [
+  const preferredFormat = useCameraFormat(device, [
     { videoAspectRatio: 16 / 9 },
     { videoResolution: { width: 1280, height: 720 } },
   ]);
+  /**
+   * 기기에 따라 16:9 포맷과 미리보기를 한 세션에 같이 올리지 못하는 경우가 있다
+   * (session/invalid-output-configuration). 그때는 기본 포맷으로 물러나
+   * 적어도 촬영은 되게 한다.
+   */
+  const [useWideFormat, setUseWideFormat] = useState(true);
+  const format = useWideFormat ? preferredFormat : undefined;
   /** 휴대폰을 어느 방향으로 들고 있는지. 가로 촬영을 안내하는 데 쓴다. */
   const [deviceOrientation, setDeviceOrientation] = useState<Orientation>('portrait');
   const isLandscape = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right';
@@ -108,7 +119,7 @@ export default function RecordClipModal({
     }
   }, [isRecording]);
 
-  /** 5초가 되면 알아서 멈춘다. */
+  /** 2초가 되면 알아서 멈춘다. */
   useEffect(() => {
     if (!isRecording) return;
     const timer = setInterval(() => {
@@ -131,7 +142,7 @@ export default function RecordClipModal({
         setIsBusy(false);
         const durationMs = Math.round((video.duration ?? 0) * 1000) || Date.now() - startedAt.current;
         if (durationMs < MIN_MS) {
-          setNotice('2초보다 짧아요. 조금만 더 길게 찍어주세요.');
+          setNotice('1초보다 짧아요. 조금만 더 길게 찍어주세요.');
           setElapsed(0);
           return;
         }
@@ -194,11 +205,23 @@ export default function RecordClipModal({
                  */
                 outputOrientation="device"
                 onOutputOrientationChanged={setDeviceOrientation}
-                // 담기는 16:9 화면을 잘라내지 않고 그대로 보여준다(위아래는 빈 칸).
-                resizeMode="contain"
+                onError={(e) => {
+                  // 16:9 를 못 올리는 기기면 기본 포맷으로 한 번 더 시도한다.
+                  if (useWideFormat && e.code === 'session/invalid-output-configuration') {
+                    setUseWideFormat(false);
+                    return;
+                  }
+                  setNotice('카메라를 열지 못했어요. 창을 닫았다가 다시 열어 주세요.');
+                }}
+                /*
+                 * 미리보기는 기본값(cover)으로 화면을 채운다. contain 으로 바꾸면
+                 * 담기는 16:9 가 그대로 보이는 대신 미리보기가 네모로 떠서
+                 * 화면 가운데에 상자가 생긴 것처럼 보인다. 저장되는 파일은
+                 * format 이 정하므로 미리보기 방식과 상관없이 16:9 다.
+                 */
                 style={{ flex: 1 }}
               />
-              {/* 진행 막대 — 5초가 가득 */}
+              {/* 진행 막대 — 2초가 가득 */}
               <View className="absolute left-0 right-0 top-0 h-1 bg-white/20">
                 <View
                   className="h-full bg-[#FF5A87]"
@@ -219,7 +242,7 @@ export default function RecordClipModal({
             {isLandscape ? '↔ 가로로 촬영 중이에요' : '📱 휴대폰을 옆으로 돌려 가로로 찍어주세요'}
           </Text>
           <Text className="font-pixel text-[10px] text-white/70">
-            {isRecording ? `${(elapsed / 1000).toFixed(1)}초 / 5초` : '2~5초로 짧게 찍어주세요'}
+            {isRecording ? `${(elapsed / 1000).toFixed(1)}초 / 2초` : '최대 2초로 짧게 찍어주세요'}
           </Text>
           <Pressable
             onPress={isRecording ? stop : start}

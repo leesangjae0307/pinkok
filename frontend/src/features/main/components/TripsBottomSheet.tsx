@@ -20,7 +20,9 @@ const SELECTED_SHADOW = {
   shadowOpacity: 0.12,
   shadowRadius: 4,
   shadowOffset: { width: 0, height: 2 },
-  elevation: 3,
+  // elevation 은 쓰지 않는다. 안드로이드는 elevation 이 붙은 뷰를 따로 합성하는데,
+  // 배경이 반투명하면 둥근 모서리를 무시한 네모가 카드 위에 덧그려진다.
+  // 선택 상태는 테두리·배경·"선택됨" 배지로 이미 충분히 보인다.
 } as const;
 
 interface TripsBottomSheetProps {
@@ -57,6 +59,8 @@ interface TripsBottomSheetProps {
   onMovePlace: (placeId: number, direction: -1 | 1) => void;
   /** 여행할 시각을 고르는 창을 연다. */
   onEditTime: (place: PlaceItem) => void;
+  /** 지도에서 장소를 아주 지운다. 확인은 부모가 받는다. */
+  onDeletePlace: (place: PlaceItem) => void;
 }
 
 function DashedVLine() {
@@ -94,6 +98,7 @@ export default function TripsBottomSheet({
   onAssignDay,
   onMovePlace,
   onEditTime,
+  onDeletePlace,
 }: TripsBottomSheetProps) {
   // PanResponder 콜백 안에서 최신 값을 읽기 위한 ref
   const heightRef = useRef(sheetHeightPercent);
@@ -262,7 +267,7 @@ export default function TripsBottomSheet({
                   onPress={() => onSelectPlace(place)}
                   style={isSelected ? SELECTED_SHADOW : undefined}
                   className={`flex-row items-center justify-between gap-3 rounded-2xl border-2 p-3 ${
-                    isSelected ? 'border-pixel-navy bg-[#B4FAF0]/70' : 'border-slate-200 bg-white'
+                    isSelected ? 'border-pixel-navy bg-[#B4FAF0]' : 'border-slate-200 bg-white'
                   }`}
                 >
                   <View className="min-w-0 flex-1 flex-row items-center gap-3">
@@ -358,17 +363,28 @@ export default function TripsBottomSheet({
 
                   {/* 팀 기록 · 바로 촬영 */}
                   <View className="items-end gap-1">
-                    <Pressable
-                      onPress={() => onOpenTeamRecord(place)}
-                      className="flex-row items-center gap-1 rounded-xl border border-teal-600 bg-white px-2.5 py-1.5 active:translate-y-0.5 active:bg-teal-50"
-                    >
-                      <Text className="text-[10px] font-black text-teal-900">👥 기록</Text>
-                      {recordsCount > 0 && (
-                        <View className="rounded-full bg-teal-700 px-1">
-                          <Text className="font-pixel text-[8px] text-white">{recordsCount}</Text>
-                        </View>
-                      )}
-                    </Pressable>
+                    <View className="flex-row items-center gap-1">
+                      {/* 장소 삭제. 되돌릴 수 없어서 누르면 확인을 한 번 받는다. */}
+                      <Pressable
+                        onPress={() => onDeletePlace(place)}
+                        accessibilityLabel={`${place.name} 삭제`}
+                        hitSlop={6}
+                        className="h-7 w-7 items-center justify-center rounded-xl border border-rose-300 bg-white active:bg-rose-50"
+                      >
+                        <Text className="text-[11px] font-black text-rose-500">✕</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => onOpenTeamRecord(place)}
+                        className="flex-row items-center gap-1 rounded-xl border border-teal-600 bg-white px-2.5 py-1.5 active:translate-y-0.5 active:bg-teal-50"
+                      >
+                        <Text className="text-[10px] font-black text-teal-900">👥 기록</Text>
+                        {recordsCount > 0 && (
+                          <View className="rounded-full bg-teal-700 px-1">
+                            <Text className="font-pixel text-[8px] text-white">{recordsCount}</Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    </View>
                     <PixelPressable
                       shadowColor="#075953"
                       offset={2}

@@ -170,21 +170,19 @@ export function AvatarPickerModal() {
   );
 }
 
-const REGIONS = ['제주', '부산', '서울', '강릉', '도쿄', '오사카', '교토', '후쿠오카', '타이베이', '다낭', '파리', '뉴욕'];
-
 export function ProfileDetailModal() {
   const insets = useSafeAreaInsets();
-  const { profileDetailModal, setProfileDetailModal, mapPlaces, placeRecords, me } = useApp();
+  const { profileDetailModal, setProfileDetailModal, profileStats, isProfileStatsLoading } = useApp();
   if (!profileDetailModal) return null;
 
   const title =
     profileDetailModal === 'visited' ? '방문한 장소' : profileDetailModal === 'saved' ? '저장한 장소' : '다녀온 지역';
   /**
-   * 방문·저장 장소를 따로 주는 API 가 없어서 지금 열어 둔 여행의 자료로 보여준다.
+   * 사용자 단위로 합쳐주는 API 가 없어서 프로필 탭이 모아둔 집계를 그대로 쓴다.
    * 방문한 곳은 내가 기록을 남긴 핀이고, 저장한 곳은 일정에 담아 둔 핀이다.
    */
-  const visitedPinIds = new Set(placeRecords.filter((r) => r.userId === me.id).map((r) => r.pinId));
-  const list = profileDetailModal === 'visited' ? mapPlaces.filter((p) => visitedPinIds.has(p.id)) : mapPlaces;
+  const list = profileDetailModal === 'visited' ? profileStats.visitedPlaces : profileStats.savedPlaces;
+  const isEmpty = profileDetailModal === 'regions' ? profileStats.regions.length === 0 : list.length === 0;
 
   return (
     <ModalBackdrop onRequestClose={() => setProfileDetailModal(null)}>
@@ -196,36 +194,44 @@ export function ProfileDetailModal() {
           closeLabel="상세 내역 닫기"
         />
         <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
-          {profileDetailModal === 'regions' ? (
+          {isEmpty ? (
+            <Text className="py-8 text-center text-[11px] font-bold text-slate-400">
+              {isProfileStatsLoading ? '불러오는 중…' : '아직 기록이 없어요.'}
+            </Text>
+          ) : profileDetailModal === 'regions' ? (
             <View className="flex-row flex-wrap justify-between gap-y-2">
-              {REGIONS.map((region, index) => (
+              {profileStats.regions.map((region) => (
                 <View
                   key={region}
                   className="items-center rounded-2xl border-2 border-[#82F0DC] bg-white p-3 shadow-sm"
                   style={{ width: '31.5%' }}
                 >
-                  <Text className="text-xl">{index < 4 ? '🇰🇷' : index < 8 ? '🇯🇵' : '📍'}</Text>
-                  <Text className="mt-2 text-xs font-black text-slate-700">{region}</Text>
+                  <Text className="text-xl">📍</Text>
+                  <Text numberOfLines={1} className="mt-2 text-xs font-black text-slate-700">
+                    {region}
+                  </Text>
                 </View>
               ))}
             </View>
           ) : (
             <View className="gap-2">
               {list.map((place) => (
-                <View key={place.id} className="flex-row items-center gap-3 rounded-2xl border border-[#82F0DC] bg-white p-3 shadow-sm">
-                  <Image source={{ uri: place.thumbnail }} resizeMode="cover" className="h-14 w-14 rounded-xl" />
-                  <View className="min-w-0 flex-1">
-                    <Text numberOfLines={1} className="text-xs font-black text-slate-800">
-                      {place.name}
-                    </Text>
-                    <Text numberOfLines={1} className="mt-1 text-[10px] font-semibold text-slate-500">
-                      {place.category}
-                    </Text>
-                    <View className="mt-1 self-start rounded-md bg-[#B4FAF0] px-1.5 py-0.5">
+                <View key={place.id} className="rounded-2xl border border-[#82F0DC] bg-white p-3 shadow-sm">
+                  <Text numberOfLines={1} className="text-xs font-black text-slate-800">
+                    {place.name}
+                  </Text>
+                  <Text numberOfLines={1} className="mt-1 text-[10px] font-semibold text-slate-500">
+                    {place.address || place.category || '주소 없음'}
+                  </Text>
+                  <View className="mt-1 flex-row items-center gap-1.5">
+                    <View className="rounded-md bg-[#B4FAF0] px-1.5 py-0.5">
                       <Text className="text-[9px] font-bold text-[#075953]">
-                        {profileDetailModal === 'visited' ? '다이어리 기록 완료' : 'AI 추출 · 저장됨'}
+                        {profileDetailModal === 'visited' ? '기록 남김' : '일정에 담음'}
                       </Text>
                     </View>
+                    <Text numberOfLines={1} className="min-w-0 flex-1 text-[9px] font-bold text-slate-400">
+                      {place.tripTitle}
+                    </Text>
                   </View>
                 </View>
               ))}

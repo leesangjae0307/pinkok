@@ -10,7 +10,7 @@ import {
   ShadowBox,
 } from '../../../components/pixel/Primitives';
 import { TRAVEL_STYLES } from '../../../constants';
-import { toImageSource } from '../../../data/mockData';
+import { isImageAvatar, toImageSource } from '../../../data/mockData';
 import { avatarSilverBucket, profileAvatarSource, useApp } from '../AppContext';
 
 /** 목업 date 문자열('2026.10.12 - 10.15')에서 일수를 계산한다. 서버 연동 시 startDate/endDate 로 대체. */
@@ -118,9 +118,14 @@ export default function TripsListView() {
                   shadowColor="#56EADD"
                   offset={2}
                   radius={12}
-                  className="h-11 w-11 items-center justify-center rounded-xl border-2 border-[#075953] bg-white"
+                  className="h-11 w-11 items-center justify-center overflow-hidden rounded-xl border-2 border-[#075953] bg-white"
                 >
-                  <Text className="text-xl">{inv.inviterAvatar}</Text>
+                  {/* 아바타는 그림일 수도 이모지일 수도 있다. 그림을 Text 로 그리면 주소가 그대로 찍힌다. */}
+                  {isImageAvatar(inv.inviterAvatar) ? (
+                    <Image source={toImageSource(inv.inviterAvatar)} resizeMode="cover" className="h-full w-full" />
+                  ) : (
+                    <Text className="text-xl">{inv.inviterAvatar}</Text>
+                  )}
                 </ShadowBox>
                 <View className="min-w-0 flex-1">
                   <Text numberOfLines={1} className="text-xs font-extrabold text-slate-800">

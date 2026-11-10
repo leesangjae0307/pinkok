@@ -5,7 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
+import { PixelBackArrow, PixelTripsIcon } from '../../../components/pixel/PixelIcons';
 import KakaoMapView, { type MapMarker } from '../../../components/map/KakaoMapView';
 import TripsBottomSheet from '../components/TripsBottomSheet';
 import { useApp } from '../AppContext';
@@ -28,6 +28,7 @@ export default function TripMapView() {
     setAssigningPlace,
     handleMovePlace,
     setEditingTimePlace,
+    handleDeletePlace,
     selectedMapPin,
     setSelectedMapPin,
     setIsTripMapOpen,
@@ -75,61 +76,66 @@ export default function TripMapView() {
         selectedId={selectedMapPin?.id ?? null}
         bottomInset={Math.round((layout.height * tripsSheetHeight) / 100)}
         // 상단 플로팅 바(top-3 + 버튼 높이)에 마커 말풍선이 가리지 않게 한다.
-        topInset={72}
+        topInset={118}
       />
 
       {/* 지도 위에 띄우는 조작부. 지도 제스처를 막지 않도록 빈 곳은 터치를 흘려보낸다. */}
       <View className="absolute bottom-0 left-0 right-0 top-0" pointerEvents="box-none">
         {/* 상단 플로팅 바 */}
-        <View className="absolute left-3 right-3 top-3 z-20 flex-row items-center gap-2">
-          <Pressable
-            onPress={() => setIsTripMapOpen(false)}
-            accessibilityLabel="내 여행 목록으로 돌아가기"
-            className="h-9 w-9 items-center justify-center rounded-2xl border border-[#82F0DC] bg-white shadow-md active:scale-90"
-          >
-            <PixelBackArrow size={16} />
-          </Pressable>
-          {/*
-            이 알약은 고정폭 버튼 4개(뒤로·장소·팀원·PinLog)와 한 줄을 나눠 써서 남는 폭이
-            아주 좁다. 아이콘까지 넣으면 제목이 0 으로 눌리고도 모자라 아이콘이 배지 뒤로
-            밀려 깨졌다(RN 은 flexShrink 기본값이 0 이라 shrink 유틸로는 해결되지 않는다).
-            그래서 장식인 아이콘을 빼고 정보인 제목과 배지만 남긴다.
-          */}
-          <View className="min-w-0 flex-1 flex-row items-center justify-between rounded-2xl border border-[#82F0DC] bg-white/95 px-3 py-2 shadow-md">
-            <Text numberOfLines={1} className="min-w-0 flex-1 text-xs font-bold text-slate-800">
-              {activeTrip?.title ?? '여행'}
-            </Text>
-            <View className="ml-1.5 rounded border border-[#50E6DC] bg-[#56EADD] px-1.5 py-0.5">
-              <Text className="font-pixel text-[9px] text-slate-900">
-                {selectedDayFilter === 'all' ? '전체' : `${selectedDayFilter}D`}
+        {/*
+          버튼 4개와 제목을 한 줄에 욱여넣으면 제목이 설 자리가 없어 잘린다.
+          제목 알약은 제 줄을 통째로 쓰고, 조작 버튼은 아랫줄로 내린다.
+          이러면 아이콘을 되살려도 제목이 눌리지 않는다.
+        */}
+        <View className="absolute left-3 right-3 top-3 z-20 gap-2">
+          <View className="flex-row items-center gap-2">
+            <Pressable
+              onPress={() => setIsTripMapOpen(false)}
+              accessibilityLabel="내 여행 목록으로 돌아가기"
+              className="h-9 w-9 items-center justify-center rounded-2xl border border-[#82F0DC] bg-white shadow-md active:scale-90"
+            >
+              <PixelBackArrow size={16} />
+            </Pressable>
+            <View className="min-w-0 flex-1 flex-row items-center gap-1.5 rounded-2xl border border-[#82F0DC] bg-white/95 px-3 py-2 shadow-md">
+              <PixelTripsIcon size={18} active />
+              <Text numberOfLines={1} className="min-w-0 flex-1 text-xs font-bold text-slate-800">
+                {activeTrip?.title ?? '여행'}
               </Text>
+              <View className="rounded border border-[#50E6DC] bg-[#56EADD] px-1.5 py-0.5">
+                <Text className="font-pixel text-[9px] text-slate-900">
+                  {selectedDayFilter === 'all' ? '전체' : `${selectedDayFilter}D`}
+                </Text>
+              </View>
             </View>
           </View>
-          <Pressable
-            onPress={() => setIsAddPlaceOpen(true)}
-            accessibilityLabel="장소 추가"
-            className="rounded-2xl border-2 border-pixel-navy bg-white px-2.5 py-2 shadow-md active:translate-y-0.5"
-          >
-            <Text className="text-[10px] font-black text-[#075953]">장소 +</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setInviteTrip(activeTrip)}
-            className="rounded-2xl border-2 border-pixel-navy bg-white px-2.5 py-2 shadow-md active:translate-y-0.5"
-          >
-            <Text className="text-[10px] font-black text-[#075953]">팀원 +</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              // PinLog 모달은 pinLogTrip 을 보고 그린다. 지도에서 바로 열 때는
-              // 핀로그 탭을 거치지 않으므로 지금 보고 있는 여행으로 맞춰준다.
-              if (activeTrip) setPinLogTrip(activeTrip);
-              setIsPinLogMakerOpen(true);
-            }}
-            accessibilityLabel="팀원 영상으로 PinLog 만들기"
-            className="flex-row items-center gap-1 rounded-2xl border-2 border-pixel-navy bg-mint-primary px-3 py-2 shadow-md active:translate-y-0.5 active:bg-mint-dark"
-          >
-            <Text className="text-xs font-black text-pixel-navy">🎬 PinLog</Text>
-          </Pressable>
+
+          <View className="flex-row items-center justify-end gap-2">
+            <Pressable
+              onPress={() => setIsAddPlaceOpen(true)}
+              accessibilityLabel="장소 추가"
+              className="rounded-2xl border-2 border-pixel-navy bg-white px-2.5 py-2 shadow-md active:translate-y-0.5"
+            >
+              <Text className="text-[10px] font-black text-[#075953]">장소 +</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setInviteTrip(activeTrip)}
+              className="rounded-2xl border-2 border-pixel-navy bg-white px-2.5 py-2 shadow-md active:translate-y-0.5"
+            >
+              <Text className="text-[10px] font-black text-[#075953]">팀원 +</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                // PinLog 모달은 pinLogTrip 을 보고 그린다. 지도에서 바로 열 때는
+                // 핀로그 탭을 거치지 않으므로 지금 보고 있는 여행으로 맞춰준다.
+                if (activeTrip) setPinLogTrip(activeTrip);
+                setIsPinLogMakerOpen(true);
+              }}
+              accessibilityLabel="팀원 영상으로 PinLog 만들기"
+              className="flex-row items-center gap-1 rounded-2xl border-2 border-pixel-navy bg-mint-primary px-3 py-2 shadow-md active:translate-y-0.5 active:bg-mint-dark"
+            >
+              <Text className="text-xs font-black text-pixel-navy">🎬 PinLog</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -156,6 +162,7 @@ export default function TripMapView() {
         onAssignDay={setAssigningPlace}
         onMovePlace={handleMovePlace}
         onEditTime={setEditingTimePlace}
+        onDeletePlace={handleDeletePlace}
         selectedPlaceId={selectedMapPin?.id ?? -1}
         onSelectPlace={(place) => {
           setSelectedMapPin(place);

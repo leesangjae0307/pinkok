@@ -1,23 +1,10 @@
 import React from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 
 import { PixelProfileIcon } from '../../../components/pixel/PixelIcons';
 import { FadeIn, PixelPressable } from '../../../components/pixel/Primitives';
-import { TRAVEL_TASTES, profileAvatarSource, useApp } from '../AppContext';
+import { profileAvatarSource, useApp } from '../AppContext';
 import { toImageSource } from '../../../data/mockData';
-
-const GALLERY = [
-  {
-    image: 'https://images.unsplash.com/photo-1548115184-bc6544d06a58?auto=format&fit=crop&w=300&q=80',
-    title: '제주 3박4일 요약 핀로그',
-    meta: '2026.09.01 • 5초',
-  },
-  {
-    image: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=300&q=80',
-    title: '도쿄 먹방 하이라이트',
-    meta: '2026.08.15 • 8초',
-  },
-];
 
 export default function ProfileTab() {
   const {
@@ -28,6 +15,8 @@ export default function ProfileTab() {
     openProfileEditor,
     setProfileDetailModal,
     setActiveTab,
+    profileStats,
+    isProfileStatsLoading,
   } = useApp();
 
   /**
@@ -86,9 +75,24 @@ export default function ProfileTab() {
       <View className="flex-row gap-2">
         {(
           [
-            { key: 'visited', value: '87', label: '방문한 장소', color: 'text-[#075953]' },
-            { key: 'saved', value: '156', label: '저장한 장소', color: 'text-[#FF5A87]' },
-            { key: 'regions', value: '12', label: '다녀온 지역 수', color: 'text-violet-500' },
+            {
+              key: 'visited',
+              value: profileStats.visitedPlaces.length,
+              label: '방문한 장소',
+              color: 'text-[#075953]',
+            },
+            {
+              key: 'saved',
+              value: profileStats.savedPlaces.length,
+              label: '저장한 장소',
+              color: 'text-[#FF5A87]',
+            },
+            {
+              key: 'regions',
+              value: profileStats.regions.length,
+              label: '다녀온 지역 수',
+              color: 'text-violet-500',
+            },
           ] as const
         ).map((s) => (
           <Pressable
@@ -96,7 +100,11 @@ export default function ProfileTab() {
             onPress={() => setProfileDetailModal(s.key)}
             className="flex-1 items-center rounded-2xl border border-[#82F0DC] bg-white p-3 active:scale-95"
           >
-            <Text className={`font-pixel text-lg ${s.color}`}>{s.value}</Text>
+            {isProfileStatsLoading ? (
+              <ActivityIndicator color="#075953" />
+            ) : (
+              <Text className={`font-pixel text-lg ${s.color}`}>{s.value}</Text>
+            )}
             <Text className="mt-2 text-[10px] font-black text-slate-500">{s.label}</Text>
           </Pressable>
         ))}
@@ -117,28 +125,36 @@ export default function ProfileTab() {
           <Text className="font-pixel text-[8px] text-[#075953]">PIXEL TASTE</Text>
         </View>
 
-        <View className="gap-3">
-          {TRAVEL_TASTES.map((taste) => (
-            <View key={taste.label}>
-              <View className="mb-1.5 flex-row items-center justify-between">
-                <Text className="text-xs font-black text-slate-700">
-                  {taste.icon} {taste.label}
-                </Text>
-                <Text className="font-pixel text-[9px] text-slate-600">{taste.percent}%</Text>
+        {profileStats.tastes.length === 0 ? (
+          <Text className="py-2 text-center text-[11px] font-bold text-slate-400">
+            {isProfileStatsLoading
+              ? '불러오는 중…'
+              : '아직 담아둔 장소가 없어요. 여행에 장소를 추가하면 취향이 보여요.'}
+          </Text>
+        ) : (
+          <View className="gap-3">
+            {profileStats.tastes.map((taste) => (
+              <View key={taste.label}>
+                <View className="mb-1.5 flex-row items-center justify-between">
+                  <Text className="text-xs font-black text-slate-700">
+                    {taste.icon} {taste.label}
+                  </Text>
+                  <Text className="font-pixel text-[9px] text-slate-600">{taste.percent}%</Text>
+                </View>
+                <View className="flex-row" style={{ gap: 2 }}>
+                  {Array.from({ length: 20 }).map((_, index) => (
+                    <View
+                      key={index}
+                      className={`h-3 flex-1 rounded-[2px] border border-slate-900/10 ${
+                        index < Math.round(taste.percent / 5) ? taste.color : 'bg-slate-100'
+                      }`}
+                    />
+                  ))}
+                </View>
               </View>
-              <View className="flex-row" style={{ gap: 2 }}>
-                {Array.from({ length: 20 }).map((_, index) => (
-                  <View
-                    key={index}
-                    className={`h-3 flex-1 rounded-[2px] border border-slate-900/10 ${
-                      index < Math.round(taste.percent / 5) ? taste.color : 'bg-slate-100'
-                    }`}
-                  />
-                ))}
-              </View>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* 핀로그 갤러리 */}
@@ -150,22 +166,36 @@ export default function ProfileTab() {
           </Pressable>
         </View>
 
-        <View className="flex-row gap-2">
-          {GALLERY.map((g) => (
-            <View key={g.title} className="flex-1 gap-1.5 rounded-2xl border border-slate-100 bg-white p-2">
-              <View className="relative aspect-video overflow-hidden rounded-xl">
-                <Image source={{ uri: g.image }} resizeMode="cover" className="h-full w-full" />
-                <View className="absolute inset-0 items-center justify-center bg-black/30">
-                  <Text className="text-xl text-white">▶</Text>
+        {profileStats.pinlogs.length === 0 ? (
+          <View className="rounded-2xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-6">
+            <Text className="text-center text-[11px] font-bold text-slate-400">
+              {isProfileStatsLoading ? '불러오는 중…' : '아직 만든 PinLog 가 없어요.'}
+            </Text>
+          </View>
+        ) : (
+          <View className="flex-row flex-wrap gap-2">
+            {profileStats.pinlogs.slice(0, 4).map((g) => (
+              <View
+                key={g.id}
+                className="gap-1.5 rounded-2xl border border-slate-100 bg-white p-2"
+                style={{ width: '48.5%' }}
+              >
+                <View className="relative aspect-video overflow-hidden rounded-xl bg-black">
+                  {g.thumbnail ? (
+                    <Image source={{ uri: g.thumbnail }} resizeMode="cover" className="h-full w-full" />
+                  ) : null}
+                  <View className="absolute inset-0 items-center justify-center bg-black/30">
+                    <Text className="text-xl text-white">▶</Text>
+                  </View>
                 </View>
+                <Text numberOfLines={1} className="text-[11px] font-bold text-slate-800">
+                  {g.title}
+                </Text>
+                <Text className="text-[9px] text-slate-400">{g.meta}</Text>
               </View>
-              <Text numberOfLines={1} className="text-[11px] font-bold text-slate-800">
-                {g.title}
-              </Text>
-              <Text className="text-[9px] text-slate-400">{g.meta}</Text>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
       </View>
     </FadeIn>
   );

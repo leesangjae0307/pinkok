@@ -2,7 +2,19 @@
  * 장소별 팀 다이어리 모달 (1인 1기록 규칙 · 앱 내 2~3초 촬영 · 팀원 피드)
  */
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
+import Video from 'react-native-video';
 
 import { AvatarSource, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
 import RecordClipModal from './RecordClipModal';
@@ -24,13 +36,6 @@ interface PlaceDetailModalProps {
   startInCamera?: boolean;
 }
 
-const SAMPLE_PHOTOS = [
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80',
-  'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=400&q=80',
-  'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80',
-  'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80',
-];
-
 export default function PlaceDetailModal({
   place,
   records,
@@ -50,6 +55,8 @@ export default function PlaceDetailModal({
   const [memoText, setMemoText] = useState(myExistingRecord?.memo || '');
   const [photos, setPhotos] = useState<string[]>(myExistingRecord?.photos || []);
   const [videoClip, setVideoClip] = useState<PlaceRecord['videoClip'] | undefined>(myExistingRecord?.videoClip);
+  /** 붙인 영상을 눌러서 미리 재생 중인지. 핀로그를 만들기 전에도 확인할 수 있어야 한다. */
+  const [isClipPlaying, setIsClipPlaying] = useState(false);
   const [memoFocused, setMemoFocused] = useState(false);
 
   // 촬영
@@ -70,9 +77,49 @@ export default function PlaceDetailModal({
   }, [myExistingRecord, place.id]);
 
 
-  const handleAddSamplePhoto = () => {
-    const randomPhoto = SAMPLE_PHOTOS[Math.floor(Math.random() * SAMPLE_PHOTOS.length)];
-    setPhotos((prev) => [...prev, randomPhoto]);
+  /**
+   * 기기 사진첩에서 실제 사진을 고른다. 고른 file:// 주소를 그대로 들고 있다가
+   * 기록을 저장할 때 uploadRecordMedia 가 서버로 올린다.
+   *
+   * 안드로이드 13+ 는 사진첩 접근에 권한이 따로 필요 없다. 시스템 사진 선택기가
+   * 골라준 사진만 앱에 건네주기 때문이다(READ_MEDIA_IMAGES 를 받지 않아도 된다).
+   */
+  const handleAddPhoto = async () => {
+    try {
+      const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 0 });
+      if (res.didCancel) return;
+      if (res.errorCode) {
+        Alert.alert('사진을 열지 못했어요', res.errorMessage ?? '잠시 후 다시 시도해 주세요.');
+        return;
+      }
+      const picked = (res.assets ?? []).map((a) => a.uri).filter((uri): uri is string => !!uri);
+      if (picked.length > 0) setPhotos((prev) => [...prev, ...picked]);
+    } catch {
+      Alert.alert('사진을 열지 못했어요', '잠시 후 다시 시도해 주세요.');
+    }
+  };
+
+  /** PinLog 용 영상을 사진첩에서 고른다. 길이는 선택기가 주는 duration(초) 을 쓴다. */
+  const handlePickVideo = async () => {
+    try {
+      const res = await launchImageLibrary({ mediaType: 'video', selectionLimit: 1 });
+      if (res.didCancel) return;
+      if (res.errorCode) {
+        Alert.alert('영상을 열지 못했어요', res.errorMessage ?? '잠시 후 다시 시도해 주세요.');
+        return;
+      }
+      const asset = res.assets?.[0];
+      if (!asset?.uri) return;
+      setVideoClip({
+        id: Date.now(),
+        duration: asset.duration ?? 0,
+        thumbnail: '',
+        videoUrl: asset.uri,
+        createdAt: '방금 전',
+      });
+    } catch {
+      Alert.alert('영상을 열지 못했어요', '잠시 후 다시 시도해 주세요.');
+    }
   };
 
   const handleSave = () => {
@@ -155,8 +202,8 @@ export default function PlaceDetailModal({
           {/* 본문 */}
           <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
             {/* 장소 요약 */}
-            <View className="flex-row items-center gap-3 rounded-2xl border-2 border-pixel-navy bg-white p-3 shadow-md">
-              <Image source={{ uri: place.thumbnail }} resizeMode="cover" className="h-16 w-16 rounded-xl border border-slate-200" />
+            {/* 썸네일은 빼고 장소 정보만 남긴다. */}
+            <View className="rounded-2xl border-2 border-pixel-navy bg-white p-3 shadow-md">
               <View className="min-w-0 flex-1">
                 <View className="self-start rounded-md bg-[#B4FAF0] px-2 py-0.5">
                   <Text className="text-[10px] font-bold text-teal-800">{place.category}</Text>
@@ -278,7 +325,7 @@ export default function PlaceDetailModal({
                     <View className="mb-1.5 flex-row items-center justify-between">
                       <Text className="text-xs font-black text-slate-700">사진 첨부 (복수 등록 가능)</Text>
                       <Pressable
-                        onPress={handleAddSamplePhoto}
+                        onPress={handleAddPhoto}
                         className="rounded-lg border border-teal-300 bg-[#B4FAF0] px-2 py-0.5 active:bg-teal-200"
                       >
                         <Text className="text-[10px] font-extrabold text-teal-900">+ 사진 추가</Text>
@@ -286,7 +333,7 @@ export default function PlaceDetailModal({
                     </View>
                     {photos.length === 0 ? (
                       <Pressable
-                        onPress={handleAddSamplePhoto}
+                        onPress={handleAddPhoto}
                         className="w-full items-center justify-center rounded-xl border-2 border-dashed border-slate-300 py-4"
                       >
                         <Text className="text-xs text-slate-400">📷 사진을 추가해주세요 (클릭)</Text>
@@ -325,14 +372,7 @@ export default function PlaceDetailModal({
                           <Text className="text-[10px] font-black text-white">🔴 앱 내 바로 촬영</Text>
                         </Pressable>
                         <Pressable
-                          onPress={() =>
-                            setVideoClip({
-                              id: Date.now(),
-                              duration: 2.5,
-                              thumbnail: place.thumbnail,
-                              createdAt: '방금 전',
-                            })
-                          }
+                          onPress={handlePickVideo}
                           className="rounded-lg border border-slate-300 bg-slate-100 px-2 py-1 active:bg-slate-200"
                         >
                           <Text className="text-[10px] font-bold text-slate-700">갤러리</Text>
@@ -342,12 +382,36 @@ export default function PlaceDetailModal({
 
                     {videoClip && (
                       <View className="relative flex-row items-center gap-3 overflow-hidden rounded-2xl border-2 border-pixel-navy bg-slate-900 p-2.5">
-                        <View className="relative h-16 w-16 overflow-hidden rounded-xl border border-white/20">
-                          <Image source={{ uri: videoClip.thumbnail }} resizeMode="cover" className="h-full w-full" />
-                          <View className="absolute inset-0 items-center justify-center bg-black/30">
-                            <Text className="text-base text-white">▶</Text>
+                        {/* 붙인 영상은 저장 전에도 눌러서 바로 확인할 수 있다. */}
+                        <Pressable
+                          onPress={() => videoClip.videoUrl && setIsClipPlaying((p) => !p)}
+                          accessibilityLabel={isClipPlaying ? '영상 일시정지' : '영상 재생'}
+                          className="relative h-16 w-16 overflow-hidden rounded-xl border border-white/20 bg-black"
+                        >
+                          {/*
+                            안드로이드에서 Video 는 자기 네이티브 뷰로 터치를 먹어버려서
+                            감싼 Pressable 까지 이벤트가 오지 않는다. 터치를 흘려보낸다.
+                          */}
+                          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                            {videoClip.videoUrl ? (
+                              <Video
+                                source={{ uri: videoClip.videoUrl }}
+                                paused={!isClipPlaying}
+                                repeat
+                                muted={!isClipPlaying}
+                                resizeMode="cover"
+                                style={{ width: '100%', height: '100%' }}
+                              />
+                            ) : videoClip.thumbnail ? (
+                              <Image source={{ uri: videoClip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+                            ) : null}
                           </View>
-                        </View>
+                          {!isClipPlaying && (
+                            <View className="absolute inset-0 items-center justify-center bg-black/30">
+                              <Text className="text-base text-white">▶</Text>
+                            </View>
+                          )}
+                        </Pressable>
                         <View className="min-w-0 flex-1">
                           <View className="flex-row items-center gap-1.5">
                             <View className="rounded bg-rose-500 px-1.5 py-0.5">

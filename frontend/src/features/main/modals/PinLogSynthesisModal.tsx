@@ -39,6 +39,8 @@ interface ClipOption {
   placeId: number;
   thumbnailUrl: string;
   durationMs: number;
+  /** 서버에 올라간 영상 주소. 만들기 전에 미리 재생할 때 쓴다. */
+  videoUrl?: string;
   author: { nickname: string; avatar: AvatarSource };
   mine: boolean;
 }
@@ -81,6 +83,7 @@ export default function PinLogSynthesisModal({
                 diaryMediaId: record.videoClip.id,
                 placeId: record.pinId,
                 thumbnailUrl: record.videoClip.thumbnail,
+                videoUrl: record.videoClip.videoUrl,
                 durationMs: Math.round(record.videoClip.duration * 1000),
                 author: {
                   nickname: record.authorName,
@@ -108,6 +111,8 @@ export default function PinLogSynthesisModal({
   const [pinLogId, setPinLogId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [result, setResult] = useState<SynthesizedVlog | null>(null);
+  /** 지금 미리보기로 재생 중인 클립. 한 번에 하나만 돈다. */
+  const [playingMediaId, setPlayingMediaId] = useState<number | null>(null);
   const [isSavingToGallery, setIsSavingToGallery] = useState(false);
   /** 0~100. 서버가 Content-Length 를 주면 내려받는 동안 올라간다. */
   const [saveProgress, setSaveProgress] = useState(0);
@@ -442,6 +447,7 @@ export default function PinLogSynthesisModal({
                           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
                             {options.map((option) => {
                               const selected = selectedMedia[place.id] === option.diaryMediaId;
+                              const isPlaying = playingMediaId === option.diaryMediaId;
                               return (
                                 <Pressable
                                   key={option.diaryMediaId}
@@ -452,15 +458,45 @@ export default function PinLogSynthesisModal({
                                 >
                                   <View className="relative">
                                     {/* 비율은 감싸는 View 의 style 로 잡는다(위와 같은 이유). */}
-                                    <View style={{ width: '100%', aspectRatio: 16 / 9 }}>
-                                      <Image source={{ uri: option.thumbnailUrl }} resizeMode="cover" className="h-full w-full" />
+                                    <View style={{ width: '100%', aspectRatio: 16 / 9 }} className="bg-black">
+                                      {isPlaying ? (
+                                        <Video
+                                          source={{ uri: option.videoUrl! }}
+                                          paused={false}
+                                          repeat
+                                          resizeMode="cover"
+                                          style={{ width: '100%', height: '100%' }}
+                                        />
+                                      ) : (
+                                        <Image source={{ uri: option.thumbnailUrl }} resizeMode="cover" className="h-full w-full" />
+                                      )}
                                     </View>
+                                    {/* PinLog 를 만들기 전에도 클립을 하나씩 확인할 수 있어야 한다. */}
+                                    {option.videoUrl ? (
+                                      <Pressable
+                                        onPress={() =>
+                                          setPlayingMediaId((cur) =>
+                                            cur === option.diaryMediaId ? null : option.diaryMediaId,
+                                          )
+                                        }
+                                        accessibilityLabel={`${option.author.nickname} 영상 ${isPlaying ? '일시정지' : '재생'}`}
+                                        hitSlop={4}
+                                        className="absolute left-1 bottom-1 h-6 w-6 items-center justify-center rounded-full border border-white/70 bg-black/60"
+                                      >
+                                        <Text className="text-[9px] text-white">{isPlaying ? '❚❚' : '▶'}</Text>
+                                      </Pressable>
+                                    ) : null}
                                     <View className="absolute bottom-1 right-1 rounded bg-black/75 px-1">
                                       <Text className="font-pixel text-[7px] text-white">{(option.durationMs / 1000).toFixed(1)}s</Text>
                                     </View>
                                     {option.mine && (
                                       <View className="absolute left-1 top-1 rounded bg-[#56EADD] px-1.5 py-0.5">
                                         <Text className="text-[8px] font-black text-[#075953]">내 영상</Text>
+                                      </View>
+                                    )}
+                                    {isPlaying && (
+                                      <View className="absolute right-1 top-1 rounded bg-rose-500 px-1.5 py-0.5">
+                                        <Text className="font-pixel text-[7px] text-white">재생중</Text>
                                       </View>
                                     )}
                                   </View>

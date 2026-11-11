@@ -63,6 +63,13 @@ gemini.total-timeout-ms=300000
 pinlog.width=1280
 pinlog.height=720
 
+# ---- 폰 푸시 알림 (Firebase Cloud Messaging) ----
+# Firebase 콘솔 > 프로젝트 설정 > 서비스 계정 > "새 비공개 키 생성" 으로 받은 JSON 파일의 경로.
+# 이 파일은 비밀이다. 저장소 밖(예: C:/pinkok-secrets/)에 두고 절대 커밋하지 말 것.
+# 비워두면 폰 푸시만 안 나가고 서버와 앱 안 알림함은 그대로 동작한다.
+# 환경변수로 넣는 걸 권장: FIREBASE_CREDENTIALS_PATH=C:/pinkok-secrets/firebase-key.json
+firebase.credentials-path=${FIREBASE_CREDENTIALS_PATH:}
+
 # ---- 소셜 로그인 (카카오 · 구글) ----
 # 설정 방법: backend/docs/소셜로그인-설정.md
 # 카카오: developers.kakao.com > 내 애플리케이션 > 앱 ID (숫자). 앱이 보낸 토큰이 우리 앱 것인지 확인하는 데 쓴다.

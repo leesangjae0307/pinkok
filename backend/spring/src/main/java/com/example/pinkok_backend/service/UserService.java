@@ -24,10 +24,13 @@ public class UserService {
     private final FileService fileService;
     private final TripService tripService;
     private final RefreshTokenService refreshTokenService;
+    private final PushTokenService pushTokenService;
 
     public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder,
                        AvatarService avatarService, FileService fileService,
-                       TripService tripService, RefreshTokenService refreshTokenService) {
+                       TripService tripService, RefreshTokenService refreshTokenService,
+                       PushTokenService pushTokenService) {
+        this.pushTokenService = pushTokenService;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.avatarService = avatarService;
@@ -154,6 +157,8 @@ public class UserService {
         // 지워버리면 남이 같은 아이디로 가입해 "그 사람인 척" 할 수 있다.
 
         refreshTokenService.revokeAllForUser(userId);
+        // 탈퇴한 사람의 폰으로 알림이 더 가지 않도록 기기 토큰도 지운다
+        pushTokenService.removeAllOf(userId);
         fileService.deleteAfterCommit(oldProfileImageUrl);
     }
 

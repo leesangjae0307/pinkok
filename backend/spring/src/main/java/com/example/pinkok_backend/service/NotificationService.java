@@ -42,10 +42,13 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final PushNotificationService pushNotificationService;
 
-    public NotificationService(NotificationRepository notificationRepository, UserRepository userRepository) {
+    public NotificationService(NotificationRepository notificationRepository, UserRepository userRepository,
+                               PushNotificationService pushNotificationService) {
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
+        this.pushNotificationService = pushNotificationService;
     }
 
     // ------------------------------------------------------------------
@@ -72,6 +75,8 @@ public class NotificationService {
             notification.setCreatedAt(LocalDateTime.now());
             notificationRepository.save(notification);
 
+            // 폰 푸시도 보낸다. 저장이 확정된 뒤 별도 스레드에서 나가므로 여기서 기다리지 않는다.
+            pushNotificationService.sendAfterCommit(notification);
         } catch (RuntimeException e) {
             log.warn("알림을 남기지 못했다 (userId={}, type={})", user.getId(), type, e);
         }

@@ -9,6 +9,11 @@ backend/spring/out/
 # Local Spring config
 backend/spring/src/main/resources/application.properties
 
+# Firebase 서비스 계정 키 (비밀! 절대 커밋 금지)
+*firebase-adminsdk*.json
+firebase-service-account*.json
+backend/spring/secrets/
+
 # 업로드된 사진·영상 (로컬 저장소)
 backend/spring/uploads/
 

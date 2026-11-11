@@ -426,6 +426,20 @@ CREATE TABLE notifications (
 ) COMMENT='알림';
 
 
+CREATE TABLE push_tokens (
+    id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '푸시 토큰 ID',
+    user_id     BIGINT       NOT NULL COMMENT '토큰 주인 (같은 폰에서 다른 계정으로 로그인하면 바뀜)',
+    token       VARCHAR(512) NOT NULL COMMENT 'FCM 기기 토큰',
+    platform    VARCHAR(10)  NOT NULL DEFAULT 'ANDROID' COMMENT 'ANDROID / IOS',
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_push_tokens_token (token),
+    KEY idx_push_tokens_user (user_id),
+    CONSTRAINT fk_push_tokens_user FOREIGN KEY (user_id) REFERENCES users (id)
+) COMMENT='폰 푸시(FCM) 기기 토큰';
+
+
 CREATE TABLE password_reset_codes (
     id                    BIGINT      NOT NULL AUTO_INCREMENT COMMENT '비밀번호 재설정 시도 ID',
     user_id               BIGINT      NOT NULL COMMENT '사용자 ID',

@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface DiaryRepository extends JpaRepository<Diary, Long> {
@@ -29,6 +30,17 @@ public interface DiaryRepository extends JpaRepository<Diary, Long> {
             order by dd.dayNumber asc nulls last, i.visitOrder asc nulls last, d.createdAt asc
             """)
     List<Diary> findAllByTripId(@Param("tripId") Long tripId);
+
+    /** 여러 여행에서 <b>내가 쓴</b> 기록을 핀·장소·여행과 함께 한 번에 (프로필 집계용). 최근순. */
+    @Query("""
+            select d from Diary d
+            join fetch d.itineraryItem i
+            join fetch i.place
+            join fetch i.trip
+            where d.user.id = :userId and i.trip.id in :tripIds
+            order by d.createdAt desc
+            """)
+    List<Diary> findMineInTrips(@Param("userId") Long userId, @Param("tripIds") Collection<Long> tripIds);
 
     /** 핀 하나에 달린 팀원들의 기록. */
     @Query("""

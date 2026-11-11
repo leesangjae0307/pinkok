@@ -21,6 +21,21 @@ public interface PinlogRepository extends JpaRepository<Pinlog, Long> {
     List<Pinlog> findAllByTripId(@Param("tripId") Long tripId);
 
     /**
+     * 내가 참여 중인 여행들(삭제된 여행 제외)의 PinLog 를 상태로 걸러 최신순으로. 프로필 "내 핀로그 모아보기"용.
+     * 여행이 몇 개든 쿼리 한 번이다.
+     */
+    @Query("""
+            select p from Pinlog p
+            join fetch p.user
+            join fetch p.trip t
+            where t.deletedAt is null
+              and p.status = :status
+              and exists (select 1 from TripMember m where m.trip = t and m.user.id = :userId)
+            order by p.createdAt desc
+            """)
+    List<Pinlog> findAllInMyTripsByStatus(@Param("userId") Long userId, @Param("status") String status);
+
+    /**
      * 합성할 PinLog 를 여행·만든 사람과 함께 읽는다.
      * 합성은 트랜잭션 밖(별도 스레드)에서 돌아서, 나중에 여행 이름을 꺼내려 하면 DB 연결이 이미 닫혀 있다.
      */

@@ -412,7 +412,20 @@ public class PinlogService {
     public List<PinlogResponse> list(Long tripId, Long userId) {
         tripAccessGuard.requireMember(tripId, userId);
 
-        List<Pinlog> pinlogs = pinlogRepository.findAllByTripId(tripId);
+        return toResponses(pinlogRepository.findAllByTripId(tripId), userId);
+    }
+
+    /**
+     * 내가 참여 중인 모든 여행의 완성된(DONE) PinLog. 프로필의 "내 핀로그 모아보기"가 여행마다
+     * 따로 부르지 않도록 한 번에 돌려준다. 만든 사람이 팀원이어도 포함된다 (여행별 목록과 같은 기준).
+     */
+    @Transactional(readOnly = true)
+    public List<PinlogResponse> listMine(Long userId) {
+        return toResponses(pinlogRepository.findAllInMyTripsByStatus(userId, STATUS_DONE), userId);
+    }
+
+    /** 클립은 PinLog 마다 따로 읽지 않고 한 번에 모아 읽는다 (N+1 방지). */
+    private List<PinlogResponse> toResponses(List<Pinlog> pinlogs, Long userId) {
         if (pinlogs.isEmpty()) {
             return List.of();
         }

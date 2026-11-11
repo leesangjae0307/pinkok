@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -72,9 +73,24 @@ public class PinlogController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(pinlogService.retry(pinlogId, userId));
     }
 
+    /**
+     * PinLog 목록.
+     * <ul>
+     *   <li>{@code ?tripId=3} — 그 여행의 PinLog 전체 (만드는 중·실패 포함)</li>
+     *   <li>{@code ?mine=true} — 내가 참여 중인 모든 여행의 <b>완성된</b> PinLog (프로필 모아보기용)</li>
+     * </ul>
+     */
     @GetMapping
-    public List<PinlogResponse> list(@CurrentUserId Long userId, @RequestParam Long tripId) {
-        return pinlogService.list(tripId, userId);
+    public List<PinlogResponse> list(@CurrentUserId Long userId,
+                                     @RequestParam(required = false) Long tripId,
+                                     @RequestParam(defaultValue = "false") boolean mine) {
+        if (tripId != null) {
+            return pinlogService.list(tripId, userId);
+        }
+        if (mine) {
+            return pinlogService.listMine(userId);
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "tripId 또는 mine=true 중 하나가 필요합니다.");
     }
 
     /**

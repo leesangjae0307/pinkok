@@ -99,12 +99,21 @@ public class ItineraryItemService {
         ItineraryItem item = getItemOrThrow(itemId);
         tripAccessGuard.requireMember(item.getTrip().getId(), userId);
 
-        if (request.getDayId() != null && !request.getDayId().equals(dayIdOf(item))) {
-            ItineraryDay newDay = getDayInTripOrThrow(request.getDayId(), item.getTrip().getId());
-            item.setDay(newDay);
-            item.setVisitOrder(nextOrder(newDay.getId()));
+        // dayId / plannedArrivalTime 은 "키를 보냈는지"로 판단한다. null 을 보냈으면 해제다.
+        if (request.isDayIdPresent()) {
+            if (request.getDayId() == null) {
+                // 날짜 미정으로 되돌린다. 순서는 날짜 안에서만 의미가 있어서 같이 비운다.
+                item.setDay(null);
+                item.setVisitOrder(null);
+            } else if (!request.getDayId().equals(dayIdOf(item))) {
+                ItineraryDay newDay = getDayInTripOrThrow(request.getDayId(), item.getTrip().getId());
+                // 순서 번호를 먼저 구한다. 핀을 먼저 옮기면 조회 직전에 DB 에 반영(flush)돼서 자기 자신까지 세어진다.
+                int order = nextOrder(newDay.getId());
+                item.setDay(newDay);
+                item.setVisitOrder(order);
+            }
         }
-        if (request.getPlannedArrivalTime() != null) item.setPlannedArrivalTime(request.getPlannedArrivalTime());
+        if (request.isPlannedArrivalTimePresent()) item.setPlannedArrivalTime(request.getPlannedArrivalTime());
         if (request.getStayMinutes() != null) item.setStayMinutes(request.getStayMinutes());
         if (request.getTransportMode() != null) item.setTransportMode(request.getTransportMode());
         if (request.getMemo() != null) item.setMemo(request.getMemo());
@@ -182,7 +191,7 @@ public class ItineraryItemService {
     }
 
     private int nextOrder(Long dayId) {
-        return itineraryItemRepository.countByDay_Id(dayId) + 1;
+        return itineraryItemRepository.findMaxVisitOrder(dayId) + 1;
     }
 
     private Long dayIdOf(ItineraryItem item) {

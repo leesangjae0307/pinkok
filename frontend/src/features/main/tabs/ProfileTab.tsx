@@ -127,9 +127,11 @@ export default function ProfileTab() {
 
         {profileStats.tastes.length === 0 ? (
           <Text className="py-2 text-center text-[11px] font-bold text-slate-400">
-            {isProfileStatsLoading
-              ? '불러오는 중…'
-              : '아직 담아둔 장소가 없어요. 여행에 장소를 추가하면 취향이 보여요.'}
+            {/*
+              저장한 장소가 있어도 서버가 취향을 못 내는 경우가 있어, 장소가 없다고
+              단정하지 않는다. 숫자 카드와 말이 어긋나 보이기 때문이다.
+            */}
+            {isProfileStatsLoading ? '불러오는 중…' : '아직 보여줄 취향이 없어요.'}
           </Text>
         ) : (
           <View className="gap-3">

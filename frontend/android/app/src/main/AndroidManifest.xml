@@ -11,6 +11,8 @@
       android:name="android.permission.WRITE_EXTERNAL_STORAGE"
       android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- 안드로이드 13(API 33)부터는 알림을 띄우려면 사용자에게 물어봐야 한다. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- 카메라가 없는 기기에도 설치될 수 있게 required 는 끈다. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />

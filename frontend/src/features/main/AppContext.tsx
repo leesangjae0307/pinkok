@@ -87,6 +87,7 @@ import {
   relativeTime,
 } from '../../api/notificationApi';
 import { BASE_URL, errorMessage } from '../../api/axios';
+import { onNotificationOpened, startPush, stopPush, type PushTarget } from '../../services/push';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
   AvatarSource,
@@ -512,6 +513,34 @@ function useAppState(me: Me, onLogout: () => void) {
     reloadInvitations();
   }, [reloadTrips, reloadNotifications, reloadInvitations]);
 
+  /**
+   * 로그인한 상태로 이 화면이 뜬 것이므로 여기서 이 기기를 푸시 대상으로 등록한다.
+   * 토큰이 갱신될 때 다시 등록하는 구독은 화면을 벗어날 때 끊는다.
+   */
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+    startPush().then((off) => {
+      if (cancelled) off();
+      else unsubscribe = off;
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+
+  /**
+   * 폰 알림을 눌러 들어온 경우 그 화면으로 보낸다.
+   * 알림함에서 누른 것과 가는 곳이 같아야 해서 같은 함수를 쓴다.
+   */
+  useEffect(
+    () => onNotificationOpened((target) => openTargetRef.current(target)),
+    // 구독은 한 번만 걸고, 안에서 쓰는 최신 함수는 ref 로 읽는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   // 핀로그 탭은 고른 여행이 바뀔 때마다 그 여행의 완성본을 다시 받는다.
   useEffect(() => {
     if (pinLogTrip) reloadVlogClips(pinLogTrip.id);
@@ -854,6 +883,9 @@ function useAppState(me: Me, onLogout: () => void) {
 
   // 서버 호출이 실패해도 토큰은 지워져 있으므로 로그인 화면으로 보낸다.
   const handleLogout = async () => {
+    // 먼저 푸시를 끊는다. 토큰이 남아 있으면 다음에 이 폰을 쓰는 사람에게
+    // 내 알림이 간다. 실패해도 로그아웃은 그대로 진행한다.
+    await stopPush();
     try {
       await logout();
     } catch (e) {
@@ -872,6 +904,7 @@ function useAppState(me: Me, onLogout: () => void) {
    * 돌려보낸다.
    */
   const handleDeleteAccount = async (password: string): Promise<string | null> => {
+    await stopPush();
     try {
       await deleteAccount(password);
     } catch (e) {
@@ -974,10 +1007,21 @@ function useAppState(me: Me, onLogout: () => void) {
       showToast('먼저 여행을 만들어 주세요.');
       return;
     }
-    const closestTrip = [...trips].sort((a, b) => dDayNumber(a.dDay) - dDayNumber(b.dDay))[0];
-    setPinLogTrip(closestTrip);
+    /*
+     * 찍은 영상은 "어느 장소의 기록인지" 를 정해야 올라간다. 그래서 장소가 없는
+     * 여행을 열면 다 찍고 나서야 고를 것이 없어 막힌다. 날짜가 가깝더라도 장소가
+     * 없는 여행은 건너뛰고, 담아둔 장소가 있는 여행 중 가장 가까운 것을 연다.
+     */
+    const byDDay = [...trips].sort((a, b) => dDayNumber(a.dDay) - dDayNumber(b.dDay));
+    const target = byDDay.find((t) => t.placesCount > 0);
+    if (!target) {
+      showToast('여행에 장소를 먼저 추가해 주세요. 찍은 영상은 장소에 붙어요.');
+      setActiveTab('trips');
+      return;
+    }
+    setPinLogTrip(target);
     setIsQuickPinLogCameraOpen(true);
-    loadItinerary(closestTrip.id);
+    loadItinerary(target.id);
   };
 
   // 빠른 촬영 영상을 그 장소의 내 기록에 붙인다. 기록이 없으면 새로 만든다(1인 1기록).
@@ -1218,6 +1262,44 @@ function useAppState(me: Me, onLogout: () => void) {
       showToast(errorMessage(e, '읽음 처리를 하지 못했어요.'));
     }
   };
+
+  /**
+   * 폰 알림을 눌렀을 때 그 화면으로 보낸다.
+   * 서버가 알림함과 같은 targetType / targetId 를 함께 보내준다.
+   */
+  const openNotificationTarget = ({ targetType, targetId }: PushTarget) => {
+    setIsNotificationOpen(false);
+    setIsSettingsOpen(false);
+
+    if (targetType === 'INVITATION') {
+      setFocusedInvitationId(targetId);
+      setIsTripMapOpen(false);
+      setActiveTab('trips');
+      return;
+    }
+    if (targetType === 'TRIP') {
+      const target = trips.find((t) => t.id === targetId);
+      if (target) {
+        setActiveTrip(target);
+        setIsTripMapOpen(true);
+      }
+      setActiveTab('trips');
+      return;
+    }
+    if (targetType === 'PINLOG') {
+      setIsTripMapOpen(false);
+      setActiveTab('pinlog');
+      return;
+    }
+    if (targetType === 'AI_REQUEST') {
+      setIsTripMapOpen(false);
+      setActiveTab('extract');
+    }
+  };
+
+  // 구독은 한 번만 걸리므로, 최신 상태를 보는 함수를 ref 에 담아둔다.
+  const openTargetRef = useRef(openNotificationTarget);
+  openTargetRef.current = openNotificationTarget;
 
   const handleNotificationSelect = (notification: NotificationItem) => {
     setNotifications((cur) => cur.map((n) => (n.id === notification.id ? { ...n, read: true } : n)));

@@ -1,6 +1,9 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+// 같은 폴더의 google-services.json 을 읽는다. 그 파일은 저장소에 올리지 않으므로
+// 팀 공용 Firebase 프로젝트에서 받아 android/app/ 에 직접 넣어야 빌드된다.
+apply plugin: "com.google.gms.google-services"
 
 /**
  * This is the configuration block to customize your React Native Android app.

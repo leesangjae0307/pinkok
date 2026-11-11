@@ -108,12 +108,15 @@ export async function createItineraryItem(payload: ItineraryItemCreatePayload): 
 }
 
 /**
- * 핀을 다른 일자로 옮긴다. 옮기면 그 일자의 맨 뒤 순서가 된다.
+ * 핀을 다른 일자로 옮긴다. 옮기면 그 일자의 맨 앞부터 순서가 다시 매겨진다.
  *
- * 주의: dayId 를 비우면 서버는 "바꾸지 말라"로 읽는다. 그래서 이 API 로는 핀을
- * 미배정으로 되돌릴 수 없다(그 일자를 통째로 지우는 수밖에 없다).
+ * dayId 에 null 을 보내면 "날짜 미정" 으로 돌아간다(visitOrder 도 null 이 된다).
+ * 키를 아예 빼면 서버가 "바꾸지 말라"로 읽으므로, 해제할 때는 꼭 null 을 넣는다.
  */
-export async function moveItineraryItemToDay(itemId: number, dayId: number): Promise<ItineraryItem> {
+export async function moveItineraryItemToDay(
+  itemId: number,
+  dayId: number | null,
+): Promise<ItineraryItem> {
   const { data } = await api.patch<ItineraryItem>(`/itinerary-items/${itemId}`, { dayId });
   return data;
 }
@@ -121,10 +124,12 @@ export async function moveItineraryItemToDay(itemId: number, dayId: number): Pro
 /**
  * 핀의 여행할 시각을 정한다. time 은 'HH:mm'.
  *
- * 주의: 비워서 보내면 서버가 "바꾸지 말라"로 읽는다. 이 API 로는 한 번 넣은 시각을
- * 지울 수 없다.
+ * null 을 보내면 넣어둔 시각을 지운다. 위와 같은 이유로 키를 빼면 안 된다.
  */
-export async function updateItineraryItemTime(itemId: number, time: string): Promise<ItineraryItem> {
+export async function updateItineraryItemTime(
+  itemId: number,
+  time: string | null,
+): Promise<ItineraryItem> {
   const { data } = await api.patch<ItineraryItem>(`/itinerary-items/${itemId}`, {
     plannedArrivalTime: time,
   });

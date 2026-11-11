@@ -21,7 +21,8 @@ export default function DayPickerModal({
   place: PlaceItem;
   dayNumbers: number[];
   onClose: () => void;
-  onSelect: (day: number) => void;
+  /** null 이면 날짜 미정으로 되돌린다. */
+  onSelect: (day: number | null) => void;
 }) {
   const insets = useSafeAreaInsets();
   return (
@@ -72,6 +73,17 @@ export default function DayPickerModal({
               </Pressable>
             );
           })}
+
+          {/* 이미 어느 일자에 있는 핀만 되돌릴 것이 있다. */}
+          {place.day > 0 && (
+            <Pressable
+              onPress={() => onSelect(null)}
+              className="mt-1 flex-row items-center justify-between rounded-2xl border-2 border-dashed border-slate-400 bg-white p-3 active:bg-slate-50"
+            >
+              <Text className="text-xs font-black text-slate-600">날짜 미정으로 되돌리기</Text>
+              <Text className="font-pixel text-sm text-slate-500">›</Text>
+            </Pressable>
+          )}
         </ScrollView>
       </View>
     </ModalBackdrop>

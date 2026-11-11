@@ -77,19 +77,19 @@ export default function ProfileTab() {
           [
             {
               key: 'visited',
-              value: profileStats.visitedPlaces.length,
+              value: profileStats.visitedCount,
               label: '방문한 장소',
               color: 'text-[#075953]',
             },
             {
               key: 'saved',
-              value: profileStats.savedPlaces.length,
+              value: profileStats.savedCount,
               label: '저장한 장소',
               color: 'text-[#FF5A87]',
             },
             {
               key: 'regions',
-              value: profileStats.regions.length,
+              value: profileStats.regionCount,
               label: '다녀온 지역 수',
               color: 'text-violet-500',
             },

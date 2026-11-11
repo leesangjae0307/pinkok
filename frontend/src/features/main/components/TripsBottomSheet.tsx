@@ -59,6 +59,8 @@ interface TripsBottomSheetProps {
   onMovePlace: (placeId: number, direction: -1 | 1) => void;
   /** 여행할 시각을 고르는 창을 연다. */
   onEditTime: (place: PlaceItem) => void;
+  /** 넣어둔 시각을 지운다. 시각이 있을 때만 불린다. */
+  onClearTime: (place: PlaceItem) => void;
   /** 지도에서 장소를 아주 지운다. 확인은 부모가 받는다. */
   onDeletePlace: (place: PlaceItem) => void;
 }
@@ -98,6 +100,7 @@ export default function TripsBottomSheet({
   onAssignDay,
   onMovePlace,
   onEditTime,
+  onClearTime,
   onDeletePlace,
 }: TripsBottomSheetProps) {
   // PanResponder 콜백 안에서 최신 값을 읽기 위한 ref
@@ -298,7 +301,10 @@ export default function TripsBottomSheet({
                       {/* 여행할 시각. 누르면 고치고, 길게 누르면 지운다. */}
                       <Pressable
                         onPress={() => onEditTime(place)}
-                        accessibilityLabel={`${place.name} 시각 ${place.time ?? '추가'}`}
+                        onLongPress={place.time ? () => onClearTime(place) : undefined}
+                        accessibilityLabel={`${place.name} 시각 ${
+                          place.time ? `${place.time}. 길게 누르면 지움` : '추가'
+                        }`}
                         className="mt-1 flex-row items-center gap-1 self-start"
                       >
                         <Text className="text-[10px]">🕑</Text>

@@ -178,10 +178,10 @@ export function ProfileDetailModal() {
   const title =
     profileDetailModal === 'visited' ? '방문한 장소' : profileDetailModal === 'saved' ? '저장한 장소' : '다녀온 지역';
   /**
-   * 사용자 단위로 합쳐주는 API 가 없어서 프로필 탭이 모아둔 집계를 그대로 쓴다.
-   * 방문한 곳은 내가 기록을 남긴 핀이고, 저장한 곳은 일정에 담아 둔 핀이다.
+   * GET /users/me/stats 가 보내준 목록을 그대로 쓴다. 방문한 곳은 내가 기록을 남긴
+   * 핀, 저장한 곳은 일정에 담아 둔 핀이고, 정렬도 서버가 해서 온다.
    */
-  const list = profileDetailModal === 'visited' ? profileStats.visitedPlaces : profileStats.savedPlaces;
+  const list = profileDetailModal === 'visited' ? profileStats.visited : profileStats.saved;
   const isEmpty = profileDetailModal === 'regions' ? profileStats.regions.length === 0 : list.length === 0;
 
   return (
@@ -202,26 +202,27 @@ export function ProfileDetailModal() {
             <View className="flex-row flex-wrap justify-between gap-y-2">
               {profileStats.regions.map((region) => (
                 <View
-                  key={region}
+                  key={region.name}
                   className="items-center rounded-2xl border-2 border-[#82F0DC] bg-white p-3 shadow-sm"
                   style={{ width: '31.5%' }}
                 >
                   <Text className="text-xl">📍</Text>
                   <Text numberOfLines={1} className="mt-2 text-xs font-black text-slate-700">
-                    {region}
+                    {region.name}
                   </Text>
+                  <Text className="text-[9px] font-bold text-slate-400">여행 {region.tripCount}개</Text>
                 </View>
               ))}
             </View>
           ) : (
             <View className="gap-2">
               {list.map((place) => (
-                <View key={place.id} className="rounded-2xl border border-[#82F0DC] bg-white p-3 shadow-sm">
+                <View key={place.key} className="rounded-2xl border border-[#82F0DC] bg-white p-3 shadow-sm">
                   <Text numberOfLines={1} className="text-xs font-black text-slate-800">
                     {place.name}
                   </Text>
                   <Text numberOfLines={1} className="mt-1 text-[10px] font-semibold text-slate-500">
-                    {place.address || place.category || '주소 없음'}
+                    {place.detail || '—'}
                   </Text>
                   <View className="mt-1 flex-row items-center gap-1.5">
                     <View className="rounded-md bg-[#B4FAF0] px-1.5 py-0.5">

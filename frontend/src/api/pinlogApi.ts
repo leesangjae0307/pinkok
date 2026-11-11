@@ -73,6 +73,15 @@ export async function fetchPinlogs(tripId: number): Promise<Pinlog[]> {
   return data;
 }
 
+/**
+ * 내가 참여 중인 모든 여행에서 완성된(DONE) PinLog 만 최신순으로 받는다.
+ * 여행 화면에서 쓰는 tripId 방식과 달리 만드는 중·실패한 것은 오지 않는다.
+ */
+export async function fetchMyPinlogs(): Promise<Pinlog[]> {
+  const { data } = await api.get<Pinlog[]>('/pinlogs', { params: { mine: true } });
+  return data;
+}
+
 export async function fetchPinlog(pinlogId: number): Promise<Pinlog> {
   const { data } = await api.get<Pinlog>(`/pinlogs/${pinlogId}`);
   return data;

@@ -87,7 +87,13 @@ import {
   relativeTime,
 } from '../../api/notificationApi';
 import { BASE_URL, errorMessage } from '../../api/axios';
-import { onNotificationOpened, startPush, stopPush, type PushTarget } from '../../services/push';
+import {
+  onForegroundMessage,
+  onNotificationOpened,
+  startPush,
+  stopPush,
+  type PushTarget,
+} from '../../services/push';
 import { TRAVEL_STYLES, travelStyleLabel } from '../../constants';
 import {
   AvatarSource,
@@ -541,6 +547,20 @@ function useAppState(me: Me, onLogout: () => void) {
     [],
   );
 
+  /**
+   * 앱이 켜져 있는 동안 온 푸시. 이때는 안드로이드가 알림을 띄워주지 않으므로
+   * 앱이 직접 알려준다. 알림함 배지도 같이 맞춘다.
+   */
+  useEffect(
+    () =>
+      onForegroundMessage((title, body) => {
+        showToast(body ? `${title} · ${body}` : title);
+        reloadNotifications();
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   // 핀로그 탭은 고른 여행이 바뀔 때마다 그 여행의 완성본을 다시 받는다.
   useEffect(() => {
     if (pinLogTrip) reloadVlogClips(pinLogTrip.id);
@@ -549,22 +569,18 @@ function useAppState(me: Me, onLogout: () => void) {
 
   /** 프로필 집계를 다시 받는다. 기록을 남기거나 여행이 늘면 숫자가 달라진다. */
   const reloadProfileStats = useCallback(async () => {
-    if (trips.length === 0) {
-      setProfileStats(EMPTY_PROFILE_STATS);
-      return;
-    }
     setIsProfileStatsLoading(true);
     try {
-      setProfileStats(await loadProfileStats(trips, me.id));
+      setProfileStats(await loadProfileStats());
     } catch {
       // 집계는 보조 정보라 실패해도 화면을 막지 않는다. 비어 있는 상태로 둔다.
       setProfileStats(EMPTY_PROFILE_STATS);
     } finally {
       setIsProfileStatsLoading(false);
     }
-  }, [trips, me.id]);
+  }, []);
 
-  // 프로필 탭을 열 때만 모은다. 여행 수만큼 요청이 늘어서 항상 받아두지 않는다.
+  // 프로필 탭을 열 때 받는다. 다른 탭에서 기록을 남겨도 돌아오면 숫자가 맞는다.
   useEffect(() => {
     if (activeTab === 'profile') reloadProfileStats();
   }, [activeTab, reloadProfileStats]);
@@ -613,28 +629,31 @@ function useAppState(me: Me, onLogout: () => void) {
    * 지우는 건 안 된다. 서버가 plannedArrivalTime 이 비어 있으면 "바꾸지 말라"로 읽어서,
    * 한 번 넣은 시각을 없애려면 서버 쪽 수정이 필요하다.
    */
-  const handleSetPlaceTime = async (placeId: number, time: string) => {
+  /** time 에 null 을 넣으면 넣어둔 시각을 지운다. */
+  const handleSetPlaceTime = async (placeId: number, time: string | null) => {
     if (!activeTrip) return;
     setEditingTimePlace(null);
     try {
       await updateItineraryItemTime(placeId, time);
       await loadItinerary(activeTrip.id);
-      showToast(`${time} 으로 정했어요.`);
+      showToast(time ? `${time} 으로 정했어요.` : '시각을 지웠어요.');
     } catch (e) {
       showToast(errorMessage(e, '시각을 저장하지 못했어요.'));
     }
   };
 
-  /** 핀을 고른 일자로 옮긴다. 옮기면 그 일자의 맨 뒤 순서가 된다. */
-  const handleAssignDay = async (placeId: number, dayNumber: number) => {
+  /**
+   * 핀을 고른 일자로 옮긴다. dayNumber 에 null 을 넣으면 날짜 미정으로 되돌린다.
+   */
+  const handleAssignDay = async (placeId: number, dayNumber: number | null) => {
     if (!activeTrip) return;
-    const target = itineraryDays.find((d) => d.dayNumber === dayNumber);
-    if (!target) return;
+    const target = dayNumber === null ? null : itineraryDays.find((d) => d.dayNumber === dayNumber);
+    if (target === undefined) return;
     setAssigningPlace(null);
     try {
-      await moveItineraryItemToDay(placeId, target.id);
+      await moveItineraryItemToDay(placeId, target === null ? null : target.id);
       await loadItinerary(activeTrip.id);
-      showToast(`${dayNumber}일차로 옮겼어요.`);
+      showToast(target === null ? '날짜 미정으로 되돌렸어요.' : `${dayNumber}일차로 옮겼어요.`);
     } catch (e) {
       showToast(errorMessage(e, '일자를 바꾸지 못했어요.'));
     }

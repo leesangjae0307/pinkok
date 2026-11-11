@@ -18,6 +18,7 @@ import Video from 'react-native-video';
 
 import { AvatarSource, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
 import RecordClipModal from './RecordClipModal';
+import PhotoViewerModal from './PhotoViewerModal';
 import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
 
@@ -57,6 +58,8 @@ export default function PlaceDetailModal({
   const [videoClip, setVideoClip] = useState<PlaceRecord['videoClip'] | undefined>(myExistingRecord?.videoClip);
   /** 붙인 영상을 눌러서 미리 재생 중인지. 핀로그를 만들기 전에도 확인할 수 있어야 한다. */
   const [isClipPlaying, setIsClipPlaying] = useState(false);
+  /** 크게 보고 있는 사진. 어느 기록의 몇 번째인지 함께 들고 있는다. */
+  const [viewerPhotos, setViewerPhotos] = useState<{ photos: string[]; index: number } | null>(null);
   const [memoFocused, setMemoFocused] = useState(false);
 
   // 촬영
@@ -343,9 +346,17 @@ export default function PlaceDetailModal({
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
                         {photos.map((url, idx) => (
                           <View key={`${url}-${idx}`} className="relative h-16 w-16 overflow-hidden rounded-xl border border-slate-200">
-                            <Image source={{ uri: url }} resizeMode="cover" className="h-full w-full" />
+                            {/* 붙이기 전에도 눌러서 크게 볼 수 있다. ✕ 는 위에 떠 있어 따로 눌린다. */}
+                            <Pressable
+                              onPress={() => setViewerPhotos({ photos, index: idx })}
+                              accessibilityLabel={`붙인 사진 ${idx + 1} 크게 보기`}
+                              className="h-full w-full"
+                            >
+                              <Image source={{ uri: url }} resizeMode="cover" className="h-full w-full" />
+                            </Pressable>
                             <Pressable
                               onPress={() => setPhotos((prev) => prev.filter((_, i) => i !== idx))}
+                              accessibilityLabel={`붙인 사진 ${idx + 1} 빼기`}
                               className="absolute right-0.5 top-0.5 h-4 w-4 items-center justify-center rounded-full bg-black/70"
                             >
                               <Text className="text-[9px] text-white">✕</Text>
@@ -530,12 +541,17 @@ export default function PlaceDetailModal({
                           <Text className="text-[10px] font-bold text-slate-400">사진 ({record.photos.length}장)</Text>
                           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
                             {record.photos.map((img, i) => (
-                              <Image
+                              <Pressable
                                 key={`${img}-${i}`}
-                                source={{ uri: img }}
-                                resizeMode="cover"
-                                className="h-20 w-20 rounded-xl border border-slate-200"
-                              />
+                                onPress={() => setViewerPhotos({ photos: record.photos ?? [], index: i })}
+                                accessibilityLabel={`${record.authorName} 사진 ${i + 1} 크게 보기`}
+                              >
+                                <Image
+                                  source={{ uri: img }}
+                                  resizeMode="cover"
+                                  className="h-20 w-20 rounded-xl border border-slate-200"
+                                />
+                              </Pressable>
                             ))}
                           </ScrollView>
                         </View>
@@ -587,6 +603,14 @@ export default function PlaceDetailModal({
           </View>
         </View>
       </View>
+
+      {viewerPhotos && (
+        <PhotoViewerModal
+          photos={viewerPhotos.photos}
+          initialIndex={viewerPhotos.index}
+          onClose={() => setViewerPhotos(null)}
+        />
+      )}
     </Modal>
   );
 }

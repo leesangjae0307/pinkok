@@ -1,6 +1,42 @@
 import api from './axios';
 import { Me } from './authApi';
 
+/** 프로필 집계에 쓰는 장소 한 줄. 방문·저장이 같은 모양으로 온다. */
+export interface StatPlace {
+  itineraryItemId: number;
+  tripId: number;
+  tripTitle: string;
+  placeName: string;
+  roadAddress: string | null;
+  lotAddress: string | null;
+  categoryName: string | null;
+  /** 방문 목록에만 들어 있다. 내가 그 핀에 기록을 남긴 시각. */
+  recordedAt: string | null;
+}
+
+export interface MyStats {
+  visitedCount: number;
+  savedCount: number;
+  regionCount: number;
+  /** 최신순 */
+  visited: StatPlace[];
+  /** 최신순 */
+  saved: StatPlace[];
+  /** 여행 수가 많은 순 → 가나다순 */
+  regions: { name: string; tripCount: number }[];
+  /** 많은 순. code 는 TRAVEL_STYLES 와 같은 값이다. */
+  tastes: { code: string; name: string; count: number; percent: number }[];
+}
+
+/**
+ * 내 여행 기록 집계. 방문·저장 장소, 다녀온 지역, 취향을 한 번에 준다.
+ * 세는 기준과 정렬은 서버가 정한다. 지역을 비워둔 여행과 지운 여행은 빠진다.
+ */
+export async function fetchMyStats(): Promise<MyStats> {
+  const { data } = await api.get<MyStats>('/users/me/stats');
+  return data;
+}
+
 /**
  * 이 기기의 FCM 토큰을 서버에 등록한다. 로그인했을 때와 토큰이 갱신될 때 부른다.
  *

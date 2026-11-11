@@ -29,6 +29,7 @@ export default function TripMapView() {
     handleMovePlace,
     setEditingTimePlace,
     handleDeletePlace,
+    handleSetPlaceTime,
     selectedMapPin,
     setSelectedMapPin,
     setIsTripMapOpen,
@@ -162,6 +163,7 @@ export default function TripMapView() {
         onAssignDay={setAssigningPlace}
         onMovePlace={handleMovePlace}
         onEditTime={setEditingTimePlace}
+        onClearTime={(place) => handleSetPlaceTime(place.id, null)}
         onDeletePlace={handleDeletePlace}
         selectedPlaceId={selectedMapPin?.id ?? -1}
         onSelectPlace={(place) => {

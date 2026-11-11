@@ -97,6 +97,23 @@ export async function stopPush(): Promise<void> {
   }
 }
 
+/**
+ * 앱이 켜져 있는 동안 온 푸시를 알려준다.
+ *
+ * 안드로이드는 앱이 떠 있을 때는 알림을 자동으로 띄워주지 않는다. 그래서 이때는
+ * 앱이 직접 알려줘야 한다. 여기서는 "새 알림이 왔다" 는 사실만 전하고, 화면에
+ * 어떻게 보여줄지(토스트·배지 갱신)는 받는 쪽이 정한다.
+ *
+ * 구독을 끊는 함수를 돌려준다.
+ */
+export function onForegroundMessage(handler: (title: string, body: string) => void): () => void {
+  return messaging().onMessage((message) => {
+    const title = message.notification?.title ?? '새 알림';
+    const body = message.notification?.body ?? '';
+    handler(title, body);
+  });
+}
+
 /** 알림 데이터에서 어디로 갈지 읽는다. 값이 없거나 모양이 다르면 null. */
 function toTarget(data?: Record<string, string | object>): PushTarget | null {
   const type = data?.targetType;

@@ -11,10 +11,6 @@ public interface TripTravelStyleRepository extends JpaRepository<TripTravelStyle
 
     List<TripTravelStyle> findAllByTrip_Id(Long tripId);
 
-    /** 여러 여행이 고른 테마를 한 번에 (프로필 취향 집계용). */
-    @Query("select t from TripTravelStyle t join fetch t.travelStyle where t.trip.id in :tripIds")
-    List<TripTravelStyle> findAllWithStyleByTripIds(@Param("tripIds") java.util.Collection<Long> tripIds);
-
     /** 비동기 스레드처럼 트랜잭션 밖에서 쓸 때 lazy 로딩 없이 표시명만 바로 가져온다. */
     @Query("select s.name from TripTravelStyle t join t.travelStyle s where t.trip.id = :tripId order by s.id")
     List<String> findStyleNamesByTripId(@Param("tripId") Long tripId);

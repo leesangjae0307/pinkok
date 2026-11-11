@@ -12,7 +12,7 @@ import java.util.List;
  * @param visited      내가 기록(다이어리)을 남긴 핀. 최근에 쓴 순
  * @param saved        내 여행 일정에 담긴 핀. 최근에 담은 순
  * @param regions      여행 지역별 여행 수. 많은 순, 같으면 가나다순
- * @param tastes       내 여행들이 고른 테마별 횟수와 비율(%). 많은 순
+ * @param tastes       저장한 핀들의 장소 카테고리별 개수와 비율(%). 많은 순. 카테고리 없는 핀은 빠진다
  */
 public record UserStatsResponse(
         int visitedCount,
@@ -44,6 +44,10 @@ public record UserStatsResponse(
     public record RegionEntry(String name, int tripCount) {
     }
 
+    /**
+     * @param code 카카오 큰 분류 코드(FD6, CE7, AT4 …). 코드가 없는 장소는 카테고리 이름 그대로(예: "해수욕장")
+     * @param name 화면에 보일 이름 (맛집, 카페, 관광명소 …)
+     */
     public record TasteEntry(String code, String name, int count, int percent) {
     }
 }

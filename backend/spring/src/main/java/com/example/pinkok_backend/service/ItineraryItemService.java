@@ -98,6 +98,7 @@ public class ItineraryItemService {
     public ItineraryItemResponse update(Long itemId, Long userId, ItineraryItemUpdateRequest request) {
         ItineraryItem item = getItemOrThrow(itemId);
         tripAccessGuard.requireMember(item.getTrip().getId(), userId);
+        Long oldDayId = dayIdOf(item);
 
         // dayId / plannedArrivalTime 은 "키를 보냈는지"로 판단한다. null 을 보냈으면 해제다.
         if (request.isDayIdPresent()) {
@@ -118,7 +119,11 @@ public class ItineraryItemService {
         if (request.getTransportMode() != null) item.setTransportMode(request.getTransportMode());
         if (request.getMemo() != null) item.setMemo(request.getMemo());
 
-        ItineraryItem saved = itineraryItemRepository.save(item);
+        ItineraryItem saved = itineraryItemRepository.saveAndFlush(item);
+        // 원래 있던 날짜에서 빠졌으면 그 날짜에 남은 핀들의 번호를 1 부터 다시 붙인다
+        if (oldDayId != null && !oldDayId.equals(dayIdOf(saved))) {
+            compactDay(oldDayId);
+        }
         return ItineraryItemResponse.from(saved, statsOf(saved.getTrip().getId()).get(saved.getId()));
     }
 
@@ -126,7 +131,48 @@ public class ItineraryItemService {
     public void delete(Long itemId, Long userId) {
         ItineraryItem item = getItemOrThrow(itemId);
         tripAccessGuard.requireMember(item.getTrip().getId(), userId);
+        Long dayId = dayIdOf(item);
         itineraryItemRepository.delete(item);
+        itineraryItemRepository.flush();
+        compactDay(dayId);
+    }
+
+    /**
+     * 핀이 빠진 날짜의 순서 번호를 1, 2, 3 … 으로 다시 붙인다.
+     * 안 그러면 1번 핀을 빼고 나면 2, 3 이 남고, 다시 넣을 때 4번이 되어 "2부터 시작"하는 날이 생긴다.
+     */
+    private void compactDay(Long dayId) {
+        if (dayId == null) {
+            return;
+        }
+        List<ItineraryItem> items = itineraryItemRepository.findAllByDay_IdOrderByVisitOrderAsc(dayId);
+        boolean alreadyCompact = true;
+        for (int i = 0; i < items.size(); i++) {
+            if (!Integer.valueOf(i + 1).equals(items.get(i).getVisitOrder())) {
+                alreadyCompact = false;
+                break;
+            }
+        }
+        if (!alreadyCompact) {
+            renumber(items);
+        }
+    }
+
+    /**
+     * 주어진 순서대로 1 부터 번호를 붙인다.
+     * (day_id, visit_order) 가 유니크라서, 임시로 음수를 줬다가 최종값을 주는 2단계로 바꾼다
+     * — 안 그러면 중간에 다른 핀과 순서 번호가 겹쳐서 제약조건에 걸릴 수 있다.
+     */
+    private void renumber(List<ItineraryItem> ordered) {
+        for (int i = 0; i < ordered.size(); i++) {
+            ordered.get(i).setVisitOrder(-(i + 1));
+        }
+        itineraryItemRepository.saveAllAndFlush(ordered);
+
+        for (int i = 0; i < ordered.size(); i++) {
+            ordered.get(i).setVisitOrder(i + 1);
+        }
+        itineraryItemRepository.saveAllAndFlush(ordered);
     }
 
     /**
@@ -148,15 +194,7 @@ public class ItineraryItemService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "itemIds 가 이 날짜의 핀 목록과 정확히 일치해야 합니다.");
         }
 
-        for (int i = 0; i < ids.size(); i++) {
-            byId.get(ids.get(i)).setVisitOrder(-(i + 1));
-        }
-        itineraryItemRepository.saveAllAndFlush(items);
-
-        for (int i = 0; i < ids.size(); i++) {
-            byId.get(ids.get(i)).setVisitOrder(i + 1);
-        }
-        itineraryItemRepository.saveAllAndFlush(items);
+        renumber(ids.stream().map(byId::get).toList());
 
         Map<Long, ItineraryItemResponse.Stats> stats = statsOf(day.getTrip().getId());
         return ids.stream().map(id -> ItineraryItemResponse.from(byId.get(id), stats.get(id))).toList();

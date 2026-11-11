@@ -41,6 +41,8 @@ public class FfmpegVideoComposer implements VideoComposer {
     private static final double MAX_CLIP_SECONDS = 5.0;
     /** 사진 한 장을 몇 초짜리 장면으로 만들지. */
     private static final double PHOTO_SECONDS = 2.0;
+    /** 썸네일을 뽑을 지점(초). 0초는 어두운 장면이 많아 조금 뒤를 쓴다 */
+    private static final double THUMBNAIL_SECONDS = 1.0;
 
     private final String ffmpegPath;
     private final String ffprobePath;
@@ -87,9 +89,10 @@ public class FfmpegVideoComposer implements VideoComposer {
         }
 
         concat(parts, workDir, output);
-        extractThumbnail(output, thumbnail);
+        double durationSeconds = probeDurationSeconds(output);
+        extractThumbnail(output, thumbnail, durationSeconds);
 
-        int durationMs = (int) Math.round(probeDurationSeconds(output) * 1000);
+        int durationMs = (int) Math.round(durationSeconds * 1000);
         return new Result(durationMs, width + "x" + height);
     }
 
@@ -158,9 +161,27 @@ public class FfmpegVideoComposer implements VideoComposer {
                 "클립을 이어붙이지 못했습니다");
     }
 
-    /** 완성된 영상의 첫 장면을 썸네일로 뽑는다. */
-    private void extractThumbnail(Path video, Path thumbnail) {
-        run(List.of(ffmpegPath, "-y", "-i", video.toString(),
+    /**
+     * 완성된 영상에서 썸네일 한 장을 뽑는다.
+     *
+     * <p>맨 첫 장면(0초)은 폰 영상이 어둡게 시작하는 경우가 많아 검은 화면이 되기 쉽다.
+     * 그래서 1초 지점(영상이 2초보다 짧으면 가운데)을 쓰고, 그래도 못 뽑으면 첫 장면으로 다시 시도한다.
+     */
+    private void extractThumbnail(Path video, Path thumbnail, double durationSeconds) {
+        double at = Math.min(THUMBNAIL_SECONDS, durationSeconds / 2);
+        try {
+            extractFrameAt(video, thumbnail, at);
+            if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
+                return;
+            }
+        } catch (VideoComposeException | IOException e) {
+            // 아래에서 첫 장면으로 다시 시도한다
+        }
+        extractFrameAt(video, thumbnail, 0);
+    }
+
+    private void extractFrameAt(Path video, Path thumbnail, double seconds) {
+        run(List.of(ffmpegPath, "-y", "-ss", format(seconds), "-i", video.toString(),
                 "-frames:v", "1", "-vf", "scale=480:-2", thumbnail.toString()),
                 "썸네일을 만들지 못했습니다");
     }

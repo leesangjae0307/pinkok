@@ -57,13 +57,20 @@ export const EMPTY_PROFILE_STATS: ProfileStats = {
   pinlogs: [],
 };
 
-/** 취향 코드마다 쓸 그림과 색. 이름은 서버가 보내준 것을 그대로 쓴다. */
+/**
+ * 취향 코드마다 쓸 그림과 색. 코드는 서버가 쓰는 카카오 카테고리 그룹 9종으로
+ * 고정돼 있고, 화면에 적을 이름은 서버가 보내준 name 을 그대로 쓴다.
+ */
 const TASTE_LOOK: Record<string, { icon: string; color: string }> = {
-  FOOD: { icon: '🍜', color: 'bg-[#56EADD]' },
-  CAFE: { icon: '☕', color: 'bg-[#82F0DC]' },
-  NATURE: { icon: '🌲', color: 'bg-emerald-300' },
-  SIGHT: { icon: '🎎', color: 'bg-violet-300' },
-  SHOPPING: { icon: '🛍️', color: 'bg-rose-300' },
+  FD6: { icon: '🍜', color: 'bg-[#56EADD]' }, // 맛집
+  CE7: { icon: '☕', color: 'bg-[#82F0DC]' }, // 카페
+  SEA: { icon: '🌊', color: 'bg-sky-300' }, // 바다
+  NATURE: { icon: '🌲', color: 'bg-emerald-300' }, // 자연
+  AT4: { icon: '🎎', color: 'bg-violet-300' }, // 관광명소
+  CT1: { icon: '🎭', color: 'bg-indigo-300' }, // 문화시설
+  AD5: { icon: '🛏️', color: 'bg-amber-300' }, // 숙박
+  MT1: { icon: '🛍️', color: 'bg-rose-300' }, // 쇼핑
+  ETC: { icon: '📦', color: 'bg-slate-300' }, // 기타
 };
 
 const DEFAULT_LOOK = { icon: '📍', color: 'bg-slate-300' };

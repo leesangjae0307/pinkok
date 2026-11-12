@@ -14,6 +14,8 @@ import {
   deletePinlog,
   retryPinlog,
   fetchPinlog,
+  fetchPinlogs,
+  pinlogThumbnailUrl,
   pinlogVideoUrl,
   type Pinlog,
 } from '../../../api/pinlogApi';
@@ -119,9 +121,54 @@ export default function PinLogSynthesisModal({
   const [result, setResult] = useState<SynthesizedVlog | null>(null);
   /** 지금 미리보기로 재생 중인 클립. 한 번에 하나만 돈다. */
   const [playingMediaId, setPlayingMediaId] = useState<number | null>(null);
+  /**
+   * 이 여행에 이미 만들어 둔 PinLog. 만든 직후 결과 화면에서만 지울 수 있어서
+   * 앱을 껐다 켜면 지울 길이 없었다. 클립 고르는 화면에서 바로 지우게 한다.
+   */
+  const [existingPinlogs, setExistingPinlogs] = useState<Pinlog[]>([]);
   const [isSavingToGallery, setIsSavingToGallery] = useState(false);
   /** 0~100. 서버가 Content-Length 를 주면 내려받는 동안 올라간다. */
   const [saveProgress, setSaveProgress] = useState(0);
+
+  // 이미 만든 PinLog 목록. 목록을 못 받아도 새로 만드는 데는 지장이 없어 조용히 넘긴다.
+  useEffect(() => {
+    let cancelled = false;
+    fetchPinlogs(tripId)
+      .then((list) => {
+        if (!cancelled) setExistingPinlogs(list.filter((p) => p.status === 'DONE'));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId]);
+
+  /**
+   * 만들어 둔 PinLog 를 지운다.
+   *
+   * 전에는 만든 직후 결과 화면에서만 지울 수 있어, 앱을 다시 켜면 손댈 수가 없었다.
+   */
+  const handleDeleteExisting = (pinlog: Pinlog) => {
+    Alert.alert(
+      'PinLog 삭제',
+      `'${pinlog.title ?? 'PinLog'}' 를 삭제할까요? 합성된 영상도 함께 지워집니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deletePinlog(pinlog.id);
+              setExistingPinlogs((cur) => cur.filter((p) => p.id !== pinlog.id));
+            } catch (e) {
+              Alert.alert('지우지 못했어요', apiErrorMessage(e, '잠시 후 다시 시도해 주세요.'));
+            }
+          },
+        },
+      ],
+    );
+  };
 
   /** 완성 영상을 기기 갤러리로 내린다. 서버에서 받아온 뒤 갤러리에 복사한다. */
   const handleSaveToGallery = async (pinlogId: number) => {
@@ -471,6 +518,44 @@ export default function PinLogSynthesisModal({
                     장소마다 영상 하나를 선택하세요. 선택 순서대로 가로형 PinLog가 생성됩니다.
                   </Text>
                 </View>
+
+                {/* 이미 만들어 둔 PinLog. 여기서만 지울 수 있다. */}
+                {existingPinlogs.length > 0 ? (
+                  <View className="rounded-2xl border-2 border-[#82F0DC] bg-white p-3">
+                    <Text className="text-xs font-black text-[#075953]">이미 만든 PinLog</Text>
+                    <View className="mt-2 gap-2">
+                      {existingPinlogs.map((pinlog) => (
+                        <View key={pinlog.id} className="flex-row items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                          <View style={{ width: 64, aspectRatio: 16 / 9 }} className="overflow-hidden rounded-lg bg-black">
+                            <Image
+                              source={{ uri: pinlogThumbnailUrl(pinlog) ?? '' }}
+                              resizeMode="cover"
+                              className="h-full w-full"
+                            />
+                          </View>
+                          <View className="min-w-0 flex-1">
+                            <Text numberOfLines={1} className="text-[11px] font-black text-slate-800">
+                              {pinlog.title ?? 'PinLog'}
+                            </Text>
+                            <Text className="mt-0.5 text-[9px] text-slate-500">
+                              {pinlog.createdAt.slice(0, 10).replace(/-/g, '.')}
+                              {pinlog.durationMs ? ` · ${(pinlog.durationMs / 1000).toFixed(1)}초` : ''}
+                            </Text>
+                          </View>
+                          {pinlog.mine ? (
+                            <Pressable
+                              onPress={() => handleDeleteExisting(pinlog)}
+                              accessibilityLabel={`${pinlog.title ?? 'PinLog'} 삭제`}
+                              className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 active:translate-y-0.5"
+                            >
+                              <Text className="text-[10px] font-bold text-rose-600">🗑️ 삭제</Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
 
                 {orderedPlaces.map((place, index) => {
                   const options = clipOptions.filter((o) => o.placeId === place.id);

@@ -1122,6 +1122,11 @@ function useAppState(me: Me, onLogout: () => void) {
   };
 
   /** 붙어 있던 사진·영상 파일도 서버에서 같이 지워진다. */
+  /**
+   * 기록 창은 전체화면 Modal 이라 토스트가 그 뒤에 가려진다. 실패를 알릴 길이
+   * 없어 눌러도 아무 일이 없는 것처럼 보였으므로, 실패만 Alert 로 띄운다.
+   * Alert 는 모달 위에 뜬다.
+   */
   const handleDeletePlaceRecord = async (recordId: number) => {
     const previous = placeRecords;
     setPlaceRecords((prev) => prev.filter((r) => r.id !== recordId));
@@ -1130,7 +1135,7 @@ function useAppState(me: Me, onLogout: () => void) {
       showToast('장소 기록이 삭제되었습니다.');
     } catch (e) {
       setPlaceRecords(previous);
-      showToast(errorMessage(e, '기록을 삭제하지 못했어요.'));
+      Alert.alert('기록을 삭제하지 못했어요', errorMessage(e, '잠시 후 다시 시도해 주세요.'));
     }
   };
 

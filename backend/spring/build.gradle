@@ -32,6 +32,8 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'com.mysql:mysql-connector-j'
+    // Cloud Run -> Cloud SQL 연결(cloudSqlInstance 옵션을 쓸 때만 동작, 로컬 실행에는 영향 없음)
+    runtimeOnly 'com.google.cloud.sql:mysql-socket-factory-connector-j-8:1.21.0'
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
@@ -45,4 +47,10 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+// 실행 가능한 jar(bootJar) 하나만 만든다. 일반 jar(-plain.jar)가 같이 생기면
+// Dockerfile 의 build/libs/*.jar 복사가 두 파일을 잡아 실패한다.
+jar {
+    enabled = false
 }

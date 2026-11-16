@@ -62,7 +62,8 @@ export const EMPTY_PROFILE_STATS: ProfileStats = {
  * 고정돼 있고, 화면에 적을 이름은 서버가 보내준 name 을 그대로 쓴다.
  */
 const TASTE_LOOK: Record<string, { icon: string; color: string }> = {
-  FD6: { icon: '🍜', color: 'bg-[#56EADD]' }, // 맛집
+  // 카페와 비율이 같을 때 막대가 구분되지 않아, 맛집만 따뜻한 색으로 뺀다.
+  FD6: { icon: '🍜', color: 'bg-orange-400' }, // 맛집
   CE7: { icon: '☕', color: 'bg-[#82F0DC]' }, // 카페
   SEA: { icon: '🌊', color: 'bg-sky-300' }, // 바다
   NATURE: { icon: '🌲', color: 'bg-emerald-300' }, // 자연

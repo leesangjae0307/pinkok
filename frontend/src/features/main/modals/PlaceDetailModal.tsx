@@ -90,13 +90,13 @@ export default function PlaceDetailModal({
   const handleAddPhoto = async () => {
     try {
       const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 0 });
-      if (res.didCancel) return;
+      if (res.didCancel) {return;}
       if (res.errorCode) {
         Alert.alert('사진을 열지 못했어요', res.errorMessage ?? '잠시 후 다시 시도해 주세요.');
         return;
       }
       const picked = (res.assets ?? []).map((a) => a.uri).filter((uri): uri is string => !!uri);
-      if (picked.length > 0) setPhotos((prev) => [...prev, ...picked]);
+      if (picked.length > 0) {setPhotos((prev) => [...prev, ...picked]);}
     } catch {
       Alert.alert('사진을 열지 못했어요', '잠시 후 다시 시도해 주세요.');
     }
@@ -106,13 +106,13 @@ export default function PlaceDetailModal({
   const handlePickVideo = async () => {
     try {
       const res = await launchImageLibrary({ mediaType: 'video', selectionLimit: 1 });
-      if (res.didCancel) return;
+      if (res.didCancel) {return;}
       if (res.errorCode) {
         Alert.alert('영상을 열지 못했어요', res.errorMessage ?? '잠시 후 다시 시도해 주세요.');
         return;
       }
       const asset = res.assets?.[0];
-      if (!asset?.uri) return;
+      if (!asset?.uri) {return;}
       setVideoClip({
         id: Date.now(),
         duration: asset.duration ?? 0,

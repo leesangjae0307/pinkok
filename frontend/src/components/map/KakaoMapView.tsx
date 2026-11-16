@@ -162,7 +162,7 @@ export default function KakaoMapView({
 
   /** 핀이나 선택이 바뀌면 다시 그린다. 지도가 준비되기 전에는 보내봐야 소용없다. */
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady) {return;}
     webRef.current?.injectJavaScript(`window.renderMap(${JSON.stringify(payload)}); true;`);
   }, [isReady, payload]);
 

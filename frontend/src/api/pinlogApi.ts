@@ -124,7 +124,7 @@ export async function waitForPinlog(
   const MAX_ATTEMPTS = 60;
   let latest = await fetchPinlog(pinlogId);
   for (let i = 0; i < MAX_ATTEMPTS; i += 1) {
-    if (latest.status === 'DONE' || latest.status === 'FAILED') return latest;
+    if (latest.status === 'DONE' || latest.status === 'FAILED') {return latest;}
     await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
     latest = await fetchPinlog(pinlogId);
     onProgress?.(latest);

@@ -41,7 +41,7 @@ export default function QuickPinLogCameraModal({
    * "이 장소에 영상 추가하기" 가 영영 눌리지 않는다.
    */
   useEffect(() => {
-    if (placeId == null && places.length > 0) setPlaceId(places[0].id);
+    if (placeId == null && places.length > 0) {setPlaceId(places[0].id);}
   }, [placeId, places]);
 
   const recorded = clip !== null;

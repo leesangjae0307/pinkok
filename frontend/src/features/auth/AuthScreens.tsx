@@ -417,7 +417,7 @@ function LoginScreen({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting) {return;}
 
     setIsSubmitting(true);
 
@@ -870,9 +870,9 @@ const USERNAME_PATTERN = /^[a-z0-9_]{3,30}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function usernameProblem(value: string): string | null {
-  if (USERNAME_PATTERN.test(value)) return null;
+  if (USERNAME_PATTERN.test(value)) {return null;}
 
-  if (value.length === 0) return '아이디를 입력해주세요.';
+  if (value.length === 0) {return '아이디를 입력해주세요.';}
 
   const bad = [...new Set(value.split('').filter(c => !/[a-z0-9_]/.test(c)))];
 
@@ -890,7 +890,7 @@ function usernameProblem(value: string): string | null {
     )} — 영문 소문자·숫자·밑줄(_)만 가능해요.`;
   }
 
-  if (value.length < 3) return `3자 이상이어야 해요. (지금 ${value.length}자)`;
+  if (value.length < 3) {return `3자 이상이어야 해요. (지금 ${value.length}자)`;}
 
   return `30자 이하여야 해요. (지금 ${value.length}자)`;
 }

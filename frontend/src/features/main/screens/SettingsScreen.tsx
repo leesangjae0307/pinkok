@@ -118,7 +118,6 @@ export default function SettingsScreen() {
               checked={pushNotification}
               onChange={() => {
                 setPushNotification(!pushNotification);
-                showToast(`푸시 알림이 ${!pushNotification ? '켜졌습니다' : '꺼졌습니다'}.`);
               }}
             />
           </View>
@@ -135,7 +134,6 @@ export default function SettingsScreen() {
               checked={marketingNotification}
               onChange={() => {
                 setMarketingNotification(!marketingNotification);
-                showToast(`이벤트 알림이 ${!marketingNotification ? '켜졌습니다' : '꺼졌습니다'}.`);
               }}
             />
           </View>

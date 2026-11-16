@@ -108,7 +108,7 @@ export default function PinLogSynthesisModal({
     orderedPlaces.forEach((place) => {
       const options = clipOptions.filter((o) => o.placeId === place.id);
       const preferred = options.find((o) => o.mine) || options[0];
-      if (preferred) initial[place.id] = preferred.diaryMediaId;
+      if (preferred) {initial[place.id] = preferred.diaryMediaId;}
     });
     return initial;
   });
@@ -135,7 +135,7 @@ export default function PinLogSynthesisModal({
     let cancelled = false;
     fetchPinlogs(tripId)
       .then((list) => {
-        if (!cancelled) setExistingPinlogs(list.filter((p) => p.status === 'DONE'));
+        if (!cancelled) {setExistingPinlogs(list.filter((p) => p.status === 'DONE'));}
       })
       .catch(() => {});
     return () => {
@@ -172,7 +172,7 @@ export default function PinLogSynthesisModal({
 
   /** 완성 영상을 기기 갤러리로 내린다. 서버에서 받아온 뒤 갤러리에 복사한다. */
   const handleSaveToGallery = async (pinlogId: number) => {
-    if (isSavingToGallery) return;
+    if (isSavingToGallery) {return;}
     setIsSavingToGallery(true);
     setSaveProgress(0);
     try {
@@ -227,7 +227,7 @@ export default function PinLogSynthesisModal({
    * 서버가 완성을 알려주지 않으므로 2.4초마다 다시 물어본다.
    */
   useEffect(() => {
-    if ((status !== 'QUEUED' && status !== 'PROCESSING') || pinLogId === null) return;
+    if ((status !== 'QUEUED' && status !== 'PROCESSING') || pinLogId === null) {return;}
 
     // 서버가 꺼져 응답이 아예 없을 때를 대비한 안전장치. 2.4초 × 150 ≈ 6분.
     if (pollCount >= MAX_POLLS) {
@@ -240,7 +240,7 @@ export default function PinLogSynthesisModal({
     const timer = setTimeout(async () => {
       try {
         const latest = await fetchPinlog(pinLogId);
-        if (cancelled) return;
+        if (cancelled) {return;}
         if (latest.status === 'DONE') {
           finishGeneration(latest);
           return;
@@ -255,7 +255,7 @@ export default function PinLogSynthesisModal({
         setStatus(latest.status === 'PROCESSING' ? 'PROCESSING' : 'QUEUED');
         setPollCount((c) => c + 1);
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled) {return;}
         setErrorMessage(apiErrorMessage(e, '진행 상태를 확인하지 못했어요.'));
         setStatus('FAILED');
       }
@@ -269,7 +269,7 @@ export default function PinLogSynthesisModal({
 
   /** 실패한 합성을 서버가 다시 돌리게 한다. 끝나는 건 똑같이 폴링으로 확인한다. */
   const handleRetryPinLog = async () => {
-    if (pinLogId === null) return;
+    if (pinLogId === null) {return;}
     setErrorMessage('');
     setPollCount(0);
     setStatus('QUEUED');
@@ -308,7 +308,7 @@ export default function PinLogSynthesisModal({
   };
 
   const handleDelete = async () => {
-    if (!result?.mine || pinLogId === null) return;
+    if (!result?.mine || pinLogId === null) {return;}
     try {
       await deletePinlog(pinLogId);
       setResult(null);

@@ -91,13 +91,13 @@ export default function RecordClipModal({
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         ];
         const have = await Promise.all(need.map((p) => PermissionsAndroid.check(p)));
-        if (cancelled) return;
+        if (cancelled) {return;}
         if (have.every(Boolean)) {
           setPermsOk(true);
           return;
         }
         const res = await PermissionsAndroid.requestMultiple(need);
-        if (cancelled) return;
+        if (cancelled) {return;}
         setPermsOk(need.every((p) => res[p] === PermissionsAndroid.RESULTS.GRANTED));
       } catch {
         // 권한 조회가 실패하면 막힌 상태로 둔다. 화면이 설정으로 안내한다.
@@ -109,7 +109,7 @@ export default function RecordClipModal({
   }, []);
 
   const stop = useCallback(async () => {
-    if (!isRecording) return;
+    if (!isRecording) {return;}
     setIsBusy(true);
     try {
       await camera.current?.stopRecording();
@@ -121,17 +121,17 @@ export default function RecordClipModal({
 
   /** 2초가 되면 알아서 멈춘다. */
   useEffect(() => {
-    if (!isRecording) return;
+    if (!isRecording) {return;}
     const timer = setInterval(() => {
       const ms = Date.now() - startedAt.current;
       setElapsed(ms);
-      if (ms >= MAX_MS) stop();
+      if (ms >= MAX_MS) {stop();}
     }, 50);
     return () => clearInterval(timer);
   }, [isRecording, stop]);
 
   const start = async () => {
-    if (isRecording || isBusy || !camera.current) return;
+    if (isRecording || isBusy || !camera.current) {return;}
     setNotice(null);
     setElapsed(0);
     startedAt.current = Date.now();

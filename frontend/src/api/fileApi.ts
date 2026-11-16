@@ -28,10 +28,10 @@ export interface PickedFile {
  */
 function extensionOf(type: string): string {
   const sub = type.split('/')[1];
-  if (!sub) return 'bin';
+  if (!sub) {return 'bin';}
   // image/jpeg → jpg, video/quicktime → mov 처럼 흔한 것만 따로 맞춘다.
-  if (sub === 'jpeg') return 'jpg';
-  if (sub === 'quicktime') return 'mov';
+  if (sub === 'jpeg') {return 'jpg';}
+  if (sub === 'quicktime') {return 'mov';}
   return sub.split(';')[0];
 }
 
@@ -67,7 +67,7 @@ export async function uploadFile(file: PickedFile): Promise<UploadedFile> {
  * Image 에 그대로 주면 불러오지 못하므로 BASE_URL 을 붙인다.
  */
 export function fileUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (/^https?:\/\//.test(url)) return url;
+  if (!url) {return null;}
+  if (/^https?:\/\//.test(url)) {return url;}
   return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 }

@@ -43,7 +43,6 @@ export default function ExtractTab() {
           .filter((asset) => asset.uri)
           .map((asset) => ({ uri: asset.uri as string, fileName: asset.fileName, type: asset.type })),
       );
-      showToast(`스크린샷 ${assets.length}장이 분석 대기열에 추가됐어요.`);
     }
   };
 

@@ -3,7 +3,7 @@
  * 화면(탭)들이 props 대신 useApp() 으로 꺼내 써요.
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, BackHandler } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 
 import avatarBookWinter from '../../assets/images/avatar-book-winter.png';
@@ -186,11 +186,11 @@ export function otherUserAvatar(
 ): AvatarSource {
   // 직접 올린 사진이 있으면 그게 우선이다(아바타와 둘 중 하나만 쓰인다).
   const photo = fileUrl(profileImageUrl);
-  if (photo) return photo;
+  if (photo) {return photo;}
 
   const code = avatarImageUrl?.match(/([fm][123])\.[a-z]+$/i)?.[1]?.toUpperCase();
   const local = code ? AVATAR_IMAGE_BY_SERVER_CODE[code] : undefined;
-  if (local) return local;
+  if (local) {return local;}
 
   return fileUrl(avatarImageUrl) ?? '🙂';
 }
@@ -254,7 +254,7 @@ export function toExtractedPlace(candidate: PlaceCandidate): ExtractedPlace {
 }
 
 export function avatarImageForCode(code: string | undefined | null): number | null {
-  if (!code) return null;
+  if (!code) {return null;}
   return AVATAR_IMAGE_BY_SERVER_CODE[code] ?? null;
 }
 
@@ -389,12 +389,11 @@ function useAppState(me: Me, onLogout: () => void) {
       } else if (pendingProfileAvatar.code !== selectedProfileAvatar.code || selectedProfileAvatar.photoUrl) {
         const avatars = await fetchAvatars();
         const match = avatars.find((a) => a.code === pendingProfileAvatar.code);
-        if (match) await selectAvatar(match.id);
+        if (match) {await selectAvatar(match.id);}
       }
       setSelectedProfileAvatar(pendingProfileAvatar);
       setProfileNickname(nickname);
       setIsAvatarPickerOpen(false);
-      showToast('프로필을 변경했어요.');
     } catch (e) {
       showToast(errorMessage(e, '프로필을 저장하지 못했어요.'));
     } finally {
@@ -406,7 +405,7 @@ function useAppState(me: Me, onLogout: () => void) {
   const pickProfilePhoto = async () => {
     const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
     const asset = res.assets?.[0];
-    if (res.didCancel || !asset?.uri) return;
+    if (res.didCancel || !asset?.uri) {return;}
     setIsUploadingProfilePhoto(true);
     try {
       const uploaded = await uploadFile({ uri: asset.uri, fileName: asset.fileName, type: asset.type });
@@ -428,7 +427,7 @@ function useAppState(me: Me, onLogout: () => void) {
   const unreadNotificationCount = notifications.filter((n) => !n.read).length;
 
   const showToast = (msg: string) => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
+    if (toastTimer.current) {clearTimeout(toastTimer.current);}
     setToastMessage(msg);
     toastTimer.current = setTimeout(() => setToastMessage(null), 2800);
   };
@@ -527,8 +526,8 @@ function useAppState(me: Me, onLogout: () => void) {
     let unsubscribe: (() => void) | null = null;
     let cancelled = false;
     startPush().then((off) => {
-      if (cancelled) off();
-      else unsubscribe = off;
+      if (cancelled) {off();}
+      else {unsubscribe = off;}
     });
     return () => {
       cancelled = true;
@@ -543,7 +542,7 @@ function useAppState(me: Me, onLogout: () => void) {
   useEffect(
     () => onNotificationOpened((target) => openTargetRef.current(target)),
     // 구독은 한 번만 걸고, 안에서 쓰는 최신 함수는 ref 로 읽는다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     [],
   );
 
@@ -563,8 +562,8 @@ function useAppState(me: Me, onLogout: () => void) {
 
   // 핀로그 탭은 고른 여행이 바뀔 때마다 그 여행의 완성본을 다시 받는다.
   useEffect(() => {
-    if (pinLogTrip) reloadVlogClips(pinLogTrip.id);
-    else setVlogClips([]);
+    if (pinLogTrip) {reloadVlogClips(pinLogTrip.id);}
+    else {setVlogClips([]);}
   }, [pinLogTrip, reloadVlogClips]);
 
   /** 프로필 집계를 다시 받는다. 기록을 남기거나 여행이 늘면 숫자가 달라진다. */
@@ -582,7 +581,7 @@ function useAppState(me: Me, onLogout: () => void) {
 
   // 프로필 탭을 열 때 받는다. 다른 탭에서 기록을 남겨도 돌아오면 숫자가 맞는다.
   useEffect(() => {
-    if (activeTab === 'profile') reloadProfileStats();
+    if (activeTab === 'profile') {reloadProfileStats();}
   }, [activeTab, reloadProfileStats]);
 
   /**
@@ -594,7 +593,7 @@ function useAppState(me: Me, onLogout: () => void) {
    * 날짜를 정하지 않아 "미배정 핀"으로 들어간다. 추가 뒤에는 일정을 다시 받는다.
    */
   const handleAddPlace = async (place: PlaceSearchResult): Promise<boolean> => {
-    if (!activeTrip) return false;
+    if (!activeTrip) {return false;}
     const targetDay =
       selectedDayFilter === 'all'
         ? undefined
@@ -604,11 +603,6 @@ function useAppState(me: Me, onLogout: () => void) {
       await loadItinerary(activeTrip.id);
       setTrips((cur) =>
         cur.map((t) => (t.id === activeTrip.id ? { ...t, placesCount: t.placesCount + 1 } : t)),
-      );
-      showToast(
-        targetDay
-          ? `'${place.name}'을(를) ${selectedDayFilter}일차에 추가했어요.`
-          : `'${place.name}'을(를) 지도에 추가했어요.`,
       );
       return true;
     } catch (e) {
@@ -631,12 +625,11 @@ function useAppState(me: Me, onLogout: () => void) {
    */
   /** time 에 null 을 넣으면 넣어둔 시각을 지운다. */
   const handleSetPlaceTime = async (placeId: number, time: string | null) => {
-    if (!activeTrip) return;
+    if (!activeTrip) {return;}
     setEditingTimePlace(null);
     try {
       await updateItineraryItemTime(placeId, time);
       await loadItinerary(activeTrip.id);
-      showToast(time ? `${time} 으로 정했어요.` : '시각을 지웠어요.');
     } catch (e) {
       showToast(errorMessage(e, '시각을 저장하지 못했어요.'));
     }
@@ -646,14 +639,13 @@ function useAppState(me: Me, onLogout: () => void) {
    * 핀을 고른 일자로 옮긴다. dayNumber 에 null 을 넣으면 날짜 미정으로 되돌린다.
    */
   const handleAssignDay = async (placeId: number, dayNumber: number | null) => {
-    if (!activeTrip) return;
+    if (!activeTrip) {return;}
     const target = dayNumber === null ? null : itineraryDays.find((d) => d.dayNumber === dayNumber);
-    if (target === undefined) return;
+    if (target === undefined) {return;}
     setAssigningPlace(null);
     try {
       await moveItineraryItemToDay(placeId, target === null ? null : target.id);
       await loadItinerary(activeTrip.id);
-      showToast(target === null ? '날짜 미정으로 되돌렸어요.' : `${dayNumber}일차로 옮겼어요.`);
     } catch (e) {
       showToast(errorMessage(e, '일자를 바꾸지 못했어요.'));
     }
@@ -666,16 +658,16 @@ function useAppState(me: Me, onLogout: () => void) {
    * 전체 목록을 다시 보낸다. 미배정 핀은 순서를 매기는 일자가 없어 바꿀 수 없다.
    */
   const handleMovePlace = async (placeId: number, direction: -1 | 1) => {
-    if (!activeTrip || selectedDayFilter === 'all') return;
+    if (!activeTrip || selectedDayFilter === 'all') {return;}
     const day = itineraryDays.find((d) => d.dayNumber === selectedDayFilter);
-    if (!day) return;
+    if (!day) {return;}
 
     const ordered = mapPlaces
       .filter((p) => p.day === selectedDayFilter)
       .sort((a, b) => a.order - b.order);
     const from = ordered.findIndex((p) => p.id === placeId);
     const to = from + direction;
-    if (from < 0 || to < 0 || to >= ordered.length) return;
+    if (from < 0 || to < 0 || to >= ordered.length) {return;}
 
     const next = [...ordered];
     [next[from], next[to]] = [next[to], next[from]];
@@ -695,20 +687,19 @@ function useAppState(me: Me, onLogout: () => void) {
    * 여행 시작일을 모르면(상세 조회 실패) 번호만 보낸다.
    */
   const handleAddDay = async () => {
-    if (!activeTrip || isAddingDay) return;
+    if (!activeTrip || isAddingDay) {return;}
     setIsAddingDay(true);
     try {
       const nextNumber = (tripDayNumbers[tripDayNumbers.length - 1] ?? 0) + 1;
       let visitDate: string | undefined;
       try {
         const detail = await fetchTrip(activeTrip.id);
-        if (detail.startDate) visitDate = addDays(detail.startDate, nextNumber - 1);
+        if (detail.startDate) {visitDate = addDays(detail.startDate, nextNumber - 1);}
       } catch {
         // 날짜 없이도 일자는 만들 수 있다.
       }
       await createItineraryDay(activeTrip.id, nextNumber, visitDate);
       await loadItinerary(activeTrip.id);
-      showToast(`${nextNumber}일차를 만들었어요.`);
     } catch (e) {
       showToast(errorMessage(e, '일자를 만들지 못했어요.'));
     } finally {
@@ -724,9 +715,9 @@ function useAppState(me: Me, onLogout: () => void) {
    * 고치는 API 가 없어서 다시 매길 방법이 없다.
    */
   const handleDeleteDay = (dayNumber: number) => {
-    if (!activeTrip) return;
+    if (!activeTrip) {return;}
     const target = itineraryDays.find((d) => d.dayNumber === dayNumber);
-    if (!target) return;
+    if (!target) {return;}
     const count = mapPlaces.filter((p) => p.day === dayNumber).length;
 
     Alert.alert(
@@ -745,7 +736,6 @@ function useAppState(me: Me, onLogout: () => void) {
               // 지운 일자를 보고 있었으면 더 볼 것이 없으므로 전체로 돌린다.
               setSelectedDayFilter((cur) => (cur === dayNumber ? 'all' : cur));
               await loadItinerary(activeTrip.id);
-              showToast(`${dayNumber}일차를 지웠어요.`);
             } catch (e) {
               showToast(errorMessage(e, '일자를 지우지 못했어요.'));
             }
@@ -760,7 +750,7 @@ function useAppState(me: Me, onLogout: () => void) {
    * 그 장소에 달린 팀 기록도 함께 사라지므로 개수를 세어 미리 알려준다.
    */
   const handleDeletePlace = (place: PlaceItem) => {
-    if (!activeTrip) return;
+    if (!activeTrip) {return;}
     const recordCount = placeRecords.filter((r) => r.pinId === place.id).length;
 
     Alert.alert(
@@ -779,7 +769,6 @@ function useAppState(me: Me, onLogout: () => void) {
               // 지운 핀을 보고 있었으면 상세 카드가 빈 장소를 가리키게 된다.
               setSelectedMapPin((cur) => (cur?.id === place.id ? null : cur));
               await loadItinerary(activeTrip.id);
-              showToast(`[${place.name}] 을(를) 지웠어요.`);
             } catch (e) {
               showToast(errorMessage(e, '장소를 지우지 못했어요.'));
             }
@@ -806,7 +795,7 @@ function useAppState(me: Me, onLogout: () => void) {
         .catch(() => setPlaceRecords([]));
       setItineraryDays(days);
       // 핀을 고르기 전에도 상세 카드가 하나는 떠 있어야 해서 첫 핀을 잡아둔다.
-      if (places.length > 0) setSelectedMapPin(places[0]);
+      if (places.length > 0) {setSelectedMapPin(places[0]);}
     } catch (e) {
       setMapPlaces([]);
       setItineraryDays([]);
@@ -819,7 +808,7 @@ function useAppState(me: Me, onLogout: () => void) {
   // 핀로그로 고른 여행은 지도에서 열어둔 여행과 다를 수 있다.
   // 합성 화면은 mapPlaces 를 그대로 쓰므로, 고른 여행의 일정을 여기서 받아둔다.
   useEffect(() => {
-    if (pinLogTrip) loadItinerary(pinLogTrip.id);
+    if (pinLogTrip) {loadItinerary(pinLogTrip.id);}
   }, [pinLogTrip, loadItinerary]);
 
   /**
@@ -869,7 +858,6 @@ function useAppState(me: Me, onLogout: () => void) {
         : t;
     setTrips((cur) => cur.map(apply));
     setActiveTrip((cur) => (cur ? apply(cur) : cur));
-    showToast('여행 정보를 수정했어요.');
   };
 
   /**
@@ -888,8 +876,7 @@ function useAppState(me: Me, onLogout: () => void) {
             await deleteTrip(trip.id);
             setTrips((cur) => cur.filter((t) => t.id !== trip.id));
             // 지운 여행의 지도를 보고 있었다면 목록으로 돌려보낸다.
-            if (activeTrip?.id === trip.id) setIsTripMapOpen(false);
-            showToast('여행을 삭제했어요.');
+            if (activeTrip?.id === trip.id) {setIsTripMapOpen(false);}
           } catch (e) {
             showToast(errorMessage(e, '여행을 삭제하지 못했어요.'));
           } finally {
@@ -928,7 +915,7 @@ function useAppState(me: Me, onLogout: () => void) {
       await deleteAccount(password);
     } catch (e) {
       const status = (e as { response?: { status?: number } })?.response?.status;
-      if (status === 401) return '비밀번호가 맞지 않아요.';
+      if (status === 401) {return '비밀번호가 맞지 않아요.';}
       return errorMessage(e, '탈퇴하지 못했어요.');
     }
     setIsDeleteAccountOpen(false);
@@ -973,7 +960,6 @@ function useAppState(me: Me, onLogout: () => void) {
         }
         return [mapped, ...prev];
       });
-      showToast('장소 기록이 성공적으로 저장되었습니다! 📍');
     } catch (e) {
       showToast(errorMessage(e, '기록을 저장하지 못했어요.'));
     } finally {
@@ -1000,7 +986,7 @@ function useAppState(me: Me, onLogout: () => void) {
     );
 
     const clip = record.videoClip;
-    if (!clip?.videoUrl) return photos;
+    if (!clip?.videoUrl) {return photos;}
     if (isUploaded(clip.videoUrl)) {
       return [...photos, { fileUrl: toServerPath(clip.videoUrl), durationMs: Math.round(clip.duration * 1000) }];
     }
@@ -1082,7 +1068,7 @@ function useAppState(me: Me, onLogout: () => void) {
    * 태그는 여전히 서버에 보낼 자리가 없어 화면에만 얹어 둔다.
    */
   const handleCreateTrip = async (payload: NewTripPayload) => {
-    if (isCreatingTrip) return;
+    if (isCreatingTrip) {return;}
     setIsCreatingTrip(true);
     try {
       let created = await createTrip({
@@ -1113,7 +1099,6 @@ function useAppState(me: Me, onLogout: () => void) {
       setTrips((cur) => [createdTrip, ...cur]);
       setActiveTrip(createdTrip);
       closeCreateTrip();
-      showToast(`'${payload.title}' 여행을 만들었어요.`);
     } catch (e) {
       showToast(errorMessage(e, '여행을 만들지 못했어요.'));
     } finally {
@@ -1132,7 +1117,6 @@ function useAppState(me: Me, onLogout: () => void) {
     setPlaceRecords((prev) => prev.filter((r) => r.id !== recordId));
     try {
       await deleteDiary(recordId);
-      showToast('장소 기록이 삭제되었습니다.');
     } catch (e) {
       setPlaceRecords(previous);
       Alert.alert('기록을 삭제하지 못했어요', errorMessage(e, '잠시 후 다시 시도해 주세요.'));
@@ -1149,7 +1133,6 @@ function useAppState(me: Me, onLogout: () => void) {
       selected: true,
     };
     setVlogClips((prev) => [newClip, ...prev]);
-    showToast('🎬 PinLog 브이로그가 등록되었습니다!');
   };
 
   /**
@@ -1183,14 +1166,13 @@ function useAppState(me: Me, onLogout: () => void) {
       // 서버가 끝까지 돌았는데 0곳이면 AI 가 장소를 못 찾은 것이다. 실패가 아니다.
       showToast('링크에서 장소를 찾지 못했어요.');
     } else {
-      showToast(`AI가 장소 ${candidates.length}곳을 추출했습니다!`);
     }
     return true;
   };
 
   const handleExtractSubmit = async () => {
-    if (isExtracting) return;
-    if (!inputUrl.trim() && extractImages.length === 0) return;
+    if (isExtracting) {return;}
+    if (!inputUrl.trim() && extractImages.length === 0) {return;}
     setIsExtracting(true);
     setExtractError(null);
     setExtractedPlaces([]);
@@ -1216,7 +1198,7 @@ function useAppState(me: Me, onLogout: () => void) {
    * 후보 저장만 실패한 경우는 추출을 처음부터 돌리지 않고 후보만 다시 만든다.
    */
   const handleRetryExtract = async () => {
-    if (isExtracting || lastAiRequestId === null) return;
+    if (isExtracting || lastAiRequestId === null) {return;}
     setIsExtracting(true);
     setExtractError(null);
     try {
@@ -1241,20 +1223,16 @@ function useAppState(me: Me, onLogout: () => void) {
 
   /** 체크한 후보를 여행에 핀으로 추가한다. 좌표를 못 찾은 것은 서버가 건너뛴다. */
   const handleAddPlaceToTrip = async (tripId: number) => {
-    const targetTrip = trips.find((t) => t.id === tripId);
-    if (selectedExtractedPlaceIds.length === 0) return;
+    if (selectedExtractedPlaceIds.length === 0) {return;}
     try {
-      const { addedCount, skippedCount } = await addCandidatesToTrip(tripId, selectedExtractedPlaceIds);
-      setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, placesCount: t.placesCount + addedCount } : t)));
+      await addCandidatesToTrip(tripId, selectedExtractedPlaceIds);
+      // 몇 개가 들어갔는지 앱에서 세지 않는다. 서버가 좌표를 못 찾은 후보를 건너뛰므로
+      // 고른 개수와 실제 개수가 다를 수 있어, 목록을 다시 받아 그대로 쓴다.
+      await reloadTrips();
       setSelectedTripForExtract(tripId);
       setIsTripPickerOpen(false);
-      showToast(
-        skippedCount > 0
-          ? `${addedCount}개를 '${targetTrip?.title}'에 추가했어요. ${skippedCount}개는 지도에서 찾지 못했어요.`
-          : `선택한 ${addedCount}개 장소를 '${targetTrip?.title}'에 추가했어요.`,
-      );
       // 지금 보고 있는 여행이면 지도에도 바로 반영한다.
-      if (activeTrip?.id === tripId) loadItinerary(tripId);
+      if (activeTrip?.id === tripId) {loadItinerary(tripId);}
     } catch (e) {
       showToast(errorMessage(e, '장소를 추가하지 못했어요.'));
     }
@@ -1262,18 +1240,15 @@ function useAppState(me: Me, onLogout: () => void) {
 
   const handleClearCache = () => {
     setCacheSize('0.0 MB');
-    showToast('임시 저장 데이터 및 캐시가 깔끔하게 정리되었습니다 🧹');
   };
 
   const handleClearAllTrips = () => {
     setTrips([]);
-    showToast('여행 목록이 모두 지워졌습니다. 첫 여행을 생성해보세요!');
   };
 
   // 목록은 이제 서버가 갖고 있으므로 샘플을 되돌리는 대신 다시 받아온다.
   const handleResetTrips = async () => {
     await reloadTrips();
-    showToast('여행 목록을 다시 불러왔어요.');
   };
 
   const handleMarkAllNotificationsRead = async () => {
@@ -1328,7 +1303,7 @@ function useAppState(me: Me, onLogout: () => void) {
   const handleNotificationSelect = (notification: NotificationItem) => {
     setNotifications((cur) => cur.map((n) => (n.id === notification.id ? { ...n, read: true } : n)));
     // 읽음 표시가 실패해도 화면 이동까지 막을 이유는 없다. 다음 조회 때 다시 안 읽음으로 보일 뿐이다.
-    if (!notification.read) markNotificationRead(notification.id).catch(() => {});
+    if (!notification.read) {markNotificationRead(notification.id).catch(() => {});}
 
     if (notification.type === 'TRIP_INVITED' && notification.targetType === 'INVITATION') {
       setFocusedInvitationId(notification.targetId);
@@ -1347,7 +1322,7 @@ function useAppState(me: Me, onLogout: () => void) {
     }
     if (notification.type === 'TRIP_PLACE_ADDED') {
       const target = trips.find((t) => t.id === notification.targetId);
-      if (target) setActiveTrip(target);
+      if (target) {setActiveTrip(target);}
       setIsNotificationOpen(false);
       setIsSettingsOpen(false);
       setIsTripMapOpen(true);
@@ -1362,7 +1337,6 @@ function useAppState(me: Me, onLogout: () => void) {
   const handleInviteToTrip = async (tripId: number, nickname: string, loginId: string) => {
     try {
       await inviteToTrip(tripId, loginId);
-      showToast(`${nickname}(@${loginId})님에게 여행 초대를 보냈어요.`);
     } catch (e) {
       showToast(errorMessage(e, '초대를 보내지 못했어요.'));
     }
@@ -1370,13 +1344,12 @@ function useAppState(me: Me, onLogout: () => void) {
 
   /** 수락하면 그 여행의 팀원이 되므로 목록을 다시 받아와야 새 여행이 보인다. */
   const handleAcceptInvitation = async (invitation: TripInvitation) => {
-    if (respondingInvitationId !== null) return;
+    if (respondingInvitationId !== null) {return;}
     setRespondingInvitationId(invitation.id);
     try {
       await acceptInvitation(invitation.id);
       setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
       setFocusedInvitationId(null);
-      showToast(`'${invitation.tripTitle}' 초대를 수락했어요.`);
       await reloadTrips();
     } catch (e) {
       showToast(errorMessage(e, '초대를 수락하지 못했어요.'));
@@ -1386,13 +1359,12 @@ function useAppState(me: Me, onLogout: () => void) {
   };
 
   const handleRejectInvitation = async (invitation: TripInvitation) => {
-    if (respondingInvitationId !== null) return;
+    if (respondingInvitationId !== null) {return;}
     setRespondingInvitationId(invitation.id);
     try {
       await rejectInvitation(invitation.id);
       setTripInvitations((cur) => cur.filter((i) => i.id !== invitation.id));
       setFocusedInvitationId(null);
-      showToast(`'${invitation.tripTitle}' 초대를 거절했어요.`);
     } catch (e) {
       showToast(errorMessage(e, '초대를 거절하지 못했어요.'));
     } finally {
@@ -1408,7 +1380,7 @@ function useAppState(me: Me, onLogout: () => void) {
    * 다시 받아 바뀐 순서를 보여준다.
    */
   const handleOptimizeRoute = async () => {
-    if (isOptimizingRoute || !activeTrip) return;
+    if (isOptimizingRoute || !activeTrip) {return;}
     if (mapPlaces.length < 2) {
       showToast('최적화하려면 장소가 두 곳 이상 필요해요.');
       return;
@@ -1427,20 +1399,13 @@ function useAppState(me: Me, onLogout: () => void) {
           { cancelable: true, onDismiss: () => resolve(false) },
         );
       });
-      if (!ok) return;
+      if (!ok) {return;}
     }
     setIsOptimizingRoute(true);
-    showToast('AI가 이동 거리와 방문 시간을 계산하고 있어요.');
     try {
       const proposal = await createRouteOptimization(activeTrip.id);
       await applyRouteOptimization(proposal.id);
       await loadItinerary(activeTrip.id);
-      const saved = savedDistanceM(proposal);
-      showToast(
-        saved > 0
-          ? `동선을 정리했어요. 약 ${(saved / 1000).toFixed(1)}km 짧아졌어요.`
-          : '가장 효율적인 동선으로 장소 순서를 정리했어요.',
-      );
     } catch (e) {
       showToast(errorMessage(e, '동선을 최적화하지 못했어요.'));
     } finally {
@@ -1455,7 +1420,7 @@ function useAppState(me: Me, onLogout: () => void) {
    * place-candidates 가 아니라 /recommendations 에서 읽는다.
    */
   const handleAiTripRecommendation = async () => {
-    if (isExtracting) return;
+    if (isExtracting) {return;}
     const trip = activeTrip ?? trips[0];
     if (!trip) {
       showToast('먼저 여행을 만들어 주세요.');
@@ -1485,7 +1450,6 @@ function useAppState(me: Me, onLogout: () => void) {
       const list = await fetchRecommendations(trip.id);
       const suggested = list.filter((r) => r.status === 'SUGGESTED');
       setRecommendations(suggested);
-      showToast(`조건에 맞는 장소 ${suggested.length}곳을 추천했어요.`);
     } catch (e) {
       showToast(errorMessage(e, '추천을 받지 못했어요.'));
     } finally {
@@ -1498,8 +1462,7 @@ function useAppState(me: Me, onLogout: () => void) {
     try {
       await acceptRecommendation(recommendationId);
       setRecommendations((cur) => cur.filter((r) => r.id !== recommendationId));
-      showToast('추천 장소를 일정에 추가했어요.');
-      if (activeTrip) loadItinerary(activeTrip.id);
+      if (activeTrip) {loadItinerary(activeTrip.id);}
     } catch (e) {
       showToast(errorMessage(e, '추천 장소를 추가하지 못했어요.'));
     }
@@ -1515,6 +1478,49 @@ function useAppState(me: Me, onLogout: () => void) {
       showToast(errorMessage(e, '추천을 거절하지 못했어요.'));
     }
   };
+
+  /**
+   * 안드로이드 하드웨어 뒤로가기.
+   *
+   * 아무도 받지 않으면 안드로이드가 바로 앱을 닫아버려서, 화면 하나만 보고 있어도
+   * 통째로 꺼졌다. 덮고 있는 화면을 위에서부터 하나씩 걷어내고, 더 걷어낼 게
+   * 없을 때만 종료할지 물어본다.
+   *
+   * 모달(RN Modal)은 저마다 onRequestClose 로 뒤로가기를 직접 받으므로 여기 없다.
+   * 여기서 다루는 건 탭 위를 덮는 보통 화면들이다.
+   */
+  useEffect(() => {
+    const onBack = () => {
+      if (isCreateTripOpen) {
+        closeCreateTrip();
+        return true;
+      }
+      if (isNotificationOpen) {
+        setIsNotificationOpen(false);
+        return true;
+      }
+      if (isSettingsOpen) {
+        setIsSettingsOpen(false);
+        return true;
+      }
+      if (isTripMapOpen) {
+        setIsTripMapOpen(false);
+        return true;
+      }
+      if (activeTab !== 'home') {
+        setActiveTab('home');
+        return true;
+      }
+      Alert.alert('앱을 종료할까요?', '', [
+        { text: '취소', style: 'cancel' },
+        { text: '종료', style: 'destructive', onPress: () => BackHandler.exitApp() },
+      ]);
+      return true;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => sub.remove();
+  }, [activeTab, isCreateTripOpen, isNotificationOpen, isSettingsOpen, isTripMapOpen, closeCreateTrip]);
 
   return {
     /** 로그인한 실제 사용자. 목업이 아니다. */
@@ -1670,6 +1676,6 @@ export function AppProvider({
 
 export function useApp(): AppState {
   const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used inside <AppProvider>');
+  if (!ctx) {throw new Error('useApp must be used inside <AppProvider>');}
   return ctx;
 }

@@ -113,9 +113,9 @@ export function PixelPressable({
         const showShadow = !!shadowColor && !disabled && !(pressed && pressEffect === 'shift');
         let transform: ViewStyle['transform'];
         if (pressed && !disabled) {
-          if (pressEffect === 'shift') transform = [{ translateX: offset - 1 }, { translateY: offset - 1 }];
-          if (pressEffect === 'down') transform = [{ translateY: 2 }];
-          if (pressEffect === 'scale') transform = [{ scale: 0.95 }];
+          if (pressEffect === 'shift') {transform = [{ translateX: offset - 1 }, { translateY: offset - 1 }];}
+          if (pressEffect === 'down') {transform = [{ translateY: 2 }];}
+          if (pressEffect === 'scale') {transform = [{ scale: 0.95 }];}
         }
         return (
           <>

@@ -129,9 +129,9 @@ export default function TripsBottomSheet({
         onPanResponderRelease: () => {
           // 가까운 단계로 스냅: 접힘(25%) / 중간(50%) / 최대(78%)
           const h = heightRef.current;
-          if (h < 36) onChangeRef.current(25);
-          else if (h > 62) onChangeRef.current(78);
-          else onChangeRef.current(50);
+          if (h < 36) {onChangeRef.current(25);}
+          else if (h > 62) {onChangeRef.current(78);}
+          else {onChangeRef.current(50);}
         },
         onPanResponderTerminationRequest: () => false,
       }),

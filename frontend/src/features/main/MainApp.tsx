@@ -34,7 +34,7 @@ import { AvatarPickerModal, ClipPlaybackModal, PasswordModal, ProfileDetailModal
 function Toast() {
   const insets = useSafeAreaInsets();
   const { toastMessage } = useApp();
-  if (!toastMessage) return null;
+  if (!toastMessage) {return null;}
   return (
     <AnimatedLoop
       kind="bounceSmall"

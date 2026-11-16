@@ -16,7 +16,7 @@ import { avatarSilverBucket, profileAvatarSource, useApp } from '../AppContext';
 /** 목업 date 문자열('2026.10.12 - 10.15')에서 일수를 계산한다. 서버 연동 시 startDate/endDate 로 대체. */
 function tripDayCount(date: string): number {
   const nums = date.match(/\d+/g)?.map(Number) ?? [];
-  if (nums.length < 5) return 1;
+  if (nums.length < 5) {return 1;}
   const [year, startMonth, startDay, endMonth, endDay] = nums;
   const diff = new Date(year, endMonth - 1, endDay).getTime() - new Date(year, startMonth - 1, startDay).getTime();
   return Math.round(diff / 86400000) + 1;

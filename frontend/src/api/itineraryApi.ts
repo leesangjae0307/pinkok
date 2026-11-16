@@ -165,7 +165,7 @@ const TRANSIT_BY_MODE: Record<string, { type: TransitInfo['type']; label: string
 
 /** 'HH:mm:ss' → 'HH:mm'. 서버가 초를 빼고 줄 때도 있어 그대로 흘려보낸다. */
 function timeLabel(value: string | null): string | undefined {
-  if (!value) return undefined;
+  if (!value) {return undefined;}
   return value.slice(0, 5);
 }
 

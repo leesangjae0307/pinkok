@@ -87,16 +87,16 @@ const COMPANION_TAGS: Record<string, string> = {
 
 /** 목업과 같은 '2026.10.12 - 10.15'. 끝 날짜는 연도를 빼고 월·일만 붙인다. */
 export function tripDateLabel(startDate: string | null, endDate: string | null): string {
-  if (!startDate) return '날짜 미정';
+  if (!startDate) {return '날짜 미정';}
   const start = startDate.replace(/-/g, '.');
-  if (!endDate) return start;
+  if (!endDate) {return start;}
   return `${start} - ${endDate.slice(5).replace('-', '.')}`;
 }
 
 export function tripDDayLabel(startDate: string | null): string {
-  if (!startDate) return 'D-?';
+  if (!startDate) {return 'D-?';}
   const days = daysBetween(toYmd(new Date()), startDate);
-  if (days > 0) return `D-${days}`;
+  if (days > 0) {return `D-${days}`;}
   return days === 0 ? 'D-DAY' : `D+${-days}`;
 }
 

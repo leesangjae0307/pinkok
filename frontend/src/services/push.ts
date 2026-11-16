@@ -29,13 +29,13 @@ export interface PushTarget {
  * 그 아래 버전은 설치만 하면 되므로 묻지 않는다.
  */
 export async function ensureNotificationPermission(): Promise<boolean> {
-  if (Platform.OS !== 'android') return true;
-  if (Platform.Version < 33) return true;
+  if (Platform.OS !== 'android') {return true;}
+  if (Platform.Version < 33) {return true;}
 
   const already = await PermissionsAndroid.check(
     PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
   );
-  if (already) return true;
+  if (already) {return true;}
 
   const result = await PermissionsAndroid.request(
     PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
@@ -52,11 +52,11 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 async function currentToken(): Promise<string | null> {
   try {
     const granted = await ensureNotificationPermission();
-    if (!granted) return null;
+    if (!granted) {return null;}
     const token = await messaging().getToken();
     // Firebase 콘솔에서 이 기기로 테스트 알림을 쏘려면 토큰이 필요하다.
     // 기기를 가리키는 값이라 개발 빌드에서만 찍는다.
-    if (__DEV__) console.log('[FCM] token:', token);
+    if (__DEV__) {console.log('[FCM] token:', token);}
     return token;
   } catch {
     // Firebase 설정(google-services.json)이 없는 빌드에서도 앱은 돌아가야 한다.
@@ -117,7 +117,7 @@ export function onForegroundMessage(handler: (title: string, body: string) => vo
 /** 알림 데이터에서 어디로 갈지 읽는다. 값이 없거나 모양이 다르면 null. */
 function toTarget(data?: Record<string, string | object>): PushTarget | null {
   const type = data?.targetType;
-  if (typeof type !== 'string' || type.length === 0) return null;
+  if (typeof type !== 'string' || type.length === 0) {return null;}
   const rawId = data?.targetId;
   const id = typeof rawId === 'string' ? Number(rawId) : NaN;
   return { targetType: type, targetId: Number.isFinite(id) ? id : null };
@@ -138,9 +138,9 @@ export function onNotificationOpened(handler: (target: PushTarget) => void): () 
   messaging()
     .getInitialNotification()
     .then((message) => {
-      if (cancelled || !message) return;
+      if (cancelled || !message) {return;}
       const target = toTarget(message.data);
-      if (target) handler(target);
+      if (target) {handler(target);}
     })
     .catch(() => {
       // 알림으로 연 게 아니면 아무 일도 없다.
@@ -148,7 +148,7 @@ export function onNotificationOpened(handler: (target: PushTarget) => void): () 
 
   const unsubscribe = messaging().onNotificationOpenedApp((message) => {
     const target = toTarget(message.data);
-    if (target) handler(target);
+    if (target) {handler(target);}
   });
 
   return () => {

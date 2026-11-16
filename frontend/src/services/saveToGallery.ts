@@ -22,7 +22,7 @@ export class GalleryPermissionError extends Error {}
 
 /** 저장에 필요한 권한을 받는다. 받을 필요가 없는 버전이면 그냥 true. */
 async function ensurePermission(): Promise<boolean> {
-  if (Platform.OS !== 'android') return true;
+  if (Platform.OS !== 'android') {return true;}
 
   if (Platform.Version >= 33) {
     const result = await PermissionsAndroid.request(
@@ -63,7 +63,7 @@ export async function savePinlogToGallery(
   onProgress?: (ratio: number) => void,
 ): Promise<void> {
   const granted = await ensurePermission();
-  if (!granted) throw new GalleryPermissionError('갤러리 접근 권한이 없어요.');
+  if (!granted) {throw new GalleryPermissionError('갤러리 접근 권한이 없어요.');}
 
   const token = tokenStore.accessToken;
   // 받은 파일 이름이 그대로 갤러리에 남으므로, 캐시 경로를 직접 정해 이름을 붙여준다.
@@ -79,7 +79,7 @@ export async function savePinlogToGallery(
     task.progress((received, total) => {
       const got = Number(received);
       const all = Number(total);
-      if (all > 0) onProgress(Math.min(1, got / all));
+      if (all > 0) {onProgress(Math.min(1, got / all));}
     });
   }
 

@@ -28,7 +28,7 @@ export const setSessionExpiredHandler = (fn: () => void) => {
 
 api.interceptors.request.use(config => {
   const token = tokenStore.accessToken;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {config.headers.Authorization = `Bearer ${token}`;}
   return config;
 });
 
@@ -89,7 +89,7 @@ export function errorMessage(
   const data = (e as AxiosError<{message?: string; errors?: Record<string, string>}>)
     ?.response?.data;
   const fields = Object.values(data?.errors ?? {}).filter(Boolean);
-  if (fields.length > 0) return fields.join('\n');
+  if (fields.length > 0) {return fields.join('\n');}
   return data?.message ?? fallback;
 }
 

@@ -42,17 +42,17 @@ export default function AddPlaceModal({
     const timer = setTimeout(() => {
       searchPlaces(q)
         .then((page) => {
-          if (cancelled) return;
+          if (cancelled) {return;}
           setResults(page.places);
           setSearchError(null);
         })
         .catch((e) => {
-          if (cancelled) return;
+          if (cancelled) {return;}
           setResults([]);
           setSearchError(errorMessage(e, '장소를 찾지 못했어요.'));
         })
         .finally(() => {
-          if (!cancelled) setIsSearching(false);
+          if (!cancelled) {setIsSearching(false);}
         });
     }, 300);
     return () => {
@@ -64,11 +64,11 @@ export default function AddPlaceModal({
   /** 같은 장소를 두 번 누르지 않도록 카카오 id 로 잠근다. */
   const handleAdd = async (place: PlaceSearchResult) => {
     const key = place.kakaoPlaceId ?? place.name;
-    if (addingId) return;
+    if (addingId) {return;}
     setAddingId(key);
     try {
       const ok = await onAdd(place);
-      if (ok) onClose();
+      if (ok) {onClose();}
     } finally {
       setAddingId(null);
     }

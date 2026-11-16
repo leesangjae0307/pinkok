@@ -127,7 +127,7 @@ export async function waitForAiRequest(id: number): Promise<AiRequest> {
   const MAX_ATTEMPTS = 180;
   let latest = await fetchAiRequest(id);
   for (let i = 0; i < MAX_ATTEMPTS; i += 1) {
-    if (latest.status === 'SUCCESS' || latest.status === 'FAILED') return latest;
+    if (latest.status === 'SUCCESS' || latest.status === 'FAILED') {return latest;}
     await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
     latest = await fetchAiRequest(id);
   }
@@ -142,6 +142,6 @@ export async function waitForAiRequest(id: number): Promise<AiRequest> {
  * 부르면 서버가 400 으로 거절하므로 이 함수는 끝난 요청에만 쓴다.
  */
 export async function loadPlaceCandidates(request: AiRequest): Promise<PlaceCandidate[]> {
-  if (request.candidatesReady === false) return createPlaceCandidates(request.id);
+  if (request.candidatesReady === false) {return createPlaceCandidates(request.id);}
   return fetchPlaceCandidates(request.id);
 }

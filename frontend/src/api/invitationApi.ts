@@ -100,8 +100,8 @@ export async function removeTripMember(tripId: number, targetUserId: number): Pr
 
 /** 목록 카드에 쓰는 '2026.10.12 - 10.15'. 날짜가 없으면 안내 문구를 돌려준다. */
 export function invitationDateLabel(startDate: string | null, endDate: string | null): string {
-  if (!startDate) return '날짜 미정';
+  if (!startDate) {return '날짜 미정';}
   const start = startDate.replace(/-/g, '.');
-  if (!endDate) return start;
+  if (!endDate) {return start;}
   return `${start} - ${endDate.slice(5).replace('-', '.')}`;
 }

@@ -49,18 +49,18 @@ export default function EditTripModal({
     let cancelled = false;
     fetchTrip(trip.id)
       .then((detail) => {
-        if (cancelled) return;
+        if (cancelled) {return;}
         setTitle(detail.title);
         setRegion(detail.region ?? '');
-        if (detail.startDate) setStartDate(detail.startDate);
-        if (detail.endDate) setEndDate(detail.endDate);
+        if (detail.startDate) {setStartDate(detail.startDate);}
+        if (detail.endDate) {setEndDate(detail.endDate);}
         setCoverImageUrl(detail.coverImageUrl ?? null);
       })
       .catch((e) => {
-        if (!cancelled) setLoadError(errorMessage(e, '여행 정보를 불러오지 못했어요.'));
+        if (!cancelled) {setLoadError(errorMessage(e, '여행 정보를 불러오지 못했어요.'));}
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) {setIsLoading(false);}
       });
     return () => {
       cancelled = true;
@@ -70,7 +70,7 @@ export default function EditTripModal({
   const canSave = title.trim().length > 0 && !isSaving;
 
   const handleSave = async () => {
-    if (!canSave) return;
+    if (!canSave) {return;}
     setIsSaving(true);
     setSaveError(null);
     // 비운 지역은 null 이 아니라 빈 문자열로 보낸다. 보내지 않으면 서버가 그대로 둔다.
@@ -81,7 +81,7 @@ export default function EditTripModal({
       endDate,
     };
     // 표지를 안 건드렸으면 보내지 않는다. 보내지 않은 필드는 서버가 그대로 둔다.
-    if (coverImageUrl) payload.coverImageUrl = coverImageUrl;
+    if (coverImageUrl) {payload.coverImageUrl = coverImageUrl;}
     try {
       await updateTrip(trip.id, payload);
       onSaved(payload);
@@ -97,7 +97,7 @@ export default function EditTripModal({
   const pickCover = async () => {
     const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
     const asset = res.assets?.[0];
-    if (res.didCancel || !asset?.uri) return;
+    if (res.didCancel || !asset?.uri) {return;}
     setIsUploadingCover(true);
     setSaveError(null);
     try {

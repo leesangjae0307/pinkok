@@ -18,7 +18,7 @@ import { PlaceItem } from '../../../data/mockData';
 function toDate(time: string | undefined): Date {
   const d = new Date();
   const parse = (value: string | undefined, fallback: number) => {
-    if (value == null || value.trim() === '') return fallback;
+    if (value == null || value.trim() === '') {return fallback;}
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
   };

@@ -110,7 +110,7 @@ export default function CreateTripScreen({
   useEffect(() => {
     fetchTravelStyles()
       .then((styles) => {
-        if (styles.length > 0) setStyleOptions(styles.map((s) => ({ code: s.code, label: s.name })));
+        if (styles.length > 0) {setStyleOptions(styles.map((s) => ({ code: s.code, label: s.name })));}
       })
       .catch(() => {
         // 상수로 그려도 코드가 같으므로 저장에는 문제가 없다.

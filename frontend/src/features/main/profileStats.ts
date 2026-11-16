@@ -78,7 +78,7 @@ const DEFAULT_LOOK = { icon: '📍', color: 'bg-slate-300' };
 
 /** '2026-11-11T10:00:00' → '2026.11.11'. 값이 없으면 빈 문자열. */
 function dateLabel(value: string | null): string {
-  if (!value) return '';
+  if (!value) {return '';}
   return value.slice(0, 10).replace(/-/g, '.');
 }
 

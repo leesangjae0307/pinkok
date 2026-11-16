@@ -72,7 +72,7 @@ export default function TeamInviteModal({
     setIsMembersLoading(true);
     fetchTripMembers(tripId)
       .then((list) => {
-        if (cancelled) return;
+        if (cancelled) {return;}
         setMembers(
           list.map((m) => ({
             id: m.me ? ME_ID : String(m.userId),
@@ -87,10 +87,10 @@ export default function TeamInviteModal({
         setLeaderId(owner ? (owner.me ? ME_ID : String(owner.userId)) : ME_ID);
       })
       .catch(() => {
-        if (!cancelled) setMembers([{ id: ME_ID, nickname: currentNickname, avatar: currentAvatarUrl }]);
+        if (!cancelled) {setMembers([{ id: ME_ID, nickname: currentNickname, avatar: currentAvatarUrl }]);}
       })
       .finally(() => {
-        if (!cancelled) setIsMembersLoading(false);
+        if (!cancelled) {setIsMembersLoading(false);}
       });
     return () => {
       cancelled = true;
@@ -125,7 +125,7 @@ export default function TeamInviteModal({
           }
         })
         .finally(() => {
-          if (!cancelled) setIsSearching(false);
+          if (!cancelled) {setIsSearching(false);}
         });
     }, 300);
     return () => {
@@ -257,7 +257,7 @@ export default function TeamInviteModal({
                           <Pressable
                             onPress={async () => {
                               setActionMemberId(null);
-                              if (!tripId || member.userId === undefined) return;
+                              if (!tripId || member.userId === undefined) {return;}
                               const previous = members;
                               setMembers((cur) => cur.filter((m) => m.id !== member.id));
                               try {

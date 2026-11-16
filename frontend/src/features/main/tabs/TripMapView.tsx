@@ -128,7 +128,7 @@ export default function TripMapView() {
               onPress={() => {
                 // PinLog 모달은 pinLogTrip 을 보고 그린다. 지도에서 바로 열 때는
                 // 핀로그 탭을 거치지 않으므로 지금 보고 있는 여행으로 맞춰준다.
-                if (activeTrip) setPinLogTrip(activeTrip);
+                if (activeTrip) {setPinLogTrip(activeTrip);}
                 setIsPinLogMakerOpen(true);
               }}
               accessibilityLabel="팀원 영상으로 PinLog 만들기"
@@ -149,7 +149,7 @@ export default function TripMapView() {
         onSelectDay={(day) => {
           setSelectedDayFilter(day);
           const matching = day === 'all' ? mapPlaces : mapPlaces.filter((p) => p.day === day);
-          if (matching.length > 0) setSelectedMapPin(matching[0]);
+          if (matching.length > 0) {setSelectedMapPin(matching[0]);}
         }}
         places={displayedMapPlaces}
         totalCount={mapPlaces.length}
@@ -168,7 +168,6 @@ export default function TripMapView() {
         selectedPlaceId={selectedMapPin?.id ?? -1}
         onSelectPlace={(place) => {
           setSelectedMapPin(place);
-          showToast(`📍 [${place.name}] 핀으로 카메라가 이동했습니다.`);
         }}
         onOpenTeamRecord={(place) => {
           setSelectedMapPin(place);

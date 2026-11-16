@@ -53,7 +53,7 @@ export default function DeleteAccountModal({
   const canSubmit = password.length > 0 && !isDeleting;
 
   const submit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit) {return;}
     setIsDeleting(true);
     setError(null);
     const message = await onConfirm(password);

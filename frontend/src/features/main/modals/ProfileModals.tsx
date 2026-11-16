@@ -67,7 +67,7 @@ export function AvatarPickerModal() {
     pickProfilePhoto,
     isUploadingProfilePhoto,
   } = useApp();
-  if (!isAvatarPickerOpen) return null;
+  if (!isAvatarPickerOpen) {return null;}
 
   return (
     <ModalBackdrop onRequestClose={() => setIsAvatarPickerOpen(false)}>
@@ -173,7 +173,7 @@ export function AvatarPickerModal() {
 export function ProfileDetailModal() {
   const insets = useSafeAreaInsets();
   const { profileDetailModal, setProfileDetailModal, profileStats, isProfileStatsLoading } = useApp();
-  if (!profileDetailModal) return null;
+  if (!profileDetailModal) {return null;}
 
   const title =
     profileDetailModal === 'visited' ? '방문한 장소' : profileDetailModal === 'saved' ? '저장한 장소' : '다녀온 지역';
@@ -252,12 +252,11 @@ export function ClipPlaybackModal() {
 
   /** 완성본을 기기 갤러리로 내린다. 합성 직후가 아니라 나중에 들어와도 저장할 수 있어야 한다. */
   const saveToGallery = async (pinlogId: number) => {
-    if (isSaving) return;
+    if (isSaving) {return;}
     setIsSaving(true);
     setSaveProgress(0);
     try {
       await savePinlogToGallery(pinlogId, (ratio) => setSaveProgress(Math.round(ratio * 100)));
-      showToast('갤러리의 PinKok 앨범에 저장했어요!');
     } catch (e) {
       showToast(
         e instanceof GalleryPermissionError
@@ -271,7 +270,7 @@ export function ClipPlaybackModal() {
     }
   };
 
-  if (!activeClipModal) return null;
+  if (!activeClipModal) {return null;}
 
   return (
     <ModalBackdrop onRequestClose={() => setActiveClipModal(null)} position="center" dimClassName="bg-slate-900/80">
@@ -347,7 +346,7 @@ export function PasswordModal() {
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
-  if (!isPasswordModalOpen) return null;
+  if (!isPasswordModalOpen) {return null;}
 
   const close = () => {
     setCurrent('');
@@ -372,7 +371,6 @@ export function PasswordModal() {
     }
     // TODO(서버 연동): 비밀번호 변경 API 가 생기면 여기서 호출하고 실패 시 error 로 보여준다.
     close();
-    showToast('비밀번호가 안전하게 변경되었습니다.');
   };
 
   const fields = [

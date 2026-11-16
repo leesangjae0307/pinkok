@@ -30,7 +30,7 @@ export default function PhotoViewerModal({
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(initialIndex);
 
-  if (photos.length === 0) return null;
+  if (photos.length === 0) {return null;}
 
   return (
     <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>

@@ -55,6 +55,7 @@
     "prettier": "2.8.8",
     "react-native-dotenv": "^5.0.0",
     "react-test-renderer": "19.0.0",
+    "sharp": "^0.35.5",
     "tailwindcss": "^3.4.19",
     "typescript": "5.0.4"
   },

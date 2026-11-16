@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  적응형 아이콘. 런처가 기기마다 다른 모양(원·둥근 네모 등)으로 잘라내므로
+  배경과 열기구를 따로 둔다. 안드로이드 8.0(API 26) 이상에서 이 파일이 쓰인다.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

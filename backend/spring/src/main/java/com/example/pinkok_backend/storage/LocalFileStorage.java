@@ -1,6 +1,7 @@
 package com.example.pinkok_backend.storage;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -10,9 +11,11 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
 /**
- * 서버가 돌아가는 컴퓨터의 폴더(uploads/)에 파일을 저장한다.
+ * 서버가 돌아가는 컴퓨터의 폴더(uploads/)에 파일을 저장한다. 로컬 개발용 (기본값).
+ * 배포 서버는 {@code file.storage=gcs} 로 {@link GcsFileStorage} 를 쓴다.
  */
 @Component
+@ConditionalOnProperty(name = "file.storage", havingValue = "local", matchIfMissing = true)
 public class LocalFileStorage implements FileStorage {
 
     public static final String URL_PREFIX = "/files/";

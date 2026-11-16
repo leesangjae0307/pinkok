@@ -2,6 +2,7 @@ package com.example.pinkok_backend.config;
 
 import com.example.pinkok_backend.storage.LocalFileStorage;
 import jakarta.servlet.MultipartConfigElement;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
@@ -20,9 +21,10 @@ public class WebConfig implements WebMvcConfigurer {
     // 한 번에 여러 개 올릴 때 합계 최대 크기
     private static final long MAX_REQUEST_SIZE = 100L * 1024 * 1024;
 
-    private final LocalFileStorage localFileStorage;
+    /** 로컬 저장소를 쓸 때만 있다. 배포 서버(Cloud Storage)에서는 앱이 버킷 주소로 파일을 바로 받는다. */
+    private final ObjectProvider<LocalFileStorage> localFileStorage;
 
-    public WebConfig(LocalFileStorage localFileStorage) {
+    public WebConfig(ObjectProvider<LocalFileStorage> localFileStorage) {
         this.localFileStorage = localFileStorage;
     }
 
@@ -32,13 +34,17 @@ public class WebConfig implements WebMvcConfigurer {
      */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        LocalFileStorage local = localFileStorage.getIfAvailable();
+        if (local == null) {
+            return;
+        }
         try {
-            Files.createDirectories(localFileStorage.getRootDir());
+            Files.createDirectories(local.getRootDir());
         } catch (IOException e) {
             throw new UncheckedIOException("업로드 폴더를 만들 수 없습니다", e);
         }
 
-        String location = localFileStorage.getRootDir().toUri().toString();
+        String location = local.getRootDir().toUri().toString();
         if (!location.endsWith("/")) {
             location += "/";
         }

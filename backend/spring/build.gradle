@@ -28,6 +28,8 @@ dependencies {
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     // 폰 푸시 알림(FCM) 발송
     implementation 'com.google.firebase:firebase-admin:9.11.0'
+    // 배포 서버(Cloud Run)의 사진·영상 저장소 (Cloud Storage). firebase-admin 이 쓰는 버전과 맞춘다
+    implementation 'com.google.cloud:google-cloud-storage:2.73.0'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     compileOnly 'org.projectlombok:lombok'
@@ -39,6 +41,8 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    // 테스트에서 진짜 Cloud Storage 대신 메모리에서 흉내 내는 가짜 저장소 (google-cloud-storage 2.73.0 과 짝)
+    testImplementation 'com.google.cloud:google-cloud-nio:0.137.0'
     testRuntimeOnly 'com.h2database:h2'
     testCompileOnly 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

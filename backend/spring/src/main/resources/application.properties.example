@@ -63,6 +63,17 @@ gemini.total-timeout-ms=300000
 pinlog.width=1280
 pinlog.height=720
 
+# ---- 사진·영상 저장소 ----
+# local(기본값): 서버 컴퓨터의 uploads/ 폴더에 저장. 로컬 개발은 이대로 두면 된다.
+# gcs: Google Cloud Storage 버킷에 저장. Cloud Run 배포 서버용 (Cloud Run 디스크는 재시작하면 비워진다).
+#      Cloud Run 서비스 계정에 버킷 쓰기 권한만 주면 되고, 키 파일은 필요 없다.
+#      버킷은 공개 읽기(allUsers - 저장소 개체 뷰어)로 둔다. 앱이 버킷 주소로 사진·영상을 바로 받는다.
+file.storage=${FILE_STORAGE:local}
+# file.upload-dir=uploads
+gcs.bucket=${GCS_BUCKET:}
+# 비워두면 https://storage.googleapis.com/<버킷> 을 쓴다. CDN 을 붙이면 그 주소를 적는다
+gcs.public-base-url=${GCS_PUBLIC_BASE_URL:}
+
 # ---- 폰 푸시 알림 (Firebase Cloud Messaging) ----
 # Firebase 콘솔 > 프로젝트 설정 > 서비스 계정 > "새 비공개 키 생성" 으로 받은 JSON 파일의 경로.
 # 이 파일은 비밀이다. 저장소 밖(예: C:/pinkok-secrets/)에 두고 절대 커밋하지 말 것.

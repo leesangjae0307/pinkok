@@ -1,15 +1,24 @@
 {
-  "hosting": {
-    "public": "public",
-    "ignore": ["firebase.json", "**/.*"],
-    "rewrites": [
-      {
-        "source": "**",
-        "run": {
-          "serviceId": "pinkok-backend",
-          "region": "asia-northeast3"
+  "hosting": [
+    {
+      "target": "api",
+      "public": "public",
+      "ignore": ["firebase.json", "**/.*"],
+      "rewrites": [
+        {
+          "source": "**",
+          "run": {
+            "serviceId": "pinkok-backend",
+            "region": "asia-northeast3"
+          }
         }
-      }
-    ]
-  }
+      ]
+    },
+    {
+      "target": "web",
+      "public": "web",
+      "ignore": ["firebase.json", "**/.*"],
+      "cleanUrls": true
+    }
+  ]
 }

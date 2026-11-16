@@ -2,6 +2,17 @@
   "projects": {
     "default": "project-2e2052e6-c31c-4c2e-86e"
   },
-  "targets": {},
+  "targets": {
+    "project-2e2052e6-c31c-4c2e-86e": {
+      "hosting": {
+        "api": [
+          "project-2e2052e6-c31c-4c2e-86e"
+        ],
+        "web": [
+          "pinkok-app"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

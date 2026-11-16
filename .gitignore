@@ -51,6 +51,10 @@ backend/spring/src/main/resources/application*.yaml
 *.jks
 *.p12
 *.pem
+*.keystore
+!**/debug.keystore
+# 배포용 서명 비밀번호가 들어 있다.
+keystore.properties
 
 # Firebase (FCM). 프로젝트마다 다르고 키가 들어 있어 올리지 않는다.
 # 팀 공용 프로젝트에서 받아 frontend/android/app/ 에 직접 넣는다.

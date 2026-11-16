@@ -60,7 +60,24 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+/**
+ * 배포용 서명 정보. android/keystore.properties 에 두고 저장소에는 올리지 않는다.
+ * 파일이 없으면 null 이 되어, 릴리스 빌드가 디버그 키로 떨어진다(개발용).
+ *
+ * keystore.properties 예시(경로는 저장소 바깥 절대경로, 역슬래시 대신 / 를 쓴다):
+ *   storeFile=D:/PinKok-keys/pinkok-release.keystore
+ *   storePassword=...
+ *   keyAlias=pinkok
+ *   keyPassword=...
+ */
+def releaseSigningProps = null
+def keystorePropsFile = rootProject.file('keystore.properties')
+if (keystorePropsFile.exists()) {
+    releaseSigningProps = new Properties()
+    keystorePropsFile.withInputStream { releaseSigningProps.load(it) }
+}
+
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -95,15 +112,25 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // 배포용 서명. 키와 비밀번호는 저장소에 두지 않고 keystore.properties 에서 읽는다.
+        // 그 파일이 없으면 블록을 아예 만들지 않아, 평소 빌드는 그대로 돌아간다.
+        if (releaseSigningProps != null) {
+            release {
+                storeFile file(releaseSigningProps['storeFile'])
+                storePassword releaseSigningProps['storePassword']
+                keyAlias releaseSigningProps['keyAlias']
+                keyPassword releaseSigningProps['keyPassword']
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // 배포용 키가 있으면 그걸로, 없으면 디버그 키로 서명한다.
+            // 디버그 키로 서명된 빌드는 스토어에 올릴 수 없으니 배포 전에 키를 넣어야 한다.
+            signingConfig releaseSigningProps != null ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

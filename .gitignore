@@ -14,6 +14,9 @@ backend/spring/src/main/resources/application.properties
 firebase-service-account*.json
 backend/spring/secrets/
 
+# Firebase Hosting 배포 캐시
+backend/hosting/.firebase/
+
 # 업로드된 사진·영상 (로컬 저장소)
 backend/spring/uploads/
 

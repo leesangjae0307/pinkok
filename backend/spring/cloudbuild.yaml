@@ -1,0 +1,51 @@
+# Cloud Build 자동 배포 설정
+#
+# backend/develop 브랜치에 코드가 올라오면(PR 머지) Cloud Build 트리거가 이 파일대로
+#   1) backend/spring/Dockerfile 로 이미지를 만들고
+#   2) Artifact Registry 에 올린 뒤
+#   3) Cloud Run(pinkok-backend)에 새 버전으로 배포한다.
+#
+# 환경변수·메모리·CPU 같은 Cloud Run 설정은 건드리지 않는다 (이미지만 바꾼다).
+# 트리거의 "Cloud Build 구성 파일 위치"는 backend/spring/cloudbuild.yaml 로 지정한다.
+
+substitutions:
+  _SERVICE: pinkok-backend
+  _REGION: asia-northeast3
+  # gcloud run deploy --source 로 처음 배포하면 자동으로 생기는 저장소 이름
+  _REPOSITORY: cloud-run-source-deploy
+
+steps:
+  # 1) 이미지 빌드 (저장소 루트에서 실행되므로 backend/spring 폴더를 빌드 위치로 준다)
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:$COMMIT_SHA
+      - backend/spring
+
+  # 2) 이미지 올리기
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:$COMMIT_SHA
+
+  # 3) Cloud Run 에 새 버전 배포 (기존 환경변수·리소스 설정은 그대로 유지된다)
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:$COMMIT_SHA
+      - --region=${_REGION}
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:$COMMIT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1200s

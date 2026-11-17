@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
- * FFmpeg 로 영상의 첫 장면과 길이를 뽑는다.
+ * FFmpeg 로 영상의 썸네일 한 장면과 길이를 뽑는다.
  *
  * <p>업로드 도중에 불리므로 <b>실패해도 예외를 던지지 않는다.</b> FFmpeg 가 깔려 있지 않은 환경에서도
  * 영상 업로드 자체는 되어야 하기 때문이다 (그 경우 썸네일만 없는 상태가 된다).
@@ -39,12 +39,36 @@ public class FfmpegVideoProbe implements VideoProbe {
 
     @Override
     public Optional<byte[]> firstFrame(Path video) {
+        return frameAt(video, durationMs(video).orElse(null));
+    }
+
+    /**
+     * 업로드할 때 쓰는 쪽. 길이를 먼저 구해서 썸네일 지점을 한 번에 고른다.
+     * 예전에는 "1초 지점 시도 → 영상이 1초보다 짧으면 실패 → 0초로 다시"였어서 FFmpeg 가 두 번 돌 때가 있었다.
+     */
+    @Override
+    public Result probe(Path video) {
+        Optional<Integer> duration = durationMs(video);
+        return new Result(frameAt(video, duration.orElse(null)), duration);
+    }
+
+    /**
+     * 썸네일 한 장을 뽑는다. 맨 첫 장면(0초)은 까맣게 시작하는 폰 영상이 많아서 1초 지점을 쓰고,
+     * 영상이 2초보다 짧으면 가운데를 쓴다. 길이를 모르면 1초 → 0초 순서로 시도한다.
+     */
+    private Optional<byte[]> frameAt(Path video, Integer durationMs) {
         Path thumbnail = null;
         try {
             thumbnail = Files.createTempFile("thumb-", ".jpg");
-            // -ss 1 : 맨 첫 프레임은 까맣게 시작하는 영상이 많아서 1초 지점을 쓴다.
-            //         영상이 1초보다 짧으면 아무것도 안 나오므로, 그때는 맨 앞으로 다시 시도한다.
-            if (!extractFrame(video, thumbnail, "1") && !extractFrame(video, thumbnail, "0")) {
+            boolean extracted;
+            if (durationMs != null) {
+                double seconds = Math.min(1.0, durationMs / 2000.0);
+                extracted = extractFrame(video, thumbnail, String.format(java.util.Locale.ROOT, "%.3f", seconds))
+                        || extractFrame(video, thumbnail, "0");
+            } else {
+                extracted = extractFrame(video, thumbnail, "1") || extractFrame(video, thumbnail, "0");
+            }
+            if (!extracted) {
                 return Optional.empty();
             }
             byte[] bytes = Files.readAllBytes(thumbnail);

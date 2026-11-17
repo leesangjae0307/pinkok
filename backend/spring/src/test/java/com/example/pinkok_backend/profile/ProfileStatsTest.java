@@ -316,13 +316,47 @@ class ProfileStatsTest {
         addPin(me, tripId, null, "우도", null, "여행 > 섬 > 섬(내륙)");                  // 바다
         addPin(me, tripId, null, "바다뷰 카페", "CE7", "음식점 > 카페 > 오션뷰카페");     // 카페 (코드 우선)
         addPin(me, tripId, null, "테마파크", "AT4", "여행 > 관광,명소 > 테마파크");      // 관광명소
-        addPin(me, tripId, null, "공영주차장", "PK6", "교통,수송 > 주차장");              // 기타
-        addPin(me, tripId, null, "공인중개사", "AG2", "부동산 > 중개업소");              // 기타 (부동산 ≠ 산)
+        addPin(me, tripId, null, "공영주차장", "PK6", "교통,수송 > 주차장");              // 기타 → 취향에서 빠짐
+        addPin(me, tripId, null, "공인중개사", "AG2", "부동산 > 중개업소");              // 기타 (부동산 ≠ 산) → 빠짐
 
         String json = getJson(me, "/users/me/stats");
         assertThat((List<String>) JsonPath.read(json, "$.tastes[*].code"))
-                .containsExactly("ETC", "NATURE", "SEA", "AT4", "CE7");
-        assertThat((List<Integer>) JsonPath.read(json, "$.tastes[*].count")).containsExactly(2, 2, 2, 1, 1);
+                .containsExactly("NATURE", "SEA", "AT4", "CE7");
+        assertThat((List<Integer>) JsonPath.read(json, "$.tastes[*].count")).containsExactly(2, 2, 1, 1);
+        // 기타를 뺀 6개 기준: 2/6 = 33%, 1/6 = 17%
+        assertThat((List<Integer>) JsonPath.read(json, "$.tastes[*].percent")).containsExactly(33, 33, 17, 17);
+    }
+
+    @Test
+    @DisplayName("취향 분류 - 카카오가 큰 분류 코드를 안 붙인 장소는 카테고리 경로 첫 단계로 분류한다")
+    void tasteCategoriesWithoutGroupCode() throws Exception {
+        String me = signupAndLogin("gamjieun");
+        Long tripId = createTrip(me, "부산", "부산");
+        addPin(me, tripId, null, "감천문화마을", null, "여행 > 관광,명소");                 // 관광명소
+        addPin(me, tripId, null, "흰여울문화마을", null, "여행 > 관광,명소 > 테마거리");   // 관광명소
+        addPin(me, tripId, null, "부산시립미술관", null, "문화,예술 > 문화시설 > 미술관");  // 문화시설
+        addPin(me, tripId, null, "모모스커피", null, "음식점 > 카페 > 커피전문점");        // 카페
+        addPin(me, tripId, null, "바다횟집", null, "음식점 > 한식 > 해물,생선");           // 맛집 (이름에 바다가 있어도)
+        addPin(me, tripId, null, "부평깡통시장", null, "가정,생활 > 시장 > 전통시장");     // 쇼핑
+        addPin(me, tripId, null, "해운대해수욕장", null, "여행 > 관광,명소 > 해수욕장");   // 바다 (관광명소보다 먼저)
+        addPin(me, tripId, null, "동네 세탁소", null, "서비스,산업 > 세탁소");             // 기타 → 빠짐
+
+        String json = getJson(me, "/users/me/stats");
+        assertThat((List<String>) JsonPath.read(json, "$.tastes[*].code"))
+                .containsExactly("AT4", "CE7", "CT1", "FD6", "MT1", "SEA");
+        assertThat((List<Integer>) JsonPath.read(json, "$.tastes[*].count")).containsExactly(2, 1, 1, 1, 1, 1);
+    }
+
+    @Test
+    @DisplayName("취향 분류 - 저장한 장소가 전부 기타면 취향은 빈 목록")
+    void tasteOnlyEtc() throws Exception {
+        String me = signupAndLogin("gamjieun");
+        Long tripId = createTrip(me, "부산", "부산");
+        addPin(me, tripId, null, "공영주차장", "PK6", "교통,수송 > 주차장");
+
+        String json = getJson(me, "/users/me/stats");
+        assertThat((Integer) JsonPath.read(json, "$.savedCount")).isEqualTo(1);
+        assertThat((List<?>) JsonPath.read(json, "$.tastes")).isEmpty();
     }
 
     @Test

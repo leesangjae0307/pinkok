@@ -101,7 +101,8 @@ public class UserStatsService {
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (ItineraryItem pin : pins) {
             Category category = categoryOf(pin.getPlace());
-            if (category != null) {
+            // "기타"는 취향으로 보여줄 의미가 없어서 뺀다 (비율도 나머지끼리 다시 계산된다)
+            if (category != null && category != ETC) {
                 names.putIfAbsent(category.code(), category.name());
                 counts.merge(category.code(), 1, Integer::sum);
             }
@@ -162,19 +163,77 @@ public class UserStatsService {
             return null;
         }
 
-        if (code == null || !KEEP_CODE.contains(code)) {
-            List<String> words = wordsOf(path);
-            if (endsWithAny(words, SEA_WORDS) || words.stream().anyMatch(SEA_EXACT::contains)) {
-                return SEA;
-            }
-            if (endsWithAny(words, NATURE_WORDS) || words.stream().anyMatch(NATURE_EXACT::contains)) {
-                return NATURE;
-            }
+        // 카카오가 큰 분류 코드를 안 붙인 장소가 많다 (예: 감천문화마을 "여행 > 관광,명소").
+        // 그럴 때는 카테고리 경로의 첫 단계로 분류한다.
+        Category byPath = categoryFromPath(path);
+
+        if (code != null && KEEP_CODE.contains(code)) {
+            return BY_GROUP_CODE.get(code);
+        }
+        if (code == null && byPath != null && KEEP_CATEGORIES.contains(byPath)) {
+            return byPath;
+        }
+
+        // 바다·자연은 관광명소 코드·경로보다 먼저 본다 (카카오가 해수욕장·오름에도 관광명소를 붙이므로)
+        List<String> words = wordsOf(path);
+        if (endsWithAny(words, SEA_WORDS) || words.stream().anyMatch(SEA_EXACT::contains)) {
+            return SEA;
+        }
+        if (endsWithAny(words, NATURE_WORDS) || words.stream().anyMatch(NATURE_EXACT::contains)) {
+            return NATURE;
         }
         if (code != null && BY_GROUP_CODE.containsKey(code)) {
             return BY_GROUP_CODE.get(code);
         }
+        if (byPath != null) {
+            return byPath;
+        }
         return ETC;
+    }
+
+    /** 음식점·카페·숙박·쇼핑은 이름에 "바다"가 들어가도 그대로 둔다 (코드가 있을 때의 KEEP_CODE 와 같은 규칙) */
+    private static final Set<Category> KEEP_CATEGORIES = Set.of(FOOD, CAFE, STAY, SHOPPING);
+
+    /** 쇼핑으로 볼 경로 단어 */
+    private static final List<String> SHOPPING_WORDS = List.of("쇼핑", "시장", "백화점", "아울렛", "면세점");
+
+    /**
+     * 큰 분류 코드가 없을 때 카카오 카테고리 경로의 첫 단계로 분류한다. 모르는 경로면 null.
+     * 예: "여행 > 관광,명소" → 관광명소 / "문화,예술 > 문화시설 > 박물관" → 문화시설 / "음식점 > 카페 > 커피전문점" → 카페
+     */
+    private Category categoryFromPath(String path) {
+        if (!StringUtils.hasText(path)) {
+            return null;
+        }
+        List<String> steps = Arrays.stream(path.split(">"))
+                .map(String::trim)
+                .filter(step -> !step.isEmpty())
+                .toList();
+        if (steps.isEmpty()) {
+            return null;
+        }
+        String top = steps.get(0);
+        String second = steps.size() > 1 ? steps.get(1) : "";
+
+        if (top.equals("카페") || (top.equals("음식점") && second.equals("카페"))) {
+            return CAFE;
+        }
+        if (top.equals("음식점")) {
+            return FOOD;
+        }
+        if (top.equals("숙박")) {
+            return STAY;
+        }
+        if (steps.stream().anyMatch(step -> SHOPPING_WORDS.stream().anyMatch(step::contains))) {
+            return SHOPPING;
+        }
+        if (top.equals("여행")) {
+            return SIGHT;
+        }
+        if (top.startsWith("문화")) {
+            return CULTURE;
+        }
+        return null;
     }
 
     /** "여행 > 관광,명소 > 해수욕장" → [여행, 관광, 명소, 해수욕장] */

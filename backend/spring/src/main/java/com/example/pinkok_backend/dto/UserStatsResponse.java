@@ -12,7 +12,7 @@ import java.util.List;
  * @param visited      내가 기록(다이어리)을 남긴 핀. 최근에 쓴 순
  * @param saved        내 여행 일정에 담긴 핀. 최근에 담은 순
  * @param regions      여행 지역별 여행 수. 많은 순, 같으면 가나다순
- * @param tastes       저장한 핀들의 장소 카테고리별 개수와 비율(%). 많은 순. 카테고리 없는 핀은 빠진다
+ * @param tastes       저장한 핀들의 장소 분류별 개수와 비율(%). 많은 순. 기타·카테고리 없는 핀은 빠지고 비율은 나머지끼리 계산
  */
 public record UserStatsResponse(
         int visitedCount,

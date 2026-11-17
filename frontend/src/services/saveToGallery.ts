@@ -5,11 +5,10 @@
  * 받는 곳은 `GET /pinlogs/{id}/download` 이고 Authorization 헤더가 필요하다.
  * (재생용 videoUrl 은 로그인 없이 열리지만, 내려받기는 팀원만 할 수 있다.)
  *
- * 권한은 안드로이드 버전마다 다르다.
- * - 13(API 33) 이상: 사진·영상 접근이 READ_MEDIA_* 로 쪼개졌다. 저장만 할 때는
- *   없어도 되는 경우가 많지만, 저장한 뒤 다시 읽으려면 READ_MEDIA_VIDEO 가 필요하다.
- * - 10(API 29)~12: Scoped Storage 라 저장에 권한이 필요 없다.
- * - 9(API 28) 이하: WRITE_EXTERNAL_STORAGE 를 받아야 한다.
+ * 권한은 안드로이드 9(API 28) 이하에서만 필요하다. 10 부터는 MediaStore 로 넣기 때문에
+ * 저장에 권한이 들지 않는다. 13 이상에서 READ_MEDIA_VIDEO 를 받던 것은 저장한 영상을
+ * 다시 읽으려던 것인데, 앱은 그러지 않으면서 권한만 요구하고 있었다. 구글은 이 권한을
+ * 선언하면 핵심 기능 심사를 요구하므로, 쓰지 않는 권한은 받지 않는다.
  */
 import { PermissionsAndroid, Platform } from 'react-native';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
@@ -24,18 +23,6 @@ export class GalleryPermissionError extends Error {}
 async function ensurePermission(): Promise<boolean> {
   if (Platform.OS !== 'android') {return true;}
 
-  if (Platform.Version >= 33) {
-    const result = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
-      {
-        title: '갤러리 접근 권한',
-        message: '저장한 PinLog 를 갤러리에서 바로 볼 수 있게 권한이 필요해요.',
-        buttonPositive: '확인',
-      },
-    );
-    return result === PermissionsAndroid.RESULTS.GRANTED;
-  }
-
   if (Platform.Version <= 28) {
     const result = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
@@ -48,7 +35,7 @@ async function ensurePermission(): Promise<boolean> {
     return result === PermissionsAndroid.RESULTS.GRANTED;
   }
 
-  // 29~32 는 저장에 권한이 필요 없다.
+  // 29 이상은 저장에 권한이 필요 없다.
   return true;
 }
 

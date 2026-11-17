@@ -6,11 +6,14 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- 완성한 PinLog 를 갤러리에 저장. 13(33) 이상은 READ_MEDIA_VIDEO 를 쓴다. -->
+    <!--
+      완성한 PinLog 를 갤러리에 저장.
+      10(API 29) 이상은 MediaStore 로 저장하므로 권한이 필요 없고, 9 이하만 받는다.
+      갤러리에서 고를 때도 시스템 선택기가 고른 파일만 건네주므로 READ_MEDIA_* 는 쓰지 않는다.
+    -->
     <uses-permission
       android:name="android.permission.WRITE_EXTERNAL_STORAGE"
       android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <!-- 안드로이드 13(API 33)부터는 알림을 띄우려면 사용자에게 물어봐야 한다. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

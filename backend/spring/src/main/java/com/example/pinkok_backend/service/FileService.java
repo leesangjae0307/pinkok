@@ -4,6 +4,9 @@ import com.example.pinkok_backend.dto.FileUploadResponse;
 import com.example.pinkok_backend.exception.FileUploadException;
 import com.example.pinkok_backend.pinlog.VideoProbe;
 import com.example.pinkok_backend.storage.FileStorage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -12,6 +15,9 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -20,16 +26,24 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 @Service
 public class FileService {
@@ -50,17 +64,26 @@ public class FileService {
     public static final String MEDIA_TYPE_PHOTO = "PHOTO";
     public static final String MEDIA_TYPE_VIDEO = "VIDEO";
 
+    private static final Logger log = LoggerFactory.getLogger(FileService.class);
+
     private final FileStorage fileStorage;
     private final VideoProbe videoProbe;
+    private final Executor uploadTaskExecutor;
 
-    public FileService(FileStorage fileStorage, VideoProbe videoProbe) {
+    public FileService(FileStorage fileStorage, VideoProbe videoProbe,
+                       @Qualifier("uploadTaskExecutor") Executor uploadTaskExecutor) {
         this.fileStorage = fileStorage;
         this.videoProbe = videoProbe;
+        this.uploadTaskExecutor = uploadTaskExecutor;
     }
 
     /**
      * 파일 여러 개를 한 번에 올린다.
      * 하나라도 문제가 있으면 아무것도 저장하지 않고 거절한다. (일부만 저장되는 상황을 막기 위해)
+     *
+     * <p>파일마다 "원본 올리기"와 "썸네일 만들어 올리기"를 동시에 돌리고, 여러 파일도 동시에 처리한다.
+     * 차례대로 하면 시간이 전부 더해지지만, 동시에 하면 가장 오래 걸리는 작업만큼만 걸린다.
+     * 썸네일은 지금처럼 응답에 바로 들어간다 (앱이 올리자마자 썸네일을 보여줄 수 있도록 응답 전에 다 기다린다).
      */
     public List<FileUploadResponse> uploadAll(List<MultipartFile> files) {
         if (files == null || files.isEmpty()) {
@@ -70,24 +93,43 @@ public class FileService {
             throw new FileUploadException("한 번에 " + MAX_FILES_PER_REQUEST + "개까지 올릴 수 있습니다.");
         }
 
+        long startedAt = System.nanoTime();
+
         // 1단계: 저장하기 전에 전부 검사한다
         List<CheckedFile> checked = new ArrayList<>();
         for (MultipartFile file : files) {
             checked.add(check(file));
         }
 
-        // 2단계: 전부 통과했을 때만 저장한다
-        List<String> savedPaths = new ArrayList<>();
+        // 2단계: 전부 통과했을 때만 저장한다 (여러 스레드가 저장하므로 저장한 경로는 동시에 써도 되는 목록에 모은다)
+        Queue<String> savedPaths = new ConcurrentLinkedQueue<>();
+        List<Path> tempFiles = new ArrayList<>();
+        List<PendingUpload> pending = new ArrayList<>();
         try {
-            List<FileUploadResponse> responses = new ArrayList<>();
             for (CheckedFile file : checked) {
-                responses.add(save(file, savedPaths));
+                pending.add(start(file, savedPaths, tempFiles));
             }
+            // 하나가 실패해도 나머지가 다 끝나야 저장된 것을 깨끗이 지울 수 있으므로 전부 기다린다
+            awaitAll(pending);
+
+            List<FileUploadResponse> responses = new ArrayList<>();
+            for (PendingUpload upload : pending) {
+                responses.add(upload.toResponse());
+            }
+            log.info("파일 {}개 업로드 {}ms ({})", responses.size(), elapsedMs(startedAt),
+                    pending.stream().map(PendingUpload::summary).collect(Collectors.joining(", ")));
             return responses;
-        } catch (IOException e) {
-            // 저장 도중 실패하면 앞에서 이미 저장한 파일도 지워서 반쪽짜리 업로드를 남기지 않는다
-            deleteQuietly(savedPaths);
-            throw new FileUploadException("파일 저장에 실패했습니다.", e);
+
+        } catch (IOException | RuntimeException e) {
+            // 일부만 저장된 채로 끝나지 않도록, 진행 중이던 작업이 다 끝난 뒤 저장한 파일을 지운다
+            awaitQuietly(pending);
+            deleteQuietly(new ArrayList<>(savedPaths));
+            if (e instanceof FileUploadException uploadException) {
+                throw uploadException;
+            }
+            throw new FileUploadException("파일 저장에 실패했습니다.", unwrap(e));
+        } finally {
+            tempFiles.forEach(this::deleteTempQuietly);
         }
     }
 
@@ -107,7 +149,7 @@ public class FileService {
             try {
                 byte[] bytes = file.getBytes();
                 // 확장자만 jpg 로 바꾼 가짜 파일을 걸러내기 위해 실제로 이미지로 읽어본다
-                BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+                ImageInfo image = readImage(bytes);
                 if (image == null) {
                     throw new FileUploadException(name + ": 이미지 파일을 읽을 수 없습니다.");
                 }
@@ -121,75 +163,144 @@ public class FileService {
             if (file.getSize() > MAX_VIDEO_SIZE) {
                 throw new FileUploadException(name + ": 영상은 20MB까지 올릴 수 있습니다.");
             }
-            // 영상 썸네일·길이 확인은 FFmpeg 가 필요해서 PinLog 작업 때 추가한다
             return new CheckedFile(file, extension, null, null);
         }
 
         throw new FileUploadException(name + ": 지원하지 않는 파일 형식입니다. (사진: jpg, png / 영상: mp4, mov)");
     }
 
-    private FileUploadResponse save(CheckedFile file, List<String> savedPaths) throws IOException {
-        // 원래 파일명 대신 겹치지 않는 랜덤 이름을 쓰고, 연/월 폴더로 나눠 담는다
-        String basePath = LocalDate.now().format(FOLDER_FORMAT) + "/" + UUID.randomUUID();
-        String originalPath = basePath + "." + file.extension();
+    /**
+     * 사진의 가로·세로 크기를 읽고, 썸네일용으로 <b>작게 줄여서</b> 푼다.
+     *
+     * <p>예전에는 원본을 통째로 풀었다. 폰 사진(1200만 화소)이면 메모리에 48MB 가 올라가고 시간도 오래 걸린다.
+     * 썸네일은 300px 이면 되므로 처음부터 몇 칸씩 건너뛰며 읽는다(subsampling). 크기는 파일 머리말에서 바로 읽힌다.
+     * 썸네일 품질을 위해 목표의 2배(600px) 정도로 읽은 뒤 부드럽게 줄인다.
+     */
+    private ImageInfo readImage(byte[] bytes) throws IOException {
+        try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            if (in == null) {
+                return null;
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
+            if (!readers.hasNext()) {
+                return null;
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(in, true, true);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
 
-        if (file.image() != null) {
-            String url = fileStorage.save(new ByteArrayInputStream(file.bytes()), originalPath);
-            savedPaths.add(originalPath);
-
-            String thumbnailPath = basePath + THUMBNAIL_SUFFIX;
-            String thumbnailUrl = fileStorage.save(createThumbnail(file.image()), thumbnailPath);
-            savedPaths.add(thumbnailPath);
-
-            return new FileUploadResponse(url, thumbnailUrl, "IMAGE", file.source().getSize(),
-                    file.image().getWidth(), file.image().getHeight(), null);
-        }
-
-        try (InputStream in = file.source().getInputStream()) {
-            String url = fileStorage.save(in, originalPath);
-            savedPaths.add(originalPath);
-            return saveVideoThumbnail(file, basePath, url, savedPaths);
+                ImageReadParam param = reader.getDefaultReadParam();
+                int step = Math.max(1, width / (THUMBNAIL_WIDTH * 2));
+                param.setSourceSubsampling(step, step, 0, 0);
+                BufferedImage preview = reader.read(0, param);
+                return preview == null ? null : new ImageInfo(width, height, preview);
+            } finally {
+                reader.dispose();
+            }
         }
     }
 
-    /**
-     * 영상의 첫 장면을 썸네일로 저장하고 길이를 알아낸다.
-     *
-     * <p>PinLog 를 만들 때 "내 영상 / 팀원 영상"을 고르는 화면이 어떤 장면인지 보여줘야 하는데,
-     * 영상은 사진과 달리 FFmpeg 가 있어야 한 장면을 꺼낼 수 있다.
-     * FFmpeg 가 없는 환경에서도 업로드 자체는 되어야 하므로, 실패하면 썸네일 없이 넘어간다.
-     */
-    private FileUploadResponse saveVideoThumbnail(CheckedFile file, String basePath,
-                                                  String url, List<String> savedPaths) throws IOException {
-        Path temp = null;
+    /** 파일 하나의 저장 작업을 시작한다 (원본과 썸네일을 각각 다른 스레드에서). */
+    private PendingUpload start(CheckedFile file, Queue<String> savedPaths, List<Path> tempFiles) throws IOException {
+        // 원래 파일명 대신 겹치지 않는 랜덤 이름을 쓰고, 연/월 폴더로 나눠 담는다
+        String basePath = LocalDate.now().format(FOLDER_FORMAT) + "/" + UUID.randomUUID();
+        String originalPath = basePath + "." + file.extension();
+        String thumbnailPath = basePath + THUMBNAIL_SUFFIX;
+
+        if (file.image() != null) {
+            CompletableFuture<Timed<String>> original = async(() ->
+                    storeTracked(new ByteArrayInputStream(file.bytes()), originalPath, savedPaths));
+            CompletableFuture<Timed<Thumbnail>> thumbnail = async(() -> {
+                String url = storeTracked(createThumbnail(file.image()), thumbnailPath, savedPaths);
+                return new Thumbnail(url, null);
+            });
+            return new PendingUpload(file, original, thumbnail);
+        }
+
+        // 영상: FFmpeg 는 실제 파일이 있어야 해서 임시 파일로 한 번 쓰고, 원본 업로드도 그 파일에서 읽는다
+        Path temp = Files.createTempFile("upload-", "." + file.extension());
+        tempFiles.add(temp);
+        file.source().transferTo(temp);
+
+        CompletableFuture<Timed<String>> original = async(() -> {
+            try (InputStream in = Files.newInputStream(temp)) {
+                return storeTracked(in, originalPath, savedPaths);
+            }
+        });
+        // FFmpeg 가 없거나 실패하면 썸네일·길이 없이 넘어간다 (업로드 자체는 되어야 한다)
+        CompletableFuture<Timed<Thumbnail>> thumbnail = async(() -> {
+            VideoProbe.Result probed = videoProbe.probe(temp);
+            String url = null;
+            if (probed.frame().isPresent()) {
+                url = storeTracked(new ByteArrayInputStream(probed.frame().get()), thumbnailPath, savedPaths);
+            }
+            return new Thumbnail(url, probed.durationMs().orElse(null));
+        });
+        return new PendingUpload(file, original, thumbnail);
+    }
+
+    private String storeTracked(InputStream in, String path, Queue<String> savedPaths) throws IOException {
+        String url = fileStorage.save(in, path);
+        savedPaths.add(path);
+        return url;
+    }
+
+    /** 작업을 업로드용 스레드 풀에 넘기고, 걸린 시간도 같이 잰다. */
+    private <T> CompletableFuture<Timed<T>> async(IoTask<T> task) {
+        return CompletableFuture.supplyAsync(() -> {
+            long startedAt = System.nanoTime();
+            try {
+                return new Timed<>(task.run(), elapsedMs(startedAt));
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }, uploadTaskExecutor);
+    }
+
+    private void awaitAll(List<PendingUpload> pending) {
+        CompletableFuture.allOf(pending.stream()
+                        .flatMap(upload -> java.util.stream.Stream.of(upload.original(), upload.thumbnail()))
+                        .toArray(CompletableFuture[]::new))
+                .join();
+    }
+
+    private void awaitQuietly(List<PendingUpload> pending) {
         try {
-            temp = Files.createTempFile("upload-", "." + file.extension());
-            Files.write(temp, file.source().getBytes());
+            awaitAll(pending);
+        } catch (RuntimeException ignored) {
+            // 실패한 작업이 있어도 "끝났는지"만 보면 된다
+        }
+    }
 
-            Optional<byte[]> frame = videoProbe.firstFrame(temp);
-            String thumbnailUrl = null;
-            if (frame.isPresent()) {
-                String thumbnailPath = basePath + THUMBNAIL_SUFFIX;
-                thumbnailUrl = fileStorage.save(new ByteArrayInputStream(frame.get()), thumbnailPath);
-                savedPaths.add(thumbnailPath);
-            }
+    private Throwable unwrap(Throwable e) {
+        Throwable cause = e;
+        while ((cause instanceof CompletionException || cause instanceof UncheckedIOException) && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
 
-            return new FileUploadResponse(url, thumbnailUrl, "VIDEO", file.source().getSize(),
-                    null, null, videoProbe.durationMs(temp).orElse(null));
+    private static long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
+    }
 
-        } finally {
-            if (temp != null) {
-                Files.deleteIfExists(temp);
-            }
+    private void deleteTempQuietly(Path path) {
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException ignored) {
+            // 임시 파일 정리 실패는 무시한다
         }
     }
 
     /**
      * 가로 300px 로 줄인 jpg 썸네일을 만든다. 원본이 더 작으면 크기를 그대로 둔다.
+     * 비율은 원본 크기 기준으로 계산하고, 그리는 건 작게 풀어둔 이미지로 한다.
      */
-    private InputStream createThumbnail(BufferedImage original) throws IOException {
-        int width = Math.min(THUMBNAIL_WIDTH, original.getWidth());
-        int height = Math.max(1, original.getHeight() * width / original.getWidth());
+    private InputStream createThumbnail(ImageInfo image) throws IOException {
+        int width = Math.min(THUMBNAIL_WIDTH, image.width());
+        int height = Math.max(1, (int) ((long) image.height() * width / image.width()));
 
         // jpg 는 투명 배경을 못 가지므로 흰 바탕 위에 그린다 (png 투명 영역이 까맣게 되는 것 방지)
         BufferedImage thumbnail = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
@@ -198,7 +309,7 @@ public class FileService {
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             g.setColor(Color.WHITE);
             g.fillRect(0, 0, width, height);
-            g.drawImage(original, 0, 0, width, height, null);
+            g.drawImage(image.preview(), 0, 0, width, height, null);
         } finally {
             g.dispose();
         }
@@ -365,6 +476,46 @@ public class FileService {
         });
     }
 
-    private record CheckedFile(MultipartFile source, String extension, byte[] bytes, BufferedImage image) {
+    private record CheckedFile(MultipartFile source, String extension, byte[] bytes, ImageInfo image) {
+    }
+
+    /** 사진의 실제 크기와, 썸네일용으로 작게 풀어둔 이미지 */
+    private record ImageInfo(int width, int height, BufferedImage preview) {
+    }
+
+    private record Thumbnail(String url, Integer durationMs) {
+    }
+
+    private record Timed<T>(T value, long elapsedMs) {
+    }
+
+    @FunctionalInterface
+    private interface IoTask<T> {
+        T run() throws IOException;
+    }
+
+    /** 파일 하나의 진행 중인 저장 작업 (원본 / 썸네일) */
+    private record PendingUpload(CheckedFile file,
+                                 CompletableFuture<Timed<String>> original,
+                                 CompletableFuture<Timed<Thumbnail>> thumbnail) {
+
+        FileUploadResponse toResponse() {
+            String url = original.join().value();
+            Thumbnail thumb = thumbnail.join().value();
+            if (file.image() != null) {
+                return new FileUploadResponse(url, thumb.url(), "IMAGE", file.source().getSize(),
+                        file.image().width(), file.image().height(), null);
+            }
+            return new FileUploadResponse(url, thumb.url(), "VIDEO", file.source().getSize(),
+                    null, null, thumb.durationMs());
+        }
+
+        /** 로그용: "영상 12.3MB 원본 2100ms·썸네일 900ms" */
+        String summary() {
+            return String.format(Locale.ROOT, "%s %.1fMB 원본 %dms·썸네일 %dms",
+                    file.image() != null ? "사진" : "영상",
+                    file.source().getSize() / 1024.0 / 1024.0,
+                    original.join().elapsedMs(), thumbnail.join().elapsedMs());
+        }
     }
 }

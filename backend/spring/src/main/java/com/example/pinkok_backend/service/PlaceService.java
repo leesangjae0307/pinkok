@@ -4,9 +4,12 @@ import com.example.pinkok_backend.dto.PlaceInput;
 import com.example.pinkok_backend.dto.PlaceSearchPageResponse;
 import com.example.pinkok_backend.dto.PlaceSearchResponse;
 import com.example.pinkok_backend.entity.Place;
+import com.example.pinkok_backend.kakao.KakaoAddressSearchResponse;
 import com.example.pinkok_backend.kakao.KakaoKeywordSearchResponse;
 import com.example.pinkok_backend.kakao.KakaoLocalApiClient;
 import com.example.pinkok_backend.repository.PlaceRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +25,9 @@ public class PlaceService {
 
     private static final int MAX_PAGE_SIZE = 45; // 카카오 Local API 상한
     private static final int DEFAULT_PAGE_SIZE = 15;
+    private static final int MAX_ADDRESS_PAGE_SIZE = 30; // 카카오 주소 검색 상한
+
+    private static final Logger log = LoggerFactory.getLogger(PlaceService.class);
 
     private final PlaceRepository placeRepository;
     private final KakaoLocalApiClient kakaoLocalApiClient;
@@ -42,11 +48,39 @@ public class PlaceService {
 
         KakaoKeywordSearchResponse response = kakaoLocalApiClient.searchByKeyword(keyword, safePage, safeSize);
 
-        List<PlaceSearchResponse> places = response.getDocuments() == null
+        List<PlaceSearchResponse> places = response == null || response.getDocuments() == null
                 ? Collections.emptyList()
                 : response.getDocuments().stream().map(PlaceSearchResponse::from).toList();
-        boolean hasMore = response.getMeta() != null && !response.getMeta().isEnd();
 
+        // 카카오맵에 등록된 장소가 하나도 없으면, 사용자가 주소를 입력했을 수 있으니 주소로 한 번 더 찾는다.
+        // (에어비앤비 숙소처럼 카카오맵에 없는 곳은 이름으로는 안 나오지만 주소로는 좌표를 얻을 수 있다)
+        boolean noPlaceAtAll = places.isEmpty()
+                && (response == null || response.getMeta() == null || response.getMeta().getTotalCount() == 0);
+        if (noPlaceAtAll) {
+            return searchAddress(keyword, safePage, safeSize);
+        }
+
+        boolean hasMore = response.getMeta() != null && !response.getMeta().isEnd();
+        return new PlaceSearchPageResponse(places, hasMore);
+    }
+
+    /** 주소 검색 결과(type=ADDRESS). 주소 검색이 실패해도 원래 검색은 성공했으니 빈 목록으로 돌려준다. */
+    private PlaceSearchPageResponse searchAddress(String keyword, int page, int size) {
+        KakaoAddressSearchResponse response;
+        try {
+            response = kakaoLocalApiClient.searchByAddress(keyword, page, Math.min(size, MAX_ADDRESS_PAGE_SIZE));
+        } catch (ResponseStatusException e) {
+            log.warn("주소 검색 실패 (keyword={})", keyword, e);
+            return new PlaceSearchPageResponse(List.of(), false);
+        }
+        if (response == null || response.getDocuments() == null) {
+            return new PlaceSearchPageResponse(List.of(), false);
+        }
+        List<PlaceSearchResponse> places = response.getDocuments().stream()
+                .filter(doc -> StringUtils.hasText(doc.getX()) && StringUtils.hasText(doc.getY()))
+                .map(PlaceSearchResponse::fromAddress)
+                .toList();
+        boolean hasMore = response.getMeta() != null && !response.getMeta().isEnd();
         return new PlaceSearchPageResponse(places, hasMore);
     }
 

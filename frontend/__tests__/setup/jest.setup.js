@@ -72,3 +72,15 @@ jest.mock('@react-native-camera-roll/camera-roll', () => ({
   __esModule: true,
   CameraRoll: { saveAsset: jest.fn().mockResolvedValue({}) },
 }));
+
+/** 기록 임시저장이 로컬 사진이 남아 있는지 확인할 때 쓴다. 네이티브라 대역으로 둡니다. */
+jest.mock('react-native-fs', () => ({
+  __esModule: true,
+  default: { exists: jest.fn().mockResolvedValue(true) },
+}));
+
+/** 화면 방향 모듈은 네이티브라 Jest 에 없다. 뷰어가 쓰는 두 함수만 빈 껍데기로 둔다. */
+jest.mock('react-native-orientation-locker', () => ({
+  __esModule: true,
+  default: { unlockAllOrientations: jest.fn(), lockToPortrait: jest.fn() },
+}));

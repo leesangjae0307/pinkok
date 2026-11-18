@@ -329,6 +329,41 @@ class PlaceCandidateTest {
     }
 
     @Test
+    @DisplayName("특별시·광역시 주소도 매칭된다 - AI '서울특별시 강남구 …' vs 카카오 '서울 강남구 …' (전부 좌표 없음으로 빠지던 문제)")
+    void metropolitanAddressMatches() throws Exception {
+        String token = signupAndLogin("cand13@pinkok.com", "cand13");
+        geminiExtracts(place("스타벅스 강남역점", "서울특별시 강남구 강남대로 390"));
+        // 카카오는 시·도를 줄여서 준다 (PlaceSearchTest 의 실제 응답 형태와 같다)
+        kakaoReturns(document("26338954", "스타벅스 강남역점", "서울 강남구 강남대로 390", "127.027618", "37.497952"));
+
+        Long aiRequestId = requestExtraction(token);
+        String json = candidates(token, aiRequestId);
+        assertThat((Boolean) JsonPath.read(json, "$[0].mapped")).isTrue();
+        assertThat((Double) JsonPath.read(json, "$[0].confidence")).isEqualTo(1.0);
+
+        // 여행에 보내면 핀이 실제로 만들어진다 (앱이 받던 skippedNoCoordinate 가 아니라)
+        Long tripId = createTrip(token);
+        Long candidateId = ((Number) JsonPath.read(json, "$[0].id")).longValue();
+        String added = addToTrip(token, tripId, candidateId).getResponse().getContentAsString();
+        assertThat((List<?>) JsonPath.read(added, "$.skippedNoCoordinate")).isEmpty();
+        mockMvc.perform(get("/itinerary-items").param("tripId", tripId.toString())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].place.name").value("스타벅스 강남역점"));
+    }
+
+    @Test
+    @DisplayName("특별시 주소라도 다른 구의 같은 이름 가게는 여전히 거른다")
+    void metropolitanAddressStillChecksDistrict() throws Exception {
+        String token = signupAndLogin("cand14@pinkok.com", "cand14");
+        geminiExtracts(place("스타벅스 강남역점", "서울특별시 강남구 강남대로 390"));
+        kakaoReturns(document("1", "스타벅스 강남역점", "서울 마포구 양화로 45", "126.92", "37.55"));
+
+        String json = candidates(token, requestExtraction(token));
+        assertThat((Boolean) JsonPath.read(json, "$[0].mapped")).isFalse();
+    }
+
+    @Test
     @DisplayName("AI가 주소를 안 줬으면 이름이 확실할 때만 채택하고, 신뢰도를 한 단계 낮춘다")
     void withoutAddress_onlyClearNameMatches() throws Exception {
         String loose = signupAndLogin("cand13a@pinkok.com", "cand13a");

@@ -244,19 +244,11 @@ public class PlaceCandidateService {
     }
 
     /**
-     * AI가 준 주소에서 시/군/구를 뽑아낸다. ("강원 강릉시 강릉역" → "강릉시")
-     * 이게 매칭을 검증하는 기준이 된다.
+     * AI가 준 주소에서 지역 확인용 시/군/구를 뽑아낸다. ("강원 강릉시 강릉역" → "강릉시", "서울특별시 강남구 …" → "강남구")
+     * 이게 매칭을 검증하는 기준이 된다. 규칙은 {@link AddressRegion} 참고.
      */
     private String extractRegion(String address) {
-        if (!StringUtils.hasText(address)) {
-            return null;
-        }
-        for (String token : address.trim().split("\\s+")) {
-            if (token.length() >= 2 && (token.endsWith("시") || token.endsWith("군") || token.endsWith("구"))) {
-                return token;
-            }
-        }
-        return null;
+        return AddressRegion.extract(address);
     }
 
     /** 카카오 결과의 주소(지번·도로명)에 그 시/군/구가 들어 있는지. */

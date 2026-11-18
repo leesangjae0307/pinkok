@@ -40,6 +40,7 @@ export default function TripsListView() {
     tripsError,
     reloadTrips,
     setInviteTrip,
+    setIsCreateTripOpen,
     selectedProfileAvatar,
     recommendationPeople,
     setRecommendationPeople,
@@ -94,6 +95,20 @@ export default function TripsListView() {
           </Pressable>
         ) : null}
       </View>
+
+      {/* 우측 하단 + 버튼과 같은 생성 화면을 연다. 여행이 하나도 없을 때도 여기서 바로 시작한다. */}
+      <PixelPressable
+        shadowColor="#075953"
+        offset={3}
+        radius={16}
+        accessibilityLabel="새 여행 만들기"
+        onPress={() => setIsCreateTripOpen(true)}
+        wrapperClassName="-mt-2 w-full"
+        className="h-12 w-full flex-row items-center justify-center gap-2 rounded-2xl border-2 border-[#075953] bg-[#56EADD]"
+      >
+        <Text className="font-pixel text-base text-[#075953]">+</Text>
+        <Text className="text-sm font-extrabold text-slate-900">새 여행 만들기</Text>
+      </PixelPressable>
 
       {tripInvitations.length > 0 && (
         <View

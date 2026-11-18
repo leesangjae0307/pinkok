@@ -5,7 +5,7 @@
  * 안내 문구는 서버가 실제로 하는 일에 맞춘다 — 내가 팀장이던 여행은 남은 팀원에게
  * 넘어가고, 혼자 쓰던 여행은 함께 지워진다.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -13,7 +13,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,22 +28,38 @@ export default function DeleteAccountModal({
   onConfirm: (password: string) => Promise<string | null>;
 }) {
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = useWindowDimensions();
   const [password, setPassword] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
-   * 안드로이드에서는 statusBarTranslucent 모달 안까지 adjustResize 가 닿지 않아,
-   * 키보드가 올라오면 탈퇴 버튼이 그대로 가려진다. 키보드 높이만큼 직접 띄운다.
+   * 키보드가 가리는 만큼만 아래 여백으로 비워 창을 가운데로 모은다.
+   *
+   * 기기·안드로이드 버전에 따라 키보드가 오면 Modal 창이 이미 줄어들기도(adjustResize),
+   * 그대로이기도 하다. 키보드 높이를 무조건 더하면 줄어든 기기에서 두 번 피하게 되어
+   * 창이 화면 위로 솟는다. 그래서 키보드 높이가 아니라, 이 영역이 실제로 키보드와
+   * 겹친 만큼(overlap)만 비운다. 이미 줄어 있으면 겹침이 없으니 0 이다.
    */
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const areaRef = useRef<View>(null);
+  const [overlap, setOverlap] = useState(0);
+  const [areaHeight, setAreaHeight] = useState(0);
 
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', (e) =>
-      setKeyboardHeight(e.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const show = Keyboard.addListener('keyboardDidShow', (e) => {
+      const keyboardTop = e.endCoordinates.screenY;
+      // 창이 줄어드는 기기는 그 변화가 끝난 뒤에 재야 정확하다.
+      timer = setTimeout(() => {
+        areaRef.current?.measureInWindow((_x, y, _w, h) => {
+          setOverlap(Math.max(0, Math.round(y + h - keyboardTop)));
+        });
+      }, 80);
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      if (timer) {clearTimeout(timer);}
+      setOverlap(0);
+    });
     return () => {
+      if (timer) {clearTimeout(timer);}
       show.remove();
       hide.remove();
     };
@@ -65,15 +80,18 @@ export default function DeleteAccountModal({
   };
 
   return (
-    <ModalBackdrop onRequestClose={onClose}>
+    <ModalBackdrop onRequestClose={onClose} position="center">
+      <View
+        ref={areaRef}
+        collapsable={false}
+        onLayout={(e) => setAreaHeight(e.nativeEvent.layout.height)}
+        className="flex-1 justify-center"
+        style={{ paddingBottom: overlap > 0 ? overlap : insets.bottom }}
+      >
       <View
         className="w-full overflow-hidden rounded-[28px] border-4 border-pixel-navy bg-[#B4FAF0]"
-        style={{
-          marginBottom: keyboardHeight > 0 ? keyboardHeight : insets.bottom,
-          // 키보드만큼 띄우면 창이 화면 위로 넘칠 수 있다. 남는 높이를 넘지 않게
-          // 묶어두고, 모자라면 본문이 스크롤되게 한다(머리글과 버튼은 항상 보인다).
-          maxHeight: Math.max(240, screenHeight - keyboardHeight - insets.top - 24),
-        }}
+        // 남는 높이를 넘지 않게 묶고, 모자라면 본문만 스크롤한다(제목과 버튼은 항상 보인다).
+        style={{ maxHeight: Math.max(240, areaHeight - (overlap > 0 ? overlap : insets.bottom)) }}
       >
         <View className="flex-row items-center justify-between border-b-2 border-pixel-navy bg-white px-4 py-3">
           <View className="flex-1 pr-2">
@@ -147,6 +165,7 @@ export default function DeleteAccountModal({
               )}
             </Pressable>
         </View>
+      </View>
       </View>
     </ModalBackdrop>
   );

@@ -1,9 +1,12 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 
 import { PixelBackArrow, PixelToggleSwitch } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
 import { useApp } from '../AppContext';
+
+/** 이용약관 및 개인정보 처리방침 */
+const POLICY_URL = 'https://pinkok-app.com/privacy';
 
 function Emoji({ children }: { children: string }) {
   return (
@@ -175,7 +178,9 @@ export default function SettingsScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => showToast('이용약관 및 개인정보 처리방침')}
+            onPress={() => {
+              Linking.openURL(POLICY_URL).catch(() => showToast('페이지를 열지 못했어요. 잠시 후 다시 시도해 주세요.'));
+            }}
             className="flex-row items-center justify-between border-b border-slate-100 pb-2 active:opacity-80"
           >
             <View className="flex-row items-center gap-2">

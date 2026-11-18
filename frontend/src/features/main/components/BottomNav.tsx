@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Keyboard, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -49,6 +49,19 @@ export default function BottomNav() {
     setIsSettingsOpen(false);
   };
   const isActive = (tab: TabType) => activeTab === tab && !isSettingsOpen;
+
+  // adjustResize 때문에 키보드가 올라오면 하단 탭이 입력창 위로 밀려 올라온다.
+  // 키보드가 떠 있는 동안에는 탭을 숨겨 입력 영역을 가리지 않게 한다.
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  if (keyboardVisible) {return null;}
 
   return (
     <View

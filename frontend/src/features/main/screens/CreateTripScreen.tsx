@@ -187,7 +187,9 @@ export default function CreateTripScreen({
             <PixelBackArrow size={16} />
           </Pressable>
         </View>
-        <Text className="flex-1 text-center font-pixel text-[11px] text-[#075953]">새 여행 만들기</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit className="flex-1 text-center font-pixel text-base text-[#075953]">
+          새 여행 만들기
+        </Text>
         <View className="w-14">
           <PixelPressable
             shadowColor="#075953"
@@ -232,13 +234,13 @@ export default function CreateTripScreen({
             <Text className="absolute bottom-3 left-3 text-4xl">{emoji}</Text>
             <View className="absolute bottom-3 right-3 flex-row gap-2">
               <Pressable
-                onPress={() => launchCamera({ mediaType: 'photo', saveToPhotos: false }).then(applyPickedCover)}
+                onPress={() => launchCamera({ mediaType: 'photo', saveToPhotos: false, assetRepresentationMode: 'compatible' }).then(applyPickedCover)}
                 className="rounded-xl border border-white/50 bg-black/55 px-2.5 py-2 active:opacity-70"
               >
                 <Text className="text-[10px] font-black text-white">📷 촬영</Text>
               </Pressable>
               <Pressable
-                onPress={() => launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }).then(applyPickedCover)}
+                onPress={() => launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, assetRepresentationMode: 'compatible' }).then(applyPickedCover)}
                 className="rounded-xl border border-white/50 bg-black/55 px-2.5 py-2 active:opacity-70"
               >
                 <Text className="text-[10px] font-black text-white">🖼️ 갤러리</Text>
@@ -324,7 +326,7 @@ export default function CreateTripScreen({
                 onChangeText={setLocation}
                 onFocus={() => setFocused('location')}
                 onBlur={() => setFocused(null)}
-                placeholder="부산, 제주, 도쿄 등 지역 입력"
+                placeholder="서울, 부산, 제주, 강릉 등"
                 placeholderTextColor="#94A3B8"
                 className="h-full flex-1 p-0 text-sm font-bold text-slate-900"
               />

@@ -314,6 +314,7 @@ CREATE TABLE recommendations (
     suggested_name VARCHAR(200) NOT NULL COMMENT '추천 장소명',
     suggested_address VARCHAR(300) NULL COMMENT 'AI가 준 주소 (수락 시 카카오맵 좌표 검색 힌트)',
     category_text  VARCHAR(100) NULL COMMENT 'AI가 분류한 카테고리',
+    region         VARCHAR(100) NULL COMMENT '추천받을 때 쓴 지역 (수락 시 카카오맵 검색어)',
     reason         VARCHAR(500) NULL COMMENT '추천 사유',
     status         VARCHAR(20)  NOT NULL DEFAULT 'SUGGESTED' COMMENT 'SUGGESTED / ACCEPTED / REJECTED',
     created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

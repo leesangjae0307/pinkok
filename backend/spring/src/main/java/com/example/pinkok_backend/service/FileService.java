@@ -2,6 +2,8 @@ package com.example.pinkok_backend.service;
 
 import com.example.pinkok_backend.dto.FileUploadResponse;
 import com.example.pinkok_backend.exception.FileUploadException;
+import com.example.pinkok_backend.pinlog.HeicConverter;
+import com.example.pinkok_backend.pinlog.ImageProbe;
 import com.example.pinkok_backend.pinlog.VideoProbe;
 import com.example.pinkok_backend.storage.FileStorage;
 import org.slf4j.Logger;
@@ -53,7 +55,9 @@ public class FileService {
     private static final long MAX_IMAGE_SIZE = 10L * 1024 * 1024;  // 10MB
     private static final long MAX_VIDEO_SIZE = 20L * 1024 * 1024;  // 20MB (앱에서 2~3초로 찍는 영상 기준)
 
-    private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png");
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
+    /** 업로드는 받지만 저장할 때는 JPEG 로 바뀌는 형식 (아이폰 사진) */
+    private static final Set<String> HEIC_EXTENSIONS = Set.of("heic", "heif");
     private static final Set<String> VIDEO_EXTENSIONS = Set.of("mp4", "mov");
 
     private static final int THUMBNAIL_WIDTH = 300;
@@ -68,12 +72,17 @@ public class FileService {
 
     private final FileStorage fileStorage;
     private final VideoProbe videoProbe;
+    private final ImageProbe imageProbe;
+    private final HeicConverter heicConverter;
     private final Executor uploadTaskExecutor;
 
-    public FileService(FileStorage fileStorage, VideoProbe videoProbe,
+    public FileService(FileStorage fileStorage, VideoProbe videoProbe, ImageProbe imageProbe,
+                       HeicConverter heicConverter,
                        @Qualifier("uploadTaskExecutor") Executor uploadTaskExecutor) {
         this.fileStorage = fileStorage;
         this.videoProbe = videoProbe;
+        this.imageProbe = imageProbe;
+        this.heicConverter = heicConverter;
         this.uploadTaskExecutor = uploadTaskExecutor;
     }
 
@@ -142,21 +151,35 @@ public class FileService {
 
         String extension = getExtension(file.getOriginalFilename());
 
-        if (IMAGE_EXTENSIONS.contains(extension)) {
+        if (IMAGE_EXTENSIONS.contains(extension) || HEIC_EXTENSIONS.contains(extension)) {
             if (file.getSize() > MAX_IMAGE_SIZE) {
                 throw new FileUploadException(name + ": 사진은 10MB까지 올릴 수 있습니다.");
             }
+            byte[] bytes;
             try {
-                byte[] bytes = file.getBytes();
-                // 확장자만 jpg 로 바꾼 가짜 파일을 걸러내기 위해 실제로 이미지로 읽어본다
-                ImageInfo image = readImage(bytes);
-                if (image == null) {
-                    throw new FileUploadException(name + ": 이미지 파일을 읽을 수 없습니다.");
-                }
-                return new CheckedFile(file, extension, bytes, image);
+                bytes = file.getBytes();
             } catch (IOException e) {
                 throw new FileUploadException(name + ": 이미지 파일을 읽을 수 없습니다.", e);
             }
+
+            // 이름이 아니라 파일 내용으로 실제 형식을 판단한다.
+            // 앱은 사진 이름을 upload-123.jpg 처럼 붙여서 보내는데, 인스타그램 사진은 실제로는 WebP 다.
+            ImageFormat format = ImageFormat.detect(bytes);
+            if (format == ImageFormat.HEIC) {
+                // 아이폰 사진(HEIC)은 안드로이드·FFmpeg 가 못 읽을 수 있어서 고화질 JPEG 로 바꿔서 저장한다
+                bytes = heicConverter.toJpeg(bytes).orElseThrow(() -> new FileUploadException(
+                        name + ": HEIC 사진을 변환하지 못했습니다. JPG 로 바꿔서 올려 주세요."));
+                format = ImageFormat.JPEG;
+            }
+
+            // 확장자만 jpg 로 바꾼 가짜 파일을 걸러내기 위해 실제로 이미지로 읽어본다
+            ImageInfo image = format == ImageFormat.UNKNOWN ? null : readImage(bytes, format);
+            if (image == null) {
+                log.warn("이미지를 읽지 못했다 (name={}, 판별된 형식={}, 앞부분={})", name, format, headHex(bytes));
+                throw new FileUploadException(name + ": 이미지 파일을 읽을 수 없습니다.");
+            }
+            // 저장할 때는 실제 형식의 확장자를 쓴다 (저장소가 올바른 파일 종류로 내려주도록)
+            return new CheckedFile(file, format.extension(), bytes, image);
         }
 
         if (VIDEO_EXTENSIONS.contains(extension)) {
@@ -166,7 +189,7 @@ public class FileService {
             return new CheckedFile(file, extension, null, null);
         }
 
-        throw new FileUploadException(name + ": 지원하지 않는 파일 형식입니다. (사진: jpg, png / 영상: mp4, mov)");
+        throw new FileUploadException(name + ": 지원하지 않는 파일 형식입니다. (사진: jpg, png, webp, heic / 영상: mp4, mov)");
     }
 
     /**
@@ -176,7 +199,22 @@ public class FileService {
      * 썸네일은 300px 이면 되므로 처음부터 몇 칸씩 건너뛰며 읽는다(subsampling). 크기는 파일 머리말에서 바로 읽힌다.
      * 썸네일 품질을 위해 목표의 2배(600px) 정도로 읽은 뒤 부드럽게 줄인다.
      */
-    private ImageInfo readImage(byte[] bytes) throws IOException {
+    private ImageInfo readImage(byte[] bytes, ImageFormat format) {
+        if (format == ImageFormat.WEBP) {
+            // 자바는 WebP 를 못 읽어서 FFmpeg 로 크기만 읽는다 (썸네일은 저장 단계에서 FFmpeg 로 만든다)
+            return imageProbe.size(bytes, format.extension())
+                    .map(size -> new ImageInfo(size.width(), size.height(), null, format))
+                    .orElse(null);
+        }
+        try {
+            return readWithImageIo(bytes, format);
+        } catch (IOException e) {
+            log.debug("ImageIO 로 사진을 읽지 못했다", e);
+            return null;
+        }
+    }
+
+    private ImageInfo readWithImageIo(byte[] bytes, ImageFormat format) throws IOException {
         try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
             if (in == null) {
                 return null;
@@ -195,7 +233,7 @@ public class FileService {
                 int step = Math.max(1, width / (THUMBNAIL_WIDTH * 2));
                 param.setSourceSubsampling(step, step, 0, 0);
                 BufferedImage preview = reader.read(0, param);
-                return preview == null ? null : new ImageInfo(width, height, preview);
+                return preview == null ? null : new ImageInfo(width, height, preview, format);
             } finally {
                 reader.dispose();
             }
@@ -213,7 +251,7 @@ public class FileService {
             CompletableFuture<Timed<String>> original = async(() ->
                     storeTracked(new ByteArrayInputStream(file.bytes()), originalPath, savedPaths));
             CompletableFuture<Timed<Thumbnail>> thumbnail = async(() -> {
-                String url = storeTracked(createThumbnail(file.image()), thumbnailPath, savedPaths);
+                String url = storeTracked(createThumbnail(file.image(), file.bytes()), thumbnailPath, savedPaths);
                 return new Thumbnail(url, null);
             });
             return new PendingUpload(file, original, thumbnail);
@@ -298,7 +336,13 @@ public class FileService {
      * 가로 300px 로 줄인 jpg 썸네일을 만든다. 원본이 더 작으면 크기를 그대로 둔다.
      * 비율은 원본 크기 기준으로 계산하고, 그리는 건 작게 풀어둔 이미지로 한다.
      */
-    private InputStream createThumbnail(ImageInfo image) throws IOException {
+    private InputStream createThumbnail(ImageInfo image, byte[] original) throws IOException {
+        if (image.preview() == null) {
+            // WebP: 원본은 그대로 두고, 목록용 썸네일만 FFmpeg 로 JPEG 로 만든다
+            byte[] jpeg = imageProbe.thumbnailJpeg(original, image.format().extension(), THUMBNAIL_WIDTH)
+                    .orElseThrow(() -> new IOException("사진 썸네일을 만들지 못했습니다."));
+            return new ByteArrayInputStream(jpeg);
+        }
         int width = Math.min(THUMBNAIL_WIDTH, image.width());
         int height = Math.max(1, (int) ((long) image.height() * width / image.width()));
 
@@ -356,6 +400,7 @@ public class FileService {
     private String mimeTypeOf(String extension) {
         return switch (extension) {
             case "png" -> "image/png";
+            case "webp" -> "image/webp";
             default -> "image/jpeg"; // jpg, jpeg
         };
     }
@@ -480,7 +525,57 @@ public class FileService {
     }
 
     /** 사진의 실제 크기와, 썸네일용으로 작게 풀어둔 이미지 */
-    private record ImageInfo(int width, int height, BufferedImage preview) {
+    /**
+     * @param preview 썸네일용으로 작게 풀어둔 이미지. WebP 처럼 자바가 못 읽는 형식이면 null (썸네일은 FFmpeg 로)
+     */
+    private record ImageInfo(int width, int height, BufferedImage preview, ImageFormat format) {
+    }
+
+    /** 파일 앞부분(매직 바이트)으로 판단한 실제 사진 형식 */
+    enum ImageFormat {
+        JPEG("jpg"), PNG("png"), WEBP("webp"), HEIC("heic"), UNKNOWN("");
+
+        private final String extension;
+
+        ImageFormat(String extension) {
+            this.extension = extension;
+        }
+
+        String extension() {
+            return extension;
+        }
+
+        static ImageFormat detect(byte[] b) {
+            if (b.length >= 3 && (b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8 && (b[2] & 0xFF) == 0xFF) {
+                return JPEG;
+            }
+            if (b.length >= 8 && (b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') {
+                return PNG;
+            }
+            if (b.length >= 12 && ascii(b, 0, 4).equals("RIFF") && ascii(b, 8, 4).equals("WEBP")) {
+                return WEBP;
+            }
+            if (b.length >= 12 && ascii(b, 4, 4).equals("ftyp")) {
+                String brand = ascii(b, 8, 4);
+                if (Set.of("heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1", "avif").contains(brand)) {
+                    return HEIC;
+                }
+            }
+            return UNKNOWN;
+        }
+
+        private static String ascii(byte[] b, int offset, int length) {
+            return new String(b, offset, length, java.nio.charset.StandardCharsets.US_ASCII);
+        }
+    }
+
+    /** 로그용: 파일 앞 12바이트를 16진수로 (형식을 알아보는 데 충분하다) */
+    private static String headHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(12, bytes.length); i++) {
+            sb.append(String.format("%02x", bytes[i]));
+        }
+        return sb.toString();
     }
 
     private record Thumbnail(String url, Integer durationMs) {
@@ -503,7 +598,7 @@ public class FileService {
             String url = original.join().value();
             Thumbnail thumb = thumbnail.join().value();
             if (file.image() != null) {
-                return new FileUploadResponse(url, thumb.url(), "IMAGE", file.source().getSize(),
+                return new FileUploadResponse(url, thumb.url(), "IMAGE", file.bytes().length,
                         file.image().width(), file.image().height(), null);
             }
             return new FileUploadResponse(url, thumb.url(), "VIDEO", file.source().getSize(),
@@ -514,7 +609,7 @@ public class FileService {
         String summary() {
             return String.format(Locale.ROOT, "%s %.1fMB 원본 %dms·썸네일 %dms",
                     file.image() != null ? "사진" : "영상",
-                    file.source().getSize() / 1024.0 / 1024.0,
+                    (file.bytes() != null ? file.bytes().length : file.source().getSize()) / 1024.0 / 1024.0,
                     original.join().elapsedMs(), thumbnail.join().elapsedMs());
         }
     }

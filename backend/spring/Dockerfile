@@ -11,9 +11,9 @@ RUN ./gradlew bootJar -x test --no-daemon
 
 # ---- 2단계: 실행 ----
 FROM eclipse-temurin:17-jre-jammy
-# PinLog 영상 합성에 FFmpeg 가 필요하다
+# PinLog 영상 합성·영상/WebP 썸네일에 FFmpeg, 아이폰 HEIC 사진을 JPEG 로 바꾸는 데 heif-convert(libheif-examples)가 필요하다
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg libheif-examples \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /workspace/build/libs/*.jar app.jar

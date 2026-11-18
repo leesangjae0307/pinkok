@@ -1,5 +1,7 @@
 package com.example.pinkok_backend.service;
 
+import com.example.pinkok_backend.category.PlaceCategory;
+import com.example.pinkok_backend.category.PlaceCategoryClassifier;
 import com.example.pinkok_backend.dto.UserStatsResponse;
 import com.example.pinkok_backend.dto.UserStatsResponse.PlaceEntry;
 import com.example.pinkok_backend.dto.UserStatsResponse.RegionEntry;
@@ -16,12 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 프로필 화면의 내 여행 집계.
@@ -93,161 +93,24 @@ public class UserStatsService {
     }
 
     /**
-     * 여행 취향 = 내가 저장한 핀들의 장소 분류 비율. 분류는 맛집·카페·바다·자연·관광명소·문화시설·숙박·쇼핑·기타
-     * 9개로 고정이다 ({@link #categoryOf}). 카테고리 정보가 아예 없는 핀(직접 찍은 장소 등)은 비율 계산에서 뺀다.
+     * 여행 취향 = 내가 저장한 핀들의 장소 종류 비율. 종류는 {@link PlaceCategoryClassifier} 가 정한다
+     * (여행 "전체" 탭의 종류별 묶음과 같은 규칙). "기타"는 취향으로 보여줄 의미가 없어서 빼고,
+     * 비율은 나머지끼리 다시 계산한다. 이름은 취향용 이름(숙소 → "숙박")을 쓴다.
      */
     private List<TasteEntry> tastesOf(List<ItineraryItem> pins) {
-        Map<String, String> names = new LinkedHashMap<>();
-        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<PlaceCategory, Integer> counts = new LinkedHashMap<>();
         for (ItineraryItem pin : pins) {
-            Category category = categoryOf(pin.getPlace());
-            // "기타"는 취향으로 보여줄 의미가 없어서 뺀다 (비율도 나머지끼리 다시 계산된다)
-            if (category != null && category != ETC) {
-                names.putIfAbsent(category.code(), category.name());
-                counts.merge(category.code(), 1, Integer::sum);
+            PlaceCategory category = PlaceCategoryClassifier.classify(pin.getPlace());
+            if (category != PlaceCategory.ETC) {
+                counts.merge(category, 1, Integer::sum);
             }
         }
         int total = counts.values().stream().mapToInt(Integer::intValue).sum();
         return counts.entrySet().stream()
-                .map(e -> new TasteEntry(e.getKey(), names.get(e.getKey()), e.getValue(),
+                .map(e -> new TasteEntry(e.getKey().code(), e.getKey().tasteLabel(), e.getValue(),
                         (int) Math.round(e.getValue() * 100.0 / total)))
                 .sorted(Comparator.comparingInt(TasteEntry::count).reversed()
                         .thenComparing(TasteEntry::code))
                 .toList();
-    }
-
-    private record Category(String code, String name) {
-    }
-
-    // 취향 분류는 아래 9개로 고정한다. 앱이 아이콘·색을 이 코드들로만 고르면 되도록.
-    private static final Category FOOD = new Category("FD6", "맛집");
-    private static final Category CAFE = new Category("CE7", "카페");
-    private static final Category SEA = new Category("SEA", "바다");
-    private static final Category NATURE = new Category("NATURE", "자연");
-    private static final Category SIGHT = new Category("AT4", "관광명소");
-    private static final Category CULTURE = new Category("CT1", "문화시설");
-    private static final Category STAY = new Category("AD5", "숙박");
-    private static final Category SHOPPING = new Category("MT1", "쇼핑");
-    private static final Category ETC = new Category("ETC", "기타");
-
-    /** 카카오 큰 분류 코드 중 그대로 쓰는 것. 나머지(편의점·주차장·은행 …)는 기타로 묶는다. */
-    private static final Map<String, Category> BY_GROUP_CODE = Map.of(
-            "FD6", FOOD, "CE7", CAFE, "AT4", SIGHT, "CT1", CULTURE, "AD5", STAY, "MT1", SHOPPING);
-
-    /** 이 코드가 붙은 장소는 이름에 "바다"가 들어가도 코드대로 둔다 (예: 바다뷰 카페는 카페). */
-    private static final Set<String> KEEP_CODE = Set.of("FD6", "CE7", "AD5", "MT1");
-
-    /**
-     * 카카오 카테고리 경로의 단어로 바다·자연을 가려낸다. 단어가 이 말로 끝나면 해당한다.
-     * 예: "여행 > 관광,명소 > 해수욕장" → 해수욕장 → 바다 / "여행 > 공원 > 도시근린공원" → 공원 → 자연
-     */
-    private static final List<String> SEA_WORDS = List.of("해수욕장", "해변", "해안", "바다", "항구", "포구", "등대");
-    private static final List<String> NATURE_WORDS = List.of(
-            "오름", "고개", "숲", "계곡", "폭포", "호수", "저수지", "공원", "수목원", "휴양림",
-            "자연", "생태", "동굴", "습지", "정원", "들판", "평야");
-
-    /** 한 글자 단어는 "부동산"처럼 다른 말 끝에 붙는 경우가 있어 단어가 정확히 같을 때만 인정한다. */
-    private static final List<String> SEA_EXACT = List.of("섬");
-    private static final List<String> NATURE_EXACT = List.of("산", "강");
-
-    /**
-     * 장소 하나를 9개 분류 중 하나로. 카테고리 정보가 아예 없으면 null (비율 계산에서 뺀다).
-     *
-     * <p>바다·자연을 코드보다 먼저 본다. 카카오는 해수욕장·오름에도 관광명소(AT4) 코드를 붙여서,
-     * 코드부터 보면 전부 관광명소가 되기 때문이다. 단 음식점·카페·숙박·쇼핑 코드는 그대로 둔다.
-     */
-    private Category categoryOf(Place place) {
-        String code = StringUtils.hasText(place.getCategoryGroupCode()) ? place.getCategoryGroupCode().trim() : null;
-        String path = place.getCategoryName();
-        if (code == null && !StringUtils.hasText(path)) {
-            return null;
-        }
-
-        // 카카오가 큰 분류 코드를 안 붙인 장소가 많다 (예: 감천문화마을 "여행 > 관광,명소").
-        // 그럴 때는 카테고리 경로의 첫 단계로 분류한다.
-        Category byPath = categoryFromPath(path);
-
-        if (code != null && KEEP_CODE.contains(code)) {
-            return BY_GROUP_CODE.get(code);
-        }
-        if (code == null && byPath != null && KEEP_CATEGORIES.contains(byPath)) {
-            return byPath;
-        }
-
-        // 바다·자연은 관광명소 코드·경로보다 먼저 본다 (카카오가 해수욕장·오름에도 관광명소를 붙이므로)
-        List<String> words = wordsOf(path);
-        if (endsWithAny(words, SEA_WORDS) || words.stream().anyMatch(SEA_EXACT::contains)) {
-            return SEA;
-        }
-        if (endsWithAny(words, NATURE_WORDS) || words.stream().anyMatch(NATURE_EXACT::contains)) {
-            return NATURE;
-        }
-        if (code != null && BY_GROUP_CODE.containsKey(code)) {
-            return BY_GROUP_CODE.get(code);
-        }
-        if (byPath != null) {
-            return byPath;
-        }
-        return ETC;
-    }
-
-    /** 음식점·카페·숙박·쇼핑은 이름에 "바다"가 들어가도 그대로 둔다 (코드가 있을 때의 KEEP_CODE 와 같은 규칙) */
-    private static final Set<Category> KEEP_CATEGORIES = Set.of(FOOD, CAFE, STAY, SHOPPING);
-
-    /** 쇼핑으로 볼 경로 단어 */
-    private static final List<String> SHOPPING_WORDS = List.of("쇼핑", "시장", "백화점", "아울렛", "면세점");
-
-    /**
-     * 큰 분류 코드가 없을 때 카카오 카테고리 경로의 첫 단계로 분류한다. 모르는 경로면 null.
-     * 예: "여행 > 관광,명소" → 관광명소 / "문화,예술 > 문화시설 > 박물관" → 문화시설 / "음식점 > 카페 > 커피전문점" → 카페
-     */
-    private Category categoryFromPath(String path) {
-        if (!StringUtils.hasText(path)) {
-            return null;
-        }
-        List<String> steps = Arrays.stream(path.split(">"))
-                .map(String::trim)
-                .filter(step -> !step.isEmpty())
-                .toList();
-        if (steps.isEmpty()) {
-            return null;
-        }
-        String top = steps.get(0);
-        String second = steps.size() > 1 ? steps.get(1) : "";
-
-        if (top.equals("카페") || (top.equals("음식점") && second.equals("카페"))) {
-            return CAFE;
-        }
-        if (top.equals("음식점")) {
-            return FOOD;
-        }
-        if (top.equals("숙박")) {
-            return STAY;
-        }
-        if (steps.stream().anyMatch(step -> SHOPPING_WORDS.stream().anyMatch(step::contains))) {
-            return SHOPPING;
-        }
-        if (top.equals("여행")) {
-            return SIGHT;
-        }
-        if (top.startsWith("문화")) {
-            return CULTURE;
-        }
-        return null;
-    }
-
-    /** "여행 > 관광,명소 > 해수욕장" → [여행, 관광, 명소, 해수욕장] */
-    private List<String> wordsOf(String path) {
-        if (!StringUtils.hasText(path)) {
-            return List.of();
-        }
-        return Arrays.stream(path.split("[>,]"))
-                .map(String::trim)
-                .filter(word -> !word.isEmpty())
-                .toList();
-    }
-
-    private boolean endsWithAny(List<String> words, List<String> suffixes) {
-        return words.stream().anyMatch(word -> suffixes.stream().anyMatch(word::endsWith));
     }
 }

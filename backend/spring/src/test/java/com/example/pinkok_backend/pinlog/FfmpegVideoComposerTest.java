@@ -98,6 +98,29 @@ class FfmpegVideoComposerTest {
     }
 
     @Test
+    @DisplayName("WebP 사진(인스타그램 사진)도 PinLog 의 정지 장면으로 합성된다")
+    void composesWebpPhoto() throws Exception {
+        Assumptions.assumeTrue(commandExists("ffmpeg") && commandExists("ffprobe"),
+                "FFmpeg 가 설치돼 있지 않아 건너뜁니다.");
+
+        Path photo = workDir.resolve("photo.webp");
+        Process make = new ProcessBuilder("ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=green:s=1080x1350",
+                "-frames:v", "1", "-c:v", "libwebp", photo.toString()).redirectErrorStream(true).start();
+        make.getInputStream().readAllBytes();
+        Assumptions.assumeTrue(make.waitFor() == 0, "FFmpeg 에 WebP 인코더가 없어 건너뜁니다.");
+
+        Path output = workDir.resolve("webp-pinlog.mp4");
+        Path thumbnail = workDir.resolve("webp-pinlog_thumb.jpg");
+        VideoComposer composer = new FfmpegVideoComposer("ffmpeg", "ffprobe", 600, 1280, 720);
+        VideoComposer.Result result = composer.compose(
+                List.of(new VideoComposer.Clip(photo, true, 0, null)), output, thumbnail);
+
+        assertThat(Files.size(output)).isPositive();
+        assertThat(result.resolution()).isEqualTo("1280x720");
+        assertThat(result.durationMs()).isBetween(1500, 2500); // 사진 한 장 = 2초
+    }
+
+    @Test
     @DisplayName("영상에서 첫 장면 썸네일과 길이를 뽑는다 - PinLog 클립 선택 화면에서 쓴다")
     void probesThumbnailAndDuration() throws Exception {
         Assumptions.assumeTrue(commandExists("ffmpeg") && commandExists("ffprobe"),

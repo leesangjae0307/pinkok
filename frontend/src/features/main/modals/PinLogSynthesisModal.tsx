@@ -5,6 +5,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Video from 'react-native-video';
 
+import VideoThumb from '../../../components/VideoThumb';
+import VideoPlayerModal from './VideoPlayerModal';
+
 import { AvatarSource, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
 import { PixelBackArrow, PixelHotAirBalloon } from '../../../components/pixel/PixelIcons';
 import { AnimatedLoop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
@@ -65,6 +68,8 @@ export interface SynthesizedVlog {
     authorAvatar: AvatarSource;
     duration: number;
     thumbnail: string;
+    /** 이 장소에서 실제로 쓴 원본 클립 주소. 카드를 눌러 앱 안에서 재생한다. */
+    videoUrl?: string;
   }[];
 }
 
@@ -121,6 +126,8 @@ export default function PinLogSynthesisModal({
   const [result, setResult] = useState<SynthesizedVlog | null>(null);
   /** 지금 미리보기로 재생 중인 클립. 한 번에 하나만 돈다. */
   const [playingMediaId, setPlayingMediaId] = useState<number | null>(null);
+  /** 완성 화면에서 장소별 영상을 앱 안 플레이어로 재생 중인지 */
+  const [playingClip, setPlayingClip] = useState<{ uri: string; title: string } | null>(null);
   /**
    * 이 여행에 이미 만들어 둔 PinLog. 만든 직후 결과 화면에서만 지울 수 있어서
    * 앱을 껐다 켜면 지울 길이 없었다. 클립 고르는 화면에서 바로 지우게 한다.
@@ -215,6 +222,7 @@ export default function PinLogSynthesisModal({
         authorAvatar: option.author.avatar,
         duration: option.durationMs / 1000,
         thumbnail: option.thumbnailUrl,
+        videoUrl: option.videoUrl,
       })),
     };
     setResult(completed);
@@ -421,27 +429,43 @@ export default function PinLogSynthesisModal({
                   </Pressable>
                 ) : null}
 
-                <View className="flex-row flex-wrap justify-between gap-y-2">
+                {/* 이 PinLog 에 실제로 쓴 장소별 영상. 방문 순서대로 왼쪽부터, 옆으로 넘겨 본다. */}
+                <Text className="px-1 text-[11px] font-black text-slate-700">장소별 영상 · {result.clips.length}개</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2.5 pb-1">
                   {result.clips.map((clip, index) => (
-                    <View
+                    <Pressable
                       key={`${clip.placeName}-${index}`}
-                      className="overflow-hidden rounded-xl border border-[#82F0DC] bg-white"
-                      style={{ width: '31.5%' }}
+                      onPress={() => clip.videoUrl && setPlayingClip({ uri: clip.videoUrl, title: clip.placeName })}
+                      disabled={!clip.videoUrl}
+                      accessibilityLabel={`${index + 1}번 ${clip.placeName} 영상 재생`}
+                      className="w-36 overflow-hidden rounded-2xl border-2 border-pixel-navy bg-white active:opacity-80"
                     >
-                      {/* 비율은 감싸는 View 의 style 로 잡는다. Image 의 aspect-* 클래스는
-                          적용되지 않아 높이가 잡히지 않는다(아바타에서 확인). */}
-                      <View style={{ width: '100%', aspectRatio: 16 / 9 }}>
-                        <Image source={{ uri: clip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+                      {/* 비율은 감싸는 View 의 style 로 잡는다. Image 의 aspect-* 클래스는 적용되지 않는다. */}
+                      <View style={{ width: '100%', aspectRatio: 16 / 9 }} className="bg-black">
+                        <VideoThumb thumbnail={clip.thumbnail} videoUrl={clip.videoUrl} />
+                        <View className="absolute inset-0 items-center justify-center bg-black/25">
+                          <View className="h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-black/55">
+                            <Text className="text-xs text-white">▶</Text>
+                          </View>
+                        </View>
+                        <View className="absolute left-1.5 top-1.5 h-5 w-5 items-center justify-center rounded-full border border-white bg-pixel-navy">
+                          <Text className="font-pixel text-[8px] text-white">{index + 1}</Text>
+                        </View>
+                        <View className="absolute bottom-1 right-1 rounded bg-black/75 px-1">
+                          <Text className="font-pixel text-[8px] text-white">{clip.duration.toFixed(1)}s</Text>
+                        </View>
                       </View>
                       <View className="p-2">
-                        <Text numberOfLines={1} className="text-[9px] font-black text-slate-800">
-                          {index + 1}. {clip.placeName}
+                        <Text numberOfLines={1} className="text-[10px] font-black text-slate-800">
+                          {clip.placeName}
                         </Text>
-                        <Text className="mt-1 text-[8px] text-slate-500">{clip.authorName}</Text>
+                        <Text numberOfLines={1} className="mt-0.5 text-[9px] text-slate-500">
+                          {clip.authorName}
+                        </Text>
                       </View>
-                    </View>
+                    </Pressable>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             ) : status === 'QUEUED' || status === 'PROCESSING' ? (
               <View className="min-h-[580px] flex-1 items-center justify-center rounded-3xl border-3 border-pixel-navy bg-slate-950 p-6">
@@ -667,6 +691,9 @@ export default function PinLogSynthesisModal({
           )}
         </View>
       </View>
+      {playingClip && (
+        <VideoPlayerModal uri={playingClip.uri} title={playingClip.title} onClose={() => setPlayingClip(null)} />
+      )}
     </Modal>
   );
 }

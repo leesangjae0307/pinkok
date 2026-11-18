@@ -39,6 +39,10 @@ public class Recommendation {
     @Column(name = "category_text", length = 100)
     private String categoryText;
 
+    // 이 추천을 받을 때 쓴 지역 - 수락할 때 카카오맵 검색어에 쓴다 (여행 지역과 다를 수 있어서 따로 저장)
+    @Column(length = 100)
+    private String region;
+
     @Column(length = 500)
     private String reason;
 

@@ -245,6 +245,45 @@ class RecommendationTest {
     }
 
     @Test
+    @DisplayName("요청에 지역을 주면 여행에 저장된 지역보다 우선한다")
+    void create_requestRegionOverridesTrip() throws Exception {
+        String token = signupAndLogin("rec3@pinkok.com", "recuser3");
+        long tripId = createJejuTrip(token); // 여행에는 제주
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(TWO_PLACES_JSON, 10, 10));
+
+        requestRecommendation(token, String.format("{\"tripId\":%d,\"region\":\" 부산 \"}", tripId));
+
+        String prompt = promptSentToGemini();
+        assertTrue(prompt.contains("- 지역: 부산"), "요청한 지역(공백 제거)이 프롬프트에 들어가야 한다");
+        assertFalse(prompt.contains("- 지역: 제주"));
+    }
+
+    @Test
+    @DisplayName("요청에 지역이 없거나 비어 있으면 여행에 저장된 지역을 쓴다")
+    void create_blankRegionFallsBackToTrip() throws Exception {
+        String token = signupAndLogin("rec4@pinkok.com", "recuser4");
+        long tripId = createJejuTrip(token);
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(TWO_PLACES_JSON, 10, 10));
+
+        requestRecommendation(token, String.format("{\"tripId\":%d,\"region\":\"  \"}", tripId));
+
+        assertTrue(promptSentToGemini().contains("- 지역: 제주"));
+    }
+
+    @Test
+    @DisplayName("지역이 100자를 넘으면 400")
+    void create_regionTooLong_returns400() throws Exception {
+        String token = signupAndLogin("rec5@pinkok.com", "recuser5");
+        long tripId = createJejuTrip(token);
+
+        mockMvc.perform(post("/recommendations")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"tripId\":%d,\"region\":\"%s\"}", tripId, "가".repeat(101))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("이미 일정에 있는 장소와 예전에 추천한 장소는 프롬프트에서 제외시키고, 그래도 오면 저장하지 않는다")
     void create_excludesExistingPinsAndPreviousSuggestions() throws Exception {
         String token = signupAndLogin("rec3@pinkok.com", "recuser3");
@@ -453,6 +492,26 @@ class RecommendationTest {
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].place.name").value("성산일출봉"))
                 .andExpect(jsonPath("$[0].addedBy").value("AI"));
+    }
+
+    @Test
+    @DisplayName("수락 - 추천을 받을 때 쓴 지역이 여행 지역보다 먼저 카카오맵 검색어에 붙는다")
+    void accept_usesRequestedRegionForKakaoQuery() throws Exception {
+        String token = signupAndLogin("acc3@pinkok.com", "accuser3");
+        long tripId = createJejuTrip(token); // 여행 지역은 제주
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(TWO_PLACES_JSON, 10, 10));
+        requestRecommendation(token, String.format("{\"tripId\":%d,\"region\":\"부산\"}", tripId));
+        long recommendationId = firstSuggestionId(token, tripId);
+
+        Mockito.when(kakaoLocalApiClient.searchByKeyword(Mockito.eq("부산 성산일출봉"), Mockito.anyInt(), Mockito.anyInt()))
+                .thenReturn(kakaoHit("KAKAO-779", "성산일출봉"));
+
+        mockMvc.perform(post("/recommendations/" + recommendationId + "/accept")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACCEPTED"));
+        Mockito.verify(kakaoLocalApiClient, Mockito.never())
+                .searchByKeyword(Mockito.eq("제주 성산일출봉"), Mockito.anyInt(), Mockito.anyInt());
     }
 
     @Test

@@ -65,6 +65,7 @@ public class RecommendationService {
 
     private static final int DEFAULT_COUNT = 5;
     private static final int MAX_COUNT = 10;
+    private static final int MAX_REGION_LENGTH = 100;
 
     private static final Map<String, String> COMPANION_LABELS = Map.of(
             "SOLO", "혼자",
@@ -73,7 +74,7 @@ public class RecommendationService {
             "FRIEND", "친구");
 
     /** 요청마다 달라지는 조건. 비동기 스레드로 넘기려고 한데 묶었다. */
-    private record Params(String companionType, List<String> styleCodes, int count) {
+    private record Params(String companionType, String region, List<String> styleCodes, int count) {
     }
 
     private final AiRequestRepository aiRequestRepository;
@@ -144,6 +145,7 @@ public class RecommendationService {
 
         Params params = new Params(
                 normalizeCompanion(request.getCompanionType()),
+                normalizeRegion(request.getRegion()),
                 normalizeStyleCodes(request.getStyleCodes()),
                 normalizeCount(request.getCount()));
 
@@ -153,6 +155,7 @@ public class RecommendationService {
         aiRequest.setRequestType(REQUEST_TYPE_RECOMMEND);
         aiRequest.setInputType(INPUT_TYPE_TEXT);
         aiRequest.setSourceText("추천 요청 | 동행=" + orDash(params.companionType())
+                + " | 지역=" + orDash(params.region())
                 + " | 스타일=" + (params.styleCodes().isEmpty() ? "-" : String.join(",", params.styleCodes()))
                 + " | 개수=" + params.count());
         aiRequest.setStatus(GeminiJobRunner.STATUS_PENDING);
@@ -232,6 +235,7 @@ public class RecommendationService {
         }
 
         Long tripId;
+        String region;
         List<String> excludeNames;
         List<GeminiGenerateRequest.Part> parts;
         try {
@@ -246,6 +250,9 @@ public class RecommendationService {
                     trip.getCompanionType(),
                     userSettingRepository.findById(userId).map(UserSetting::getDefaultCompanionType).orElse(null));
 
+            // 요청에 지역이 있으면 그걸, 없으면 여행에 저장된 지역을 쓴다
+            region = firstText(params.region(), trip.getRegion());
+
             excludeNames = Stream.concat(
                             itineraryItemRepository.findPlaceNamesByTripId(tripId).stream(),
                             recommendationRepository.findSuggestedNamesByTripId(tripId).stream())
@@ -253,7 +260,7 @@ public class RecommendationService {
                     .toList();
 
             String prompt = RecommendationPromptBuilder.build(
-                    trip.getRegion(),
+                    region,
                     describePeriod(trip.getStartDate(), trip.getEndDate()),
                     companion == null ? null : COMPANION_LABELS.get(companion),
                     resolveStyleNames(params, tripId, userId),
@@ -270,7 +277,7 @@ public class RecommendationService {
         }
 
         try {
-            saveRecommendations(aiRequest, tripId, params.count(), excludeNames);
+            saveRecommendations(aiRequest, tripId, region, params.count(), excludeNames);
         } catch (RuntimeException e) {
             // 호출은 성공했지만 응답이 약속한 JSON 형식이 아닌 경우 - 토큰·비용 기록은 남기고 실패로 끝낸다
             int retries = aiRequest.getRetryCount() == null ? 0 : aiRequest.getRetryCount();
@@ -282,7 +289,7 @@ public class RecommendationService {
         geminiJobRunner.markSucceeded(aiRequest);
     }
 
-    private void saveRecommendations(AiRequest aiRequest, Long tripId, int count, List<String> excludeNames) {
+    private void saveRecommendations(AiRequest aiRequest, Long tripId, String region, int count, List<String> excludeNames) {
         AiRecommendationResult result =
                 objectMapper.readValue(stripCodeFence(RawResponseJson.unwrap(objectMapper, aiRequest.getRawResponse())), AiRecommendationResult.class);
         if (result == null || result.recommendations() == null) {
@@ -315,6 +322,7 @@ public class RecommendationService {
             row.setSuggestedName(truncate(place.name().trim(), 200));
             row.setSuggestedAddress(blankToNull(truncate(place.address(), 300)));
             row.setCategoryText(blankToNull(truncate(place.category(), 100)));
+            row.setRegion(blankToNull(truncate(region, 100)));
             row.setReason(blankToNull(truncate(place.reason(), 500)));
             row.setStatus(STATUS_SUGGESTED);
             row.setCreatedAt(now);
@@ -337,6 +345,17 @@ public class RecommendationService {
                     "companionType 은 SOLO / COUPLE / FAMILY / FRIEND 중 하나여야 합니다.");
         }
         return upper;
+    }
+
+    private String normalizeRegion(String region) {
+        if (!StringUtils.hasText(region)) {
+            return null;
+        }
+        String trimmed = region.trim();
+        if (trimmed.length() > MAX_REGION_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "region 은 " + MAX_REGION_LENGTH + "자 이하여야 합니다.");
+        }
+        return trimmed;
     }
 
     private List<String> normalizeStyleCodes(List<String> styleCodes) {
@@ -391,8 +410,10 @@ public class RecommendationService {
     private String[] buildMapQueries(Trip trip, Recommendation recommendation) {
         List<String> queries = new ArrayList<>();
         String name = recommendation.getSuggestedName();
-        if (StringUtils.hasText(trip.getRegion())) {
-            queries.add(trip.getRegion().trim() + " " + name);
+        // 추천을 받을 때 쓴 지역이 우선이다. 옛 추천(지역 미저장)은 여행 지역을 쓴다.
+        String region = firstText(recommendation.getRegion(), trip.getRegion());
+        if (StringUtils.hasText(region)) {
+            queries.add(region.trim() + " " + name);
         }
         queries.add(name);
         if (StringUtils.hasText(recommendation.getSuggestedAddress())) {

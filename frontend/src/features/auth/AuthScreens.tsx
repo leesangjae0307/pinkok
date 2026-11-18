@@ -46,11 +46,9 @@ import {Me, fetchAvatars, login, signup} from '../../api/authApi';
 
 import {errorMessage} from '../../api/axios';
 
-import {
-  PixelBackArrow,
-  PixelGoogleIcon,
-  PixelKakaoIcon,
-} from '../../components/pixel/PixelIcons';
+import {PixelBackArrow} from '../../components/pixel/PixelIcons';
+
+import {GoogleLogo, KakaoLogo, NaverLogo} from './SocialLogos';
 
 import {AnimatedLoop, LinearGradient} from '../../components/pixel/Primitives';
 
@@ -141,20 +139,6 @@ function FieldIcon({kind}: {kind: 'user' | 'email' | 'lock'}) {
         stroke={c}
         strokeWidth={1.5}
       />
-    </Svg>
-  );
-}
-
-function NaverIcon() {
-  const c = '#16A34A';
-
-  return (
-    <Svg width={22} height={22} viewBox="0 0 18 18">
-      <Rect x="2" y="2" width="4" height="14" fill={c} />
-
-      <Rect x="12" y="2" width="4" height="14" fill={c} />
-
-      <Path d="M5 2h4l4 7v7H9L5 9Z" fill={c} />
     </Svg>
   );
 }
@@ -588,21 +572,21 @@ function LoginScreen({
                   onPress={notReady}
                   accessibilityLabel="네이버로 로그인 (준비 중)"
                   className="h-12 w-12 items-center justify-center rounded-2xl border-2 border-[#1E293B] bg-white shadow-md active:translate-y-0.5">
-                  <NaverIcon />
+                  <NaverLogo />
                 </Pressable>
 
                 <Pressable
                   onPress={notReady}
                   accessibilityLabel="Google로 로그인 (준비 중)"
                   className="h-12 w-12 items-center justify-center rounded-2xl border-2 border-[#1E293B] bg-white shadow-md active:translate-y-0.5">
-                  <PixelGoogleIcon size={22} />
+                  <GoogleLogo />
                 </Pressable>
 
                 <Pressable
                   onPress={notReady}
                   accessibilityLabel="카카오로 로그인 (준비 중)"
                   className="h-12 w-12 items-center justify-center rounded-2xl border-2 border-[#1E293B] bg-[#FEE500] shadow-md active:translate-y-0.5">
-                  <PixelKakaoIcon size={22} />
+                  <KakaoLogo />
                 </Pressable>
               </View>
             </View>

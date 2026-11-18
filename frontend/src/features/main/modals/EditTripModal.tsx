@@ -95,7 +95,7 @@ export default function EditTripModal({
 
   /** 갤러리에서 고른 사진을 올려 두기만 한다. 실제 반영은 저장할 때 한다. */
   const pickCover = async () => {
-    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
+    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, assetRepresentationMode: 'compatible' });
     const asset = res.assets?.[0];
     if (res.didCancel || !asset?.uri) {return;}
     setIsUploadingCover(true);

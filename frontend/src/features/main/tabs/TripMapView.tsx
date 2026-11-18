@@ -27,6 +27,7 @@ export default function TripMapView() {
     handleDeleteDay,
     setAssigningPlace,
     handleMovePlace,
+    handleReorderPlaces,
     setEditingTimePlace,
     handleDeletePlace,
     handleSetPlaceTime,
@@ -40,6 +41,9 @@ export default function TripMapView() {
     setIsPlaceDetailModalOpen,
     setStartPlaceCamera,
     placeRecords,
+    recordDrafts,
+    savingRecords,
+    handleRetryRecord,
     tripsSheetHeight,
     setTripsSheetHeight,
     handleOptimizeRoute,
@@ -52,6 +56,19 @@ export default function TripMapView() {
     acc[r.pinId] = (acc[r.pinId] || 0) + 1;
     return acc;
   }, {} as { [key: number]: number });
+
+  /**
+   * 장소 카드에 띄울 내 기록 저장 상태. 다시 시도하는 중이면 실패보다 저장 중을 보여준다.
+   */
+  const recordSaveStatus: {
+    [pinId: number]: { state: 'saving'; done: number; total: number } | { state: 'failed' };
+  } = {};
+  Object.values(recordDrafts).forEach((d) => {
+    recordSaveStatus[d.pinId] = { state: 'failed' };
+  });
+  Object.entries(savingRecords).forEach(([pinId, progress]) => {
+    recordSaveStatus[Number(pinId)] = { state: 'saving', ...progress };
+  });
 
   /** 지도에 넘길 마커. 라벨이 길면 말풍선이 화면을 덮어서 줄인다. */
   const mapMarkers: MapMarker[] = useMemo(
@@ -162,6 +179,7 @@ export default function TripMapView() {
         onDeleteDay={handleDeleteDay}
         onAssignDay={setAssigningPlace}
         onMovePlace={handleMovePlace}
+        onReorderPlaces={handleReorderPlaces}
         onEditTime={setEditingTimePlace}
         onClearTime={(place) => handleSetPlaceTime(place.id, null)}
         onDeletePlace={handleDeletePlace}
@@ -180,6 +198,8 @@ export default function TripMapView() {
           setIsPlaceDetailModalOpen(true);
         }}
         teamRecordCounts={teamRecordCounts}
+        recordSaveStatus={recordSaveStatus}
+        onRetryRecord={handleRetryRecord}
         onOptimizeRoute={handleOptimizeRoute}
         isOptimizingRoute={isOptimizingRoute}
       />

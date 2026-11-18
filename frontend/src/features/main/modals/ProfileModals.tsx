@@ -19,6 +19,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FadeIn, ModalBackdrop, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
 import { PROFILE_AVATARS, useApp } from '../AppContext';
 import { fileUrl } from '../../../api/fileApi';
+import VideoThumb from '../../../components/VideoThumb';
+import VideoPlayerModal from './VideoPlayerModal';
 import { GalleryPermissionError, savePinlogToGallery } from '../../../services/saveToGallery';
 
 function SheetHeader({
@@ -199,12 +201,12 @@ export function ProfileDetailModal() {
               {isProfileStatsLoading ? '불러오는 중…' : '아직 기록이 없어요.'}
             </Text>
           ) : profileDetailModal === 'regions' ? (
-            <View className="flex-row flex-wrap justify-between gap-y-2">
+            <View className="flex-row flex-wrap justify-start gap-2">
               {profileStats.regions.map((region) => (
                 <View
                   key={region.name}
                   className="items-center rounded-2xl border-2 border-[#82F0DC] bg-white p-3 shadow-sm"
-                  style={{ width: '31.5%' }}
+                  style={{ width: '31%' }}
                 >
                   <Text className="text-xl">📍</Text>
                   <Text numberOfLines={1} className="mt-2 text-xs font-black text-slate-700">
@@ -247,6 +249,8 @@ export function ProfileDetailModal() {
 export function ClipPlaybackModal() {
   const { activeClipModal, setActiveClipModal, showToast } = useApp();
   const [isSaving, setIsSaving] = useState(false);
+  /** 완성본을 앱 안 전체화면 플레이어로 재생 중인지 */
+  const [isPlaying, setIsPlaying] = useState(false);
   /** 0~100. 서버가 Content-Length 를 주면 내려받는 동안 올라간다. */
   const [saveProgress, setSaveProgress] = useState(0);
 
@@ -289,10 +293,18 @@ export function ClipPlaybackModal() {
               <Text className="font-pixel text-[8px] text-[#FFC837]">PINKOK TAPE</Text>
             </View>
             <View className="relative aspect-video overflow-hidden rounded-lg border-2 border-slate-600 bg-black">
-              <Image source={{ uri: activeClipModal.thumbnail }} resizeMode="cover" className="h-full w-full" />
-              <View className="absolute left-2 top-2 rounded bg-slate-900/80 px-2 py-0.5">
-                <Text className="font-pixel text-[9px] text-[#56EADD]">1.0초 플레이중</Text>
-              </View>
+              <VideoThumb thumbnail={activeClipModal.thumbnail} videoUrl={activeClipModal.videoUrl} />
+              {activeClipModal.videoUrl ? (
+                <Pressable
+                  onPress={() => setIsPlaying(true)}
+                  accessibilityLabel="영상 재생"
+                  className="absolute inset-0 items-center justify-center bg-black/20"
+                >
+                  <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-white bg-black/55">
+                    <Text className="text-lg text-white">▶</Text>
+                  </View>
+                </Pressable>
+              ) : null}
               <View className="absolute bottom-3 left-3 right-3 rounded-xl bg-black/60 p-2">
                 <Text className="font-pixel text-[10px] text-[#FFC837]">{activeClipModal.time}</Text>
                 <Text className="text-xs font-bold text-white">📍 {activeClipModal.location}</Text>
@@ -334,6 +346,13 @@ export function ClipPlaybackModal() {
           </Pressable>
         </View>
       </FadeIn>
+      {isPlaying && activeClipModal.videoUrl ? (
+        <VideoPlayerModal
+          uri={activeClipModal.videoUrl}
+          title={activeClipModal.location}
+          onClose={() => setIsPlaying(false)}
+        />
+      ) : null}
     </ModalBackdrop>
   );
 }

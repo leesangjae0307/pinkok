@@ -95,13 +95,36 @@ export async function createPlaceCandidates(aiRequestId: number): Promise<PlaceC
   return data;
 }
 
+/**
+ * 후보를 핀으로 추가한 결과.
+ *
+ * 서버는 건너뛴 후보를 이유별로 나눠서 돌려준다. 고른 개수와 실제로 꽂힌 개수가
+ * 다를 수 있으므로(좌표를 못 찾은 후보는 핀이 될 수 없다) 이 값을 보고
+ * 사용자에게 무엇이 왜 빠졌는지 알려줘야 한다.
+ */
+export interface AddCandidatesToTripResult {
+  /** 새로 꽂힌 핀 */
+  added: unknown[];
+  /** 이미 그 여행에 있던 장소라 건너뛴 후보 ID */
+  skippedDuplicate: number[];
+  /** 카카오맵에서 좌표를 못 찾아 추가할 수 없던 후보 ID */
+  skippedNoCoordinate: number[];
+}
+
 /** 체크한 후보를 여행 지도에 핀으로 추가한다 (날짜 미배정). */
 export async function addCandidatesToTrip(
   tripId: number,
   candidateIds: number[],
-): Promise<{ addedCount: number; skippedCount: number }> {
-  const { data } = await api.post('/place-candidates/add-to-trip', { tripId, candidateIds });
-  return data;
+): Promise<AddCandidatesToTripResult> {
+  const { data } = await api.post<AddCandidatesToTripResult>('/place-candidates/add-to-trip', {
+    tripId,
+    candidateIds,
+  });
+  return {
+    added: data?.added ?? [],
+    skippedDuplicate: data?.skippedDuplicate ?? [],
+    skippedNoCoordinate: data?.skippedNoCoordinate ?? [],
+  };
 }
 
 /** 스크린샷 후보에 붙은 원본 이미지 주소 (상대 경로를 절대 주소로). */

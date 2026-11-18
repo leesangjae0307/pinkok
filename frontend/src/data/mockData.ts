@@ -29,13 +29,6 @@ export interface TripFolder {
   isOwner?: boolean;
 }
 
-export interface TransitInfo {
-  type: 'car' | 'walk' | 'bus';
-  label: string;
-  duration: string;
-  distance?: string;
-}
-
 export interface PlaceItem {
   id: number;
   name: string;
@@ -52,7 +45,10 @@ export interface PlaceItem {
   /** 1일차, 2일차 ... 날짜를 안 정한 핀은 0 */
   day: number;
   time?: string;
-  transitToNext?: TransitInfo;
+  /** 서버가 준 장소 종류. 여행 "전체" 탭에서 묶는 기준 */
+  categoryCode?: string;
+  categoryLabel?: string;
+  categoryOrder?: number;
   note?: string;
 }
 
@@ -61,6 +57,8 @@ export interface VlogClip {
   time: string;
   location: string;
   thumbnail: string;
+  /** 완성된 영상 주소. 앱 안에서 재생한다. */
+  videoUrl?: string;
   selected: boolean;
 }
 

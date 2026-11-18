@@ -8,17 +8,17 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
-import Video from 'react-native-video';
+import { launchImageLibrary, type PhotoQuality } from 'react-native-image-picker';
 
 import { AvatarSource, PlaceItem, PlaceRecord, isImageAvatar, toImageSource } from '../../../data/mockData';
 import RecordClipModal from './RecordClipModal';
 import PhotoViewerModal from './PhotoViewerModal';
+import VideoPlayerModal from './VideoPlayerModal';
+import VideoThumb from '../../../components/VideoThumb';
 import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
 
@@ -35,6 +35,13 @@ interface PlaceDetailModalProps {
   currentUserName: string;
   /** true 면 기록 편집 + 카메라 화면으로 바로 연다 (지도 바텀시트의 "바로 촬영") */
   startInCamera?: boolean;
+  /**
+   * 저장에 실패해 임시저장된 내 기록. 있으면 편집 화면을 서버의 기록 대신 이 내용으로 채운다
+   * (사용자가 쓴 메모·별점·고른 사진을 다시 쓰지 않아도 되게).
+   */
+  draft?: PlaceRecord;
+  /** true 면 편집 화면으로 바로 연다 (장소의 "저장 실패 · 다시 시도") */
+  startInEdit?: boolean;
 }
 
 export default function PlaceDetailModal({
@@ -48,16 +55,20 @@ export default function PlaceDetailModal({
   currentUserId,
   currentUserName,
   startInCamera = false,
+  draft,
+  startInEdit = false,
 }: PlaceDetailModalProps) {
   const myExistingRecord = records.find((r) => r.pinId === place.id && r.userId === currentUserId);
+  // 편집 화면을 채울 내용. 저장하지 못한 임시저장본이 있으면 그것이 우선이다.
+  const editSource = draft ?? myExistingRecord;
 
-  const [isEditing, setIsEditing] = useState(startInCamera);
-  const [rating, setRating] = useState(myExistingRecord?.rating || 5);
-  const [memoText, setMemoText] = useState(myExistingRecord?.memo || '');
-  const [photos, setPhotos] = useState<string[]>(myExistingRecord?.photos || []);
-  const [videoClip, setVideoClip] = useState<PlaceRecord['videoClip'] | undefined>(myExistingRecord?.videoClip);
-  /** 붙인 영상을 눌러서 미리 재생 중인지. 핀로그를 만들기 전에도 확인할 수 있어야 한다. */
-  const [isClipPlaying, setIsClipPlaying] = useState(false);
+  const [isEditing, setIsEditing] = useState(startInCamera || startInEdit);
+  const [rating, setRating] = useState(editSource?.rating || 5);
+  const [memoText, setMemoText] = useState(editSource?.memo || '');
+  const [photos, setPhotos] = useState<string[]>(editSource?.photos || []);
+  const [videoClip, setVideoClip] = useState<PlaceRecord['videoClip'] | undefined>(editSource?.videoClip);
+  /** 앱 안 전체화면 플레이어로 재생 중인 영상 주소. 핀로그를 만들기 전에도 확인할 수 있어야 한다. */
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null);
   /** 크게 보고 있는 사진. 어느 기록의 몇 번째인지 함께 들고 있는다. */
   const [viewerPhotos, setViewerPhotos] = useState<{ photos: string[]; index: number } | null>(null);
   const [memoFocused, setMemoFocused] = useState(false);
@@ -66,18 +77,19 @@ export default function PlaceDetailModal({
   const [isCameraActive, setIsCameraActive] = useState(startInCamera);
 
   useEffect(() => {
-    if (myExistingRecord) {
-      setRating(myExistingRecord.rating);
-      setMemoText(myExistingRecord.memo);
-      setPhotos(myExistingRecord.photos);
-      setVideoClip(myExistingRecord.videoClip);
+    const source = draft ?? myExistingRecord;
+    if (source) {
+      setRating(source.rating);
+      setMemoText(source.memo);
+      setPhotos(source.photos);
+      setVideoClip(source.videoClip);
     } else {
       setRating(5);
       setMemoText('');
       setPhotos([]);
       setVideoClip(undefined);
     }
-  }, [myExistingRecord, place.id]);
+  }, [draft, myExistingRecord, place.id]);
 
 
   /**
@@ -89,7 +101,19 @@ export default function PlaceDetailModal({
    */
   const handleAddPhoto = async () => {
     try {
-      const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 0 });
+      // 고를 때 줄여 둔다 (긴 변 2048px, JPEG 85%). 폰 원본은 장당 5~15MB 라 여러 장이면
+      // 업로드가 오래 걸려 실패하기 쉽다. 비율은 유지되고, 회전 정보(EXIF)는 선택기가
+      // 줄인 파일에 그대로 옮겨 준다. 영상은 이 선택기를 쓰지 않으므로 영향이 없다.
+      const res = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 0,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        // 타입은 0.1 단위만 나열하지만 안드로이드는 값을 그대로 ×100 해서 쓴다 (Options.java).
+        quality: 0.85 as PhotoQuality,
+        // iOS 의 HEIC 는 호환되는 형식(JPEG)으로 바꿔 건넨다. 안드로이드는 영향이 없다.
+        assetRepresentationMode: 'compatible',
+      });
       if (res.didCancel) {return;}
       if (res.errorCode) {
         Alert.alert('사진을 열지 못했어요', res.errorMessage ?? '잠시 후 다시 시도해 주세요.');
@@ -229,18 +253,18 @@ export default function PlaceDetailModal({
             </View>
 
             {/* 1인 1기록 규칙 안내 */}
-            <View className="rounded-2xl border-2 border-teal-700/40 bg-white/90 p-3">
+            <View className="rounded-2xl border-2 border-pixel-navy bg-white p-3 shadow-md">
               <View className="flex-row items-start gap-2">
                 <View className="rounded-lg bg-amber-100 p-1">
                   <Text className="text-base">⚖️</Text>
                 </View>
                 <View className="flex-1 gap-0.5">
                   <Text className="text-xs font-black text-teal-900">1인 1기록 제약 규칙 (1 User = 1 Record)</Text>
-                  <Text className="text-[11px] leading-snug text-slate-600">
+                  <Text className="text-[11px] leading-4 text-slate-600">
                     [같은 핀 + 같은 유저] 당 <Text className="font-bold">오직 1개의 기록</Text>만 허용됩니다. 작성 후에는
                     자동으로 <Text className="font-bold">[수정]</Text> 모드로 전환됩니다.
                   </Text>
-                  <View className="flex-row flex-wrap items-center gap-2 pt-1">
+                  <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1 pt-1.5">
                     <Text className="text-[10px] font-bold text-teal-800">📝 메모 1개 (별점 포함)</Text>
                     <Text className="text-[10px] font-bold text-teal-800">·</Text>
                     <Text className="text-[10px] font-bold text-teal-800">🖼️ 사진 복수</Text>
@@ -394,35 +418,16 @@ export default function PlaceDetailModal({
 
                     {videoClip && (
                       <View className="relative flex-row items-center gap-3 overflow-hidden rounded-2xl border-2 border-pixel-navy bg-slate-900 p-2.5">
-                        {/* 붙인 영상은 저장 전에도 눌러서 바로 확인할 수 있다. */}
+                        {/* 붙인 영상은 저장 전에도 눌러서 앱 안에서 바로 확인할 수 있다. */}
                         <Pressable
-                          onPress={() => videoClip.videoUrl && setIsClipPlaying((p) => !p)}
-                          accessibilityLabel={isClipPlaying ? '영상 일시정지' : '영상 재생'}
+                          onPress={() => videoClip.videoUrl && setPlayingVideo(videoClip.videoUrl)}
+                          accessibilityLabel="영상 재생"
                           className="relative h-16 w-16 overflow-hidden rounded-xl border border-white/20 bg-black"
                         >
-                          {/*
-                            안드로이드에서 Video 는 자기 네이티브 뷰로 터치를 먹어버려서
-                            감싼 Pressable 까지 이벤트가 오지 않는다. 터치를 흘려보낸다.
-                          */}
-                          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-                            {videoClip.videoUrl ? (
-                              <Video
-                                source={{ uri: videoClip.videoUrl }}
-                                paused={!isClipPlaying}
-                                repeat
-                                muted={!isClipPlaying}
-                                resizeMode="cover"
-                                style={{ width: '100%', height: '100%' }}
-                              />
-                            ) : videoClip.thumbnail ? (
-                              <Image source={{ uri: videoClip.thumbnail }} resizeMode="cover" className="h-full w-full" />
-                            ) : null}
+                          <VideoThumb thumbnail={videoClip.thumbnail} videoUrl={videoClip.videoUrl} />
+                          <View className="absolute inset-0 items-center justify-center bg-black/30">
+                            <Text className="text-base text-white">▶</Text>
                           </View>
-                          {!isClipPlaying && (
-                            <View className="absolute inset-0 items-center justify-center bg-black/30">
-                              <Text className="text-base text-white">▶</Text>
-                            </View>
-                          )}
                         </Pressable>
                         <View className="min-w-0 flex-1">
                           <View className="flex-row items-center gap-1.5">
@@ -558,26 +563,36 @@ export default function PlaceDetailModal({
                       )}
 
                       {record.videoClip && (
-                        <View className="flex-row items-center justify-between rounded-2xl border border-white/20 bg-slate-900 p-2.5">
-                          <View className="flex-row items-center gap-2.5">
-                            <View className="relative h-12 w-12 overflow-hidden rounded-lg border border-white/20">
-                              <Image source={{ uri: record.videoClip.thumbnail }} resizeMode="cover" className="h-full w-full" />
-                              <View className="absolute inset-0 items-center justify-center bg-black/40">
-                                <Text className="text-xs text-white">▶</Text>
+                        <Pressable
+                          onPress={() =>
+                            record.videoClip?.videoUrl && setPlayingVideo(record.videoClip.videoUrl)
+                          }
+                          accessibilityLabel={`${record.authorName} 영상 재생`}
+                          className="overflow-hidden rounded-2xl border-2 border-pixel-navy bg-slate-900"
+                        >
+                          {/* 16:9 대표 이미지 + 가운데 재생 버튼 + 길이 */}
+                          <View className="relative aspect-video w-full">
+                            <VideoThumb
+                              thumbnail={record.videoClip.thumbnail}
+                              videoUrl={record.videoClip.videoUrl}
+                            />
+                            <View className="absolute inset-0 items-center justify-center bg-black/25">
+                              <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-white bg-black/55">
+                                <Text className="text-lg text-white">▶</Text>
                               </View>
                             </View>
-                            <View>
-                              <View className="flex-row items-center gap-1.5">
-                                <View className="rounded bg-rose-500 px-1">
-                                  <Text className="font-pixel text-[8px] text-white">{record.videoClip.duration}s</Text>
-                                </View>
-                                <Text className="text-xs font-bold text-white">최대 2초 동영상</Text>
-                              </View>
-                              <Text className="text-[10px] text-slate-400">PinLog 브이로그 후보</Text>
+                            <View className="absolute bottom-2 right-2 rounded bg-black/75 px-1.5 py-0.5">
+                              <Text className="font-pixel text-[9px] text-white">{record.videoClip.duration}s</Text>
                             </View>
                           </View>
-                          <Text className="font-pixel text-[9px] text-[#56EADD]">READY ✓</Text>
-                        </View>
+                          <View className="flex-row items-center justify-between px-3 py-2">
+                            <View>
+                              <Text className="text-xs font-bold text-white">최대 2초 동영상</Text>
+                              <Text className="text-[10px] text-slate-400">PinLog 브이로그 후보</Text>
+                            </View>
+                            <Text className="font-pixel text-[9px] text-[#56EADD]">READY ✓</Text>
+                          </View>
+                        </Pressable>
                       )}
                     </View>
                   );
@@ -603,6 +618,8 @@ export default function PlaceDetailModal({
           </View>
         </View>
       </View>
+
+      {playingVideo && <VideoPlayerModal uri={playingVideo} onClose={() => setPlayingVideo(null)} />}
 
       {viewerPhotos && (
         <PhotoViewerModal

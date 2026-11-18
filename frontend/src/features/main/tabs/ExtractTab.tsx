@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 
 import { PixelExtractIcon, PixelStar } from '../../../components/pixel/PixelIcons';
@@ -25,15 +25,34 @@ export default function ExtractTab() {
     setSelectedTripForExtract,
     extractImageNames,
     setExtractImageNames,
+    extractImages,
     setExtractImages,
     showToast,
     handleExtractSubmit,
     handleToggleExtractedPlace,
+    handleToggleAllExtractedPlaces,
     handleAddPlaceToTrip,
+    handleCreateTripAndAdd,
+    isCreatingExtractTrip,
   } = useApp();
+  const [isNewTripOpen, setIsNewTripOpen] = React.useState(false);
+  const [newTripTitle, setNewTripTitle] = React.useState('');
+  /** 불러오지 못한 첨부 이미지(주소 기준). 이것만 대체 아이콘으로 바꾼다. */
+  const [brokenImages, setBrokenImages] = React.useState<Record<string, boolean>>({});
+
+  /** 이름 목록과 원본 목록은 짝이라 같은 칸을 함께 지운다. */
+  const removeExtractImage = (index: number) => {
+    setExtractImageNames(extractImageNames.filter((_, i) => i !== index));
+    setExtractImages(extractImages.filter((_, i) => i !== index));
+  };
 
   const handlePickScreenshots = async () => {
-    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: MAX_IMAGES });
+    const res = await launchImageLibrary({
+      mediaType: 'photo',
+      selectionLimit: MAX_IMAGES,
+      // iOS 의 HEIC 는 서버가 받는 형식으로 바꿔 건넨다.
+      assetRepresentationMode: 'compatible',
+    });
     const assets = (res.assets ?? []).slice(0, MAX_IMAGES);
     if (assets.length > 0) {
       setExtractImageNames(assets.map((asset, i) => asset.fileName ?? `스크린샷 ${i + 1}`));
@@ -50,6 +69,8 @@ export default function ExtractTab() {
   const targetTripId = trips.some((t) => t.id === selectedTripForExtract) ? selectedTripForExtract : trips[0]?.id;
 
   const noneSelected = selectedExtractedPlaceIds.length === 0;
+  const allSelected =
+    extractedPlaces.length > 0 && extractedPlaces.every((p) => selectedExtractedPlaceIds.includes(p.id));
 
   return (
     <FadeIn style={{ padding: 16, paddingBottom: 80, gap: 16 }}>
@@ -109,16 +130,37 @@ export default function ExtractTab() {
             <Text className="text-[10px] font-black text-[#075953]">
               첨부 이미지 {extractImageNames.length}/{MAX_IMAGES}
             </Text>
-            <Pressable onPress={() => { setExtractImageNames([]); setExtractImages([]); }} hitSlop={8}>
+            <Pressable onPress={() => { setExtractImageNames([]); setExtractImages([]); setBrokenImages({}); }} hitSlop={8}>
               <Text className="text-[9px] font-black text-rose-500">전체 삭제</Text>
             </Pressable>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2" contentContainerClassName="gap-1.5">
-            {extractImageNames.map((name, index) => (
-              <View key={`${name}-${index}`} className="max-w-28 rounded-lg bg-[#B4FAF0] px-2 py-1">
-                <Text numberOfLines={1} className="text-[9px] font-bold text-[#075953]">
-                  {index + 1}. {name}
-                </Text>
+          {/* 파일명 대신 작은 썸네일. 여러 장이면 옆으로 넘겨 본다. */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2" contentContainerClassName="gap-2 pt-1.5">
+            {extractImages.map((img, index) => (
+              <View key={`${img.uri}-${index}`} className="relative">
+                <View className="h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-[#82F0DC] bg-[#B4FAF0]/50">
+                  {brokenImages[img.uri] ? (
+                    // 불러오지 못했을 때만 대체 아이콘을 보여준다.
+                    <Text className="text-2xl">🖼️</Text>
+                  ) : (
+                    <Image
+                      source={{ uri: img.uri }}
+                      // 비율을 지킨 채 칸 안에 전부 보이게 한다.
+                      resizeMode="contain"
+                      className="h-full w-full"
+                      accessibilityLabel={`첨부 이미지 ${index + 1}`}
+                      onError={() => setBrokenImages((cur) => ({ ...cur, [img.uri]: true }))}
+                    />
+                  )}
+                </View>
+                <Pressable
+                  onPress={() => removeExtractImage(index)}
+                  accessibilityLabel={`첨부 이미지 ${index + 1} 삭제`}
+                  hitSlop={6}
+                  className="absolute -right-1.5 -top-1.5 h-5 w-5 items-center justify-center rounded-full border border-white bg-slate-800"
+                >
+                  <Text className="text-[9px] font-black text-white">✕</Text>
+                </Pressable>
               </View>
             ))}
           </ScrollView>
@@ -184,8 +226,20 @@ export default function ExtractTab() {
                 <Text className="font-pixel text-[9px] text-[#075953]">AI FOUND PLACES</Text>
                 <Text className="mt-1 text-sm font-extrabold text-slate-900">장소 후보 {extractedPlaces.length}곳</Text>
               </View>
-              <View className="rounded-xl border border-[#82F0DC] bg-white px-2.5 py-1">
-                <Text className="text-[10px] font-bold text-[#075953]">{selectedExtractedPlaceIds.length}곳 선택</Text>
+              <View className="items-end gap-1.5">
+                <View className="rounded-xl border border-[#82F0DC] bg-white px-2.5 py-1">
+                  <Text className="text-[10px] font-bold text-[#075953]">{selectedExtractedPlaceIds.length}곳 선택</Text>
+                </View>
+                <Pressable
+                  onPress={handleToggleAllExtractedPlaces}
+                  accessibilityRole="button"
+                  accessibilityLabel={allSelected ? '전체 선택 해제' : '전체 선택'}
+                  className="rounded-xl border-2 border-[#075953] bg-[#B4FAF0] px-2.5 py-1 active:bg-[#56EADD]"
+                >
+                  <Text className="text-[10px] font-black text-[#075953]">
+                    {allSelected ? '전체 선택 해제' : '전체 선택'}
+                  </Text>
+                </Pressable>
               </View>
             </View>
 
@@ -304,9 +358,58 @@ export default function ExtractTab() {
                   </View>
                 ) : (
                   <Text className="py-3 text-center text-xs font-bold text-slate-400">
-                    보낼 여행이 없어요. 여행 탭에서 먼저 만들어 주세요.
+                    보낼 여행이 없어요. 아래에서 새 여행을 만들어 보내세요.
                   </Text>
                 )}
+
+                {/* 기존 여행과 따로 새 여행을 만들어 바로 보낸다. */}
+                <View className="mt-2 border-t border-slate-100 pt-2">
+                  {isNewTripOpen ? (
+                    <View className="gap-2">
+                      <TextInput
+                        value={newTripTitle}
+                        onChangeText={setNewTripTitle}
+                        placeholder="새 여행 이름"
+                        placeholderTextColor="#94A3B8"
+                        maxLength={100}
+                        autoFocus
+                        className="h-11 rounded-xl border-2 border-[#82F0DC] bg-white px-3 py-0 text-sm font-bold text-slate-800"
+                      />
+                      <View className="flex-row gap-2">
+                        <Pressable
+                          onPress={() => setIsNewTripOpen(false)}
+                          disabled={isCreatingExtractTrip}
+                          className="h-11 flex-1 items-center justify-center rounded-xl border-2 border-slate-300 bg-white"
+                        >
+                          <Text className="text-xs font-black text-slate-600">취소</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={async () => {
+                            if (await handleCreateTripAndAdd(newTripTitle)) {
+                              setNewTripTitle('');
+                              setIsNewTripOpen(false);
+                            }
+                          }}
+                          disabled={!newTripTitle.trim() || isCreatingExtractTrip}
+                          style={{ opacity: !newTripTitle.trim() || isCreatingExtractTrip ? 0.5 : 1 }}
+                          className="h-11 flex-[2] items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD]"
+                        >
+                          <Text className="text-xs font-black text-pixel-navy">
+                            {isCreatingExtractTrip ? '만드는 중…' : `만들고 ${selectedExtractedPlaceIds.length}곳 보내기`}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : (
+                    <Pressable
+                      onPress={() => setIsNewTripOpen(true)}
+                      accessibilityLabel="새 여행 만들기"
+                      className="h-11 w-full items-center justify-center rounded-xl border-2 border-dashed border-[#075953] bg-white active:bg-[#B4FAF0]/40"
+                    >
+                      <Text className="text-xs font-black text-[#075953]">＋ 새 여행 만들기</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             )}
           </FadeIn>

@@ -2,8 +2,8 @@
  * 로그인 이후 메인 앱 셸
  * 상단 토스트 · 화면 영역(알림/설정/5개 탭) · 하단 5탭 네비 · 각종 모달
  */
-import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Me } from '../../api/authApi';
@@ -64,7 +64,35 @@ function ScreenBody() {
     removeNewTripMember,
     handleCreateTrip,
     isCreatingTrip,
+    reloadTrips,
+    reloadInvitations,
+    reloadNotifications,
+    reloadProfileStats,
+    reloadMyPinlogs,
   } = useApp();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  /**
+   * 당겨서 새로고침. 화면마다 그 화면이 보여주는 데이터만 서버에서 다시 받는다.
+   * 서버에서 받아오는 목록이 없는 화면(추출·설정)은 지원하지 않는다.
+   * 이미 새로고침 중이면 다시 요청하지 않는다.
+   */
+  const refreshers: Partial<Record<string, () => Promise<unknown>>> = {
+    notification: () => reloadNotifications(),
+    home: () => Promise.all([reloadTrips(), reloadInvitations()]),
+    trips: () => Promise.all([reloadTrips(), reloadInvitations()]),
+    pinlog: () => Promise.all([reloadMyPinlogs(), reloadTrips()]),
+    profile: () => reloadProfileStats(),
+  };
+  const onRefresh = async () => {
+    const refresh = refreshers[isNotificationOpen ? 'notification' : activeTab];
+    if (isRefreshing || !refresh) {return;}
+    setIsRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // 새 여행 만들기는 탭 위를 덮는 전체 화면 (웹과 같이 하단 탭바도 숨김)
   if (isCreateTripOpen) {
@@ -88,9 +116,20 @@ function ScreenBody() {
   }
 
   const key = isNotificationOpen ? 'notification' : isSettingsOpen ? 'settings' : activeTab;
+  const canRefresh = !isSettingsOpen && (isNotificationOpen || activeTab !== 'extract');
 
   return (
-    <ScrollView key={key} className="flex-1" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <ScrollView
+      key={key}
+      className="flex-1"
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        canRefresh ? (
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={['#075953']} tintColor="#075953" />
+        ) : undefined
+      }
+    >
       {isNotificationOpen ? (
         <NotificationScreen />
       ) : isSettingsOpen ? (
@@ -119,6 +158,9 @@ function GlobalModals() {
     setIsPlaceDetailModalOpen,
     startPlaceCamera,
     setStartPlaceCamera,
+    startPlaceEdit,
+    setStartPlaceEdit,
+    recordDrafts,
     handleSavePlaceRecord,
     handleDeletePlaceRecord,
     selectedProfileAvatar,
@@ -168,8 +210,11 @@ function GlobalModals() {
           onClose={() => {
             setIsPlaceDetailModalOpen(false);
             setStartPlaceCamera(false);
+            setStartPlaceEdit(false);
           }}
           startInCamera={startPlaceCamera}
+          startInEdit={startPlaceEdit}
+          draft={recordDrafts[selectedMapPin.id]?.record}
           onSaveRecord={handleSavePlaceRecord}
           onDeleteRecord={handleDeletePlaceRecord}
           currentUserAvatarUrl={profileAvatarSource(selectedProfileAvatar)}

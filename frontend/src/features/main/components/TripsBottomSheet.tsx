@@ -1,9 +1,21 @@
 /**
- * 여행 지도 하단 조절형 바텀시트 (드래그 핸들 · 일자 필터 · 이동수단 타임라인)
+ * 여행 지도 하단 조절형 바텀시트 (드래그 핸들 · 일자 필터 · 장소 타임라인)
  */
-import React, { useMemo, useRef } from 'react';
-import { ActivityIndicator, PanResponder, Pressable, ScrollView, Text, View } from 'react-native';
-import Svg, { Line } from 'react-native-svg';
+import React, { useMemo, useRef, useState } from 'react';
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Animated,
+  type GestureResponderEvent,
+  LayoutAnimation,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  UIManager,
+  View,
+} from 'react-native';
 
 import { PlaceItem } from '../../../data/mockData';
 import { AnimatedLoop, PixelPressable } from '../../../components/pixel/Primitives';
@@ -25,6 +37,31 @@ const SELECTED_SHADOW = {
   // 선택 상태는 테두리·배경·"선택됨" 배지로 이미 충분히 보인다.
 } as const;
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+/** 시스템의 "애니메이션 줄이기" 설정. 켜져 있으면 시트 높이를 부드럽게 바꾸지 않고 바로 바꾼다. */
+let reduceMotion = false;
+AccessibilityInfo.isReduceMotionEnabled().then((v) => {
+  reduceMotion = v;
+});
+AccessibilityInfo.addEventListener('reduceMotionChanged', (v) => {
+  reduceMotion = v;
+});
+
+/** 다음 높이 변경을 부드럽게 이어 붙인다. 손가락을 따라 끄는 동안에는 쓰지 않는다. */
+function animateNextSheetChange() {
+  if (!reduceMotion) {
+    LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+  }
+}
+
+/** 카드 사이 간격(contentContainerStyle 의 gap) */
+const CARD_GAP = 8;
+/** 끌기가 시작되기까지 누르고 있어야 하는 시간 */
+const DRAG_HOLD_MS = 250;
+
 interface TripsBottomSheetProps {
   /** 바텀시트가 놓인 영역의 실제 높이(px) */
   containerHeight: number;
@@ -41,6 +78,12 @@ interface TripsBottomSheetProps {
   onOpenTeamRecord: (place: PlaceItem) => void;
   /** 장소 상세를 카메라 화면으로 바로 연다 */
   onOpenCamera: (place: PlaceItem) => void;
+  /** 뒤에서 저장 중이거나 저장에 실패한 내 기록 (핀 ID 기준). 없으면 아무것도 띄우지 않는다. */
+  recordSaveStatus?: {
+    [pinId: number]: { state: 'saving'; done: number; total: number } | { state: 'failed' };
+  };
+  /** "저장 실패 · 다시 시도" 를 눌렀을 때 */
+  onRetryRecord?: (place: PlaceItem) => void;
   teamRecordCounts: { [pinId: number]: number };
   onOptimizeRoute: () => void;
   isOptimizingRoute: boolean;
@@ -57,22 +100,14 @@ interface TripsBottomSheetProps {
   onAssignDay: (place: PlaceItem) => void;
   /** 일자 안에서 한 칸 위(-1)/아래(1)로 옮긴다. */
   onMovePlace: (placeId: number, direction: -1 | 1) => void;
+  /** 끌어서 바꾼 순서. 그 일자의 핀 ID 를 새 방문 순서대로 준다. */
+  onReorderPlaces: (orderedIds: number[]) => void;
   /** 여행할 시각을 고르는 창을 연다. */
   onEditTime: (place: PlaceItem) => void;
   /** 넣어둔 시각을 지운다. 시각이 있을 때만 불린다. */
   onClearTime: (place: PlaceItem) => void;
   /** 지도에서 장소를 아주 지운다. 확인은 부모가 받는다. */
   onDeletePlace: (place: PlaceItem) => void;
-}
-
-function DashedVLine() {
-  return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: 25, top: 0, bottom: 0, width: 2 }}>
-      <Svg width={2} height="100%">
-        <Line x1="1" y1="0" x2="1" y2="100%" stroke="rgba(45,212,191,0.8)" strokeWidth={2} strokeDasharray="4 3" />
-      </Svg>
-    </View>
-  );
 }
 
 export default function TripsBottomSheet({
@@ -87,6 +122,8 @@ export default function TripsBottomSheet({
   onSelectPlace,
   onOpenTeamRecord,
   onOpenCamera,
+  recordSaveStatus = {},
+  onRetryRecord,
   teamRecordCounts,
   onOptimizeRoute,
   isOptimizingRoute,
@@ -99,6 +136,7 @@ export default function TripsBottomSheet({
   onDeleteDay,
   onAssignDay,
   onMovePlace,
+  onReorderPlaces,
   onEditTime,
   onClearTime,
   onDeletePlace,
@@ -129,6 +167,7 @@ export default function TripsBottomSheet({
         onPanResponderRelease: () => {
           // 가까운 단계로 스냅: 접힘(25%) / 중간(50%) / 최대(78%)
           const h = heightRef.current;
+          animateNextSheetChange();
           if (h < 36) {onChangeRef.current(25);}
           else if (h > 62) {onChangeRef.current(78);}
           else {onChangeRef.current(50);}
@@ -137,6 +176,339 @@ export default function TripsBottomSheet({
       }),
     [],
   );
+
+  // ---- 종류별 묶음("전체" 탭) ----
+  // 서버가 준 category/categoryLabel/categoryOrder 만 쓴다. 값이 없는 장소는 기타(ETC)로 모은다.
+  // 비어 있는 종류는 만들어지지 않고, 기타는 항상 맨 뒤에 온다.
+  const categoryGroups = useMemo(() => {
+    const map = new Map<string, { code: string; label: string; order: number; places: PlaceItem[] }>();
+    places.forEach((p) => {
+      const code = p.categoryCode ?? 'ETC';
+      const group = map.get(code) ?? {
+        code,
+        label: p.categoryLabel ?? '기타',
+        order: code === 'ETC' ? Number.MAX_SAFE_INTEGER : (p.categoryOrder ?? Number.MAX_SAFE_INTEGER - 1),
+        places: [],
+      };
+      group.places.push(p);
+      map.set(code, group);
+    });
+    return [...map.values()].sort((a, b) => a.order - b.order);
+  }, [places]);
+
+  // ---- 길게 눌러 끌어서 순서 바꾸기 (같은 일자 안) ----
+  const placesRef = useRef(places);
+  placesRef.current = places;
+  const onReorderRef = useRef(onReorderPlaces);
+  onReorderRef.current = onReorderPlaces;
+  const cardHeights = useRef<Record<number, number>>({});
+  const dragY = useRef(new Animated.Value(0)).current;
+  /** 카드마다 아래로/위로 비켜 서는 거리 */
+  const shifts = useRef<Record<number, Animated.Value>>({});
+  const shiftOf = (id: number) => (shifts.current[id] ??= new Animated.Value(0));
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const drag = useRef<{ id: number; from: number; over: number; active: boolean; timer?: ReturnType<typeof setTimeout> }>({
+    id: -1,
+    from: 0,
+    over: 0,
+    active: false,
+  });
+  const settleShifts = (list: PlaceItem[], from: number, over: number) => {
+    const moved = cardHeights.current[list[from]?.id] ?? 0;
+    list.forEach((p, i) => {
+      if (i === from) {return;}
+      let to = 0;
+      if (from < over && i > from && i <= over) {to = -(moved + CARD_GAP);}
+      if (from > over && i >= over && i < from) {to = moved + CARD_GAP;}
+      Animated.timing(shiftOf(p.id), { toValue: to, duration: 140, useNativeDriver: true }).start();
+    });
+  };
+
+  const endDrag = (commit: boolean) => {
+    const d = drag.current;
+    if (d.timer) {clearTimeout(d.timer);}
+    const list = placesRef.current;
+    if (d.active) {
+      if (commit && d.over !== d.from) {
+        const ids = list.map((p) => p.id);
+        const [moved] = ids.splice(d.from, 1);
+        ids.splice(d.over, 0, moved);
+        onReorderRef.current(ids);
+      }
+      dragY.setValue(0);
+      list.forEach((p) => shiftOf(p.id).setValue(0));
+    }
+    drag.current = { id: -1, from: 0, over: 0, active: false };
+    setDraggingId(null);
+  };
+
+  /** 끌기가 시작될 때 카드가 떠오르는 정도(0~1) */
+  const lift = useRef(new Animated.Value(0)).current;
+  /** 길게 눌러 끌기를 시작한 직후에는 손을 뗄 때 카드 탭(상세 진입)이 일어나지 않게 한다. */
+  const suppressPress = useRef(false);
+  const touchStart = useRef({ x: 0, y: 0 });
+
+  /**
+   * 카드 전체에 거는 손짓. 카드를 누르고 있어도(DRAG_HOLD_MS) 거의 움직이지 않으면 끌기가 시작된다.
+   * 그 전에 손가락이 움직이면(스크롤) 끌기는 시작하지 않고, 평소 탭·스크롤이 그대로 동작한다.
+   * 시작되기 전에는 응답자를 가로채지 않아서 카드 안의 버튼(시각·일자·삭제·기록)도 그대로 눌린다.
+   */
+  const touchHandlersFor = (id: number) => ({
+    onTouchStart: (e: GestureResponderEvent) => {
+      touchStart.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+      const list = placesRef.current;
+      const from = list.findIndex((p) => p.id === id);
+      if (drag.current.timer) {clearTimeout(drag.current.timer);}
+      drag.current = { id, from, over: from, active: false };
+      drag.current.timer = setTimeout(() => {
+        if (drag.current.id !== id) {return;}
+        drag.current.active = true;
+        suppressPress.current = true;
+        lift.setValue(0);
+        Animated.spring(lift, { toValue: 1, useNativeDriver: true, friction: 7 }).start();
+        setDraggingId(id);
+      }, DRAG_HOLD_MS);
+    },
+    onTouchMove: (e: GestureResponderEvent) => {
+      const d = drag.current;
+      if (d.id !== id || d.active) {return;}
+      const dx = Math.abs(e.nativeEvent.pageX - touchStart.current.x);
+      const dy = Math.abs(e.nativeEvent.pageY - touchStart.current.y);
+      // 시작 전에 움직였다면 스크롤이다. 끌기를 포기한다.
+      if (dx > 8 || dy > 8) {
+        if (d.timer) {clearTimeout(d.timer);}
+        drag.current = { id: -1, from: 0, over: 0, active: false };
+      }
+    },
+    onTouchEnd: () => {
+      // 끌기를 시작했지만 움직이지 않고 뗀 경우(응답자를 못 잡았을 때)도 정리한다.
+      if (drag.current.id === id) {endDrag(drag.current.active);}
+      setTimeout(() => {
+        suppressPress.current = false;
+      }, 50);
+    },
+    onTouchCancel: () => {
+      if (drag.current.id === id) {endDrag(false);}
+      suppressPress.current = false;
+    },
+  });
+
+  const grips = useRef<Record<number, ReturnType<typeof PanResponder.create>>>({});
+  const gripFor = (id: number) => {
+    if (grips.current[id]) {return grips.current[id];}
+    grips.current[id] = PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      // 끌기가 시작된 뒤의 움직임만 가로챈다(카드 안 버튼과 스크롤보다 먼저).
+      onMoveShouldSetPanResponderCapture: () => drag.current.id === id && drag.current.active,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderMove: (_, g) => {
+        const d = drag.current;
+        if (!d.active) {return;}
+        dragY.setValue(g.dy);
+        const list = placesRef.current;
+        let over = d.from;
+        let acc = 0;
+        if (g.dy > 0) {
+          for (let i = d.from + 1; i < list.length; i++) {
+            const h = (cardHeights.current[list[i].id] ?? 0) + CARD_GAP;
+            if (g.dy > acc + h / 2) {over = i; acc += h;} else {break;}
+          }
+        } else {
+          for (let i = d.from - 1; i >= 0; i--) {
+            const h = (cardHeights.current[list[i].id] ?? 0) + CARD_GAP;
+            if (-g.dy > acc + h / 2) {over = i; acc += h;} else {break;}
+          }
+        }
+        if (over !== d.over) {
+          d.over = over;
+          settleShifts(list, d.from, over);
+        }
+      },
+      onPanResponderRelease: () => endDrag(true),
+      onPanResponderTerminate: () => endDrag(false),
+    });
+    return grips.current[id];
+  };
+
+  /** 카드에 입히는 이동. 끄는 카드는 손가락을 따라가고, 나머지는 자리를 비켜 준다. */
+  const cardStyle = (id: number) =>
+    id === draggingId
+      ? ({
+          zIndex: 50,
+          transform: [
+            { translateY: dragY },
+            { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.03] }) },
+          ],
+          ...SELECTED_SHADOW,
+          shadowOpacity: 0.28,
+          shadowRadius: 8,
+        } as const)
+      : ({ transform: [{ translateY: shiftOf(id) }] } as const);
+
+  /** 장소 카드 한 장. 일자별 목록과 "전체"의 종류별 목록이 같이 쓴다. */
+  const renderPlace = (place: PlaceItem) => {
+            const isSelected = selectedPlaceId === place.id;
+            const saveStatus = recordSaveStatus[place.id];
+            const recordsCount = teamRecordCounts[place.id] || 0;
+
+            return (
+              <Animated.View
+                key={place.id}
+                onLayout={(e) => {
+                  cardHeights.current[place.id] = e.nativeEvent.layout.height;
+                }}
+                style={cardStyle(place.id)}
+                {...(selectedDay !== 'all' ? { ...gripFor(place.id).panHandlers, ...touchHandlersFor(place.id) } : {})}
+              >
+                <Pressable
+                  onPress={() => {
+                    if (suppressPress.current) {return;}
+                    onSelectPlace(place);
+                  }}
+                  accessibilityActions={
+                    selectedDay !== 'all'
+                      ? [
+                          { name: 'decrement', label: '위로 옮기기' },
+                          { name: 'increment', label: '아래로 옮기기' },
+                        ]
+                      : undefined
+                  }
+                  onAccessibilityAction={(e) => {
+                    if (e.nativeEvent.actionName === 'decrement') {onMovePlace(place.id, -1);}
+                    if (e.nativeEvent.actionName === 'increment') {onMovePlace(place.id, 1);}
+                  }}
+                  style={[
+                    isSelected ? SELECTED_SHADOW : undefined,
+                    // 들어 올린 카드는 배경이 살짝 짙어진다. 클래스가 아니라 style 로 준다.
+                    draggingId === place.id ? { backgroundColor: '#D3F6EE' } : undefined,
+                  ]}
+                  className={`flex-row items-center justify-between gap-3 rounded-2xl border-2 p-3 ${
+                    isSelected ? 'border-pixel-navy bg-[#B4FAF0]' : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <View className="min-w-0 flex-1 flex-row items-center gap-3">
+                    {/* 순번 픽셀 뱃지 */}
+                    {isSelected ? (
+                      <AnimatedLoop kind="bounceSmall">
+                        <View className="h-7 w-7 items-center justify-center rounded-full border-2 border-pixel-navy bg-[#FF5A87]">
+                          <Text className="font-pixel text-xs text-white">{place.order}</Text>
+                        </View>
+                      </AnimatedLoop>
+                    ) : (
+                      <View className="h-7 w-7 items-center justify-center rounded-full border-2 border-pixel-navy bg-pixel-navy">
+                        <Text className="font-pixel text-xs text-white">{place.order}</Text>
+                      </View>
+                    )}
+
+                    {/* 장소명 · 주소 · 시각 · 배지 (썸네일을 뺀 만큼 글자 영역을 넓게 쓴다) */}
+                    <View className="min-w-0 flex-1">
+                      <Text numberOfLines={1} className="text-xs font-extrabold leading-4 text-slate-900">
+                        {place.name}
+                      </Text>
+                      {place.address ? (
+                        <Text numberOfLines={1} className="mt-0.5 text-[10px] font-semibold text-slate-500">
+                          {place.address}
+                        </Text>
+                      ) : null}
+
+                      {/* 여행할 시각. 누르면 고치고, 길게 누르면 지운다. */}
+                      <Pressable
+                        onPress={() => onEditTime(place)}
+                        onLongPress={place.time ? () => onClearTime(place) : undefined}
+                        accessibilityLabel={`${place.name} 시각 ${
+                          place.time ? `${place.time}. 길게 누르면 지움` : '추가'
+                        }`}
+                        className="mt-1 flex-row items-center gap-1 self-start"
+                      >
+                        <Text className="text-[10px]">🕑</Text>
+                        <Text
+                          className={`font-pixel text-[10px] ${place.time ? 'text-[#075953]' : 'text-slate-400'}`}
+                        >
+                          {place.time ?? '시각 추가'}
+                        </Text>
+                      </Pressable>
+
+                      <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
+                        <Text className="font-pixel text-[9px] text-amber-500">★ {place.rating}</Text>
+                        <Text className="text-[10px] text-slate-300">·</Text>
+                        {/* 날짜를 안 정한 핀은 day 가 0 이라 "0day" 로 보이면 안 된다. */}
+                        <Pressable
+                          onPress={() => onAssignDay(place)}
+                          accessibilityLabel={`${place.name} 일자 지정`}
+                          className={`rounded px-1.5 py-0.5 ${place.day > 0 ? 'bg-[#B4FAF0]' : 'border border-dashed border-slate-400 bg-white'}`}
+                        >
+                          <Text className="text-[9px] font-bold text-teal-800">
+                            {place.day > 0 ? `${place.day}day` : '일자 지정'}
+                          </Text>
+                        </Pressable>
+                        {isSelected && (
+                          <View className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5">
+                            <Text className="text-[8px] font-black text-rose-600">선택됨 ✓</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* 팀 기록 · 바로 촬영 */}
+                  <View className="items-end gap-1">
+                    <View className="flex-row items-center gap-1">
+                      {/* 장소 삭제. 되돌릴 수 없어서 누르면 확인을 한 번 받는다. */}
+                      <Pressable
+                        onPress={() => onDeletePlace(place)}
+                        accessibilityLabel={`${place.name} 삭제`}
+                        hitSlop={6}
+                        className="h-7 w-7 items-center justify-center rounded-xl border border-rose-300 bg-white active:bg-rose-50"
+                      >
+                        <Text className="text-[11px] font-black text-rose-500">✕</Text>
+                      </Pressable>
+                      {/* 기록이 있든 없든 같은 크기. 개수는 같은 자리 안에서만 바뀐다. */}
+                      <Pressable
+                        onPress={() => onOpenTeamRecord(place)}
+                        className="h-8 w-[72px] flex-row items-center justify-center gap-1 rounded-xl border border-teal-600 bg-white active:translate-y-0.5 active:bg-teal-50"
+                      >
+                        <Text className="text-[10px] font-black text-teal-900">👥 기록</Text>
+                        {recordsCount > 0 && (
+                          <View className="rounded-full bg-teal-700 px-1">
+                            <Text className="font-pixel text-[8px] text-white">{recordsCount}</Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    </View>
+                    {/* 내 기록 저장 상태: 실패하면 다시 시도, 저장 중이면 진행 상황 */}
+                    {saveStatus?.state === 'failed' && (
+                      <Pressable
+                        onPress={() => onRetryRecord?.(place)}
+                        accessibilityLabel={`${place.name} 기록 저장 실패, 다시 시도`}
+                        hitSlop={4}
+                        className="rounded-xl border border-rose-400 bg-rose-50 px-2 py-1 active:bg-rose-100"
+                      >
+                        <Text className="text-[9px] font-black text-rose-600">저장 실패 · 다시 시도</Text>
+                      </Pressable>
+                    )}
+                    {saveStatus?.state === 'saving' && (
+                      <View className="rounded-xl border border-teal-300 bg-teal-50 px-2 py-1">
+                        <Text className="text-[9px] font-black text-teal-800">
+                          {saveStatus.total > 0 ? `업로드 중… ${saveStatus.done}/${saveStatus.total}` : '저장 중…'}
+                        </Text>
+                      </View>
+                    )}
+                    <PixelPressable
+                      shadowColor="#075953"
+                      offset={2}
+                      radius={12}
+                      accessibilityLabel={`${place.name}에서 바로 촬영`}
+                      wrapperClassName="w-[104px]"
+                      className="h-8 w-[104px] items-center justify-center rounded-xl border-2 border-pixel-navy bg-rose-500"
+                      onPress={() => onOpenCamera(place)}
+                    >
+                      <Text className="text-[9px] font-black text-white">● 바로 촬영</Text>
+                    </PixelPressable>
+                  </View>
+                </Pressable>
+              </Animated.View>
+            );
+  };
 
   return (
     <View
@@ -233,7 +605,10 @@ export default function TripsBottomSheet({
             </Text>
           </Pressable>
           <Pressable
-            onPress={() => onHeightChange(sheetHeightPercent > 50 ? 25 : 78)}
+            onPress={() => {
+              animateNextSheetChange();
+              onHeightChange(sheetHeightPercent > 50 ? 25 : 78);
+            }}
             accessibilityLabel="높이 전환"
             className="h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 active:bg-slate-100"
           >
@@ -243,7 +618,12 @@ export default function TripsBottomSheet({
       </View>
 
       {/* 3. 장소 타임라인 */}
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1"
+        scrollEnabled={draggingId === null}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: CARD_GAP }}
+        showsVerticalScrollIndicator={false}
+      >
         {isLoading ? (
           <View className="items-center rounded-2xl border-2 border-dashed border-slate-200 p-8">
             <ActivityIndicator color="#075953" />
@@ -260,171 +640,19 @@ export default function TripsBottomSheet({
             <Text className="text-center text-xs text-slate-400">해당 일자에 등록된 장소가 없습니다.</Text>
           </View>
         ) : (
-          places.map((place, index) => {
-            const isSelected = selectedPlaceId === place.id;
-            const recordsCount = teamRecordCounts[place.id] || 0;
-
-            return (
-              <React.Fragment key={place.id}>
-                <Pressable
-                  onPress={() => onSelectPlace(place)}
-                  style={isSelected ? SELECTED_SHADOW : undefined}
-                  className={`flex-row items-center justify-between gap-3 rounded-2xl border-2 p-3 ${
-                    isSelected ? 'border-pixel-navy bg-[#B4FAF0]' : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <View className="min-w-0 flex-1 flex-row items-center gap-3">
-                    {/* 순번 픽셀 뱃지 */}
-                    {isSelected ? (
-                      <AnimatedLoop kind="bounceSmall">
-                        <View className="h-7 w-7 items-center justify-center rounded-full border-2 border-pixel-navy bg-[#FF5A87]">
-                          <Text className="font-pixel text-xs text-white">{place.order}</Text>
-                        </View>
-                      </AnimatedLoop>
-                    ) : (
-                      <View className="h-7 w-7 items-center justify-center rounded-full border-2 border-pixel-navy bg-pixel-navy">
-                        <Text className="font-pixel text-xs text-white">{place.order}</Text>
-                      </View>
-                    )}
-
-                    {/* 장소명 · 주소 · 시각 · 배지 (썸네일을 뺀 만큼 글자 영역을 넓게 쓴다) */}
-                    <View className="min-w-0 flex-1">
-                      <Text numberOfLines={1} className="text-xs font-extrabold leading-4 text-slate-900">
-                        {place.name}
-                      </Text>
-                      {place.address ? (
-                        <Text numberOfLines={1} className="mt-0.5 text-[10px] font-semibold text-slate-500">
-                          {place.address}
-                        </Text>
-                      ) : null}
-
-                      {/* 여행할 시각. 누르면 고치고, 길게 누르면 지운다. */}
-                      <Pressable
-                        onPress={() => onEditTime(place)}
-                        onLongPress={place.time ? () => onClearTime(place) : undefined}
-                        accessibilityLabel={`${place.name} 시각 ${
-                          place.time ? `${place.time}. 길게 누르면 지움` : '추가'
-                        }`}
-                        className="mt-1 flex-row items-center gap-1 self-start"
-                      >
-                        <Text className="text-[10px]">🕑</Text>
-                        <Text
-                          className={`font-pixel text-[10px] ${place.time ? 'text-[#075953]' : 'text-slate-400'}`}
-                        >
-                          {place.time ?? '시각 추가'}
-                        </Text>
-                      </Pressable>
-
-                      <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
-                        <Text className="font-pixel text-[9px] text-amber-500">★ {place.rating}</Text>
-                        <Text className="text-[10px] text-slate-300">·</Text>
-                        {/* 날짜를 안 정한 핀은 day 가 0 이라 "0day" 로 보이면 안 된다. */}
-                        <Pressable
-                          onPress={() => onAssignDay(place)}
-                          accessibilityLabel={`${place.name} 일자 지정`}
-                          className={`rounded px-1.5 py-0.5 ${place.day > 0 ? 'bg-[#B4FAF0]' : 'border border-dashed border-slate-400 bg-white'}`}
-                        >
-                          <Text className="text-[9px] font-bold text-teal-800">
-                            {place.day > 0 ? `${place.day}day` : '일자 지정'}
-                          </Text>
-                        </Pressable>
-                        {isSelected && (
-                          <View className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5">
-                            <Text className="text-[8px] font-black text-rose-600">선택됨 ✓</Text>
-                          </View>
-                        )}
-                      </View>
+          selectedDay === 'all'
+            ? categoryGroups.map((group) => (
+                <View key={group.code} className="gap-2">
+                  <View className="flex-row items-center gap-1.5 px-1 pt-1">
+                    <Text className="text-xs font-black text-[#075953]">{group.label}</Text>
+                    <View className="rounded-full bg-[#B4FAF0] px-1.5 py-0.5">
+                      <Text className="font-pixel text-[9px] text-[#075953]">{group.places.length}곳</Text>
                     </View>
                   </View>
-
-                  {/* 일자 안에서만 순서를 바꿀 수 있다. 전체에는 기준이 되는 일자가 없다. */}
-                  {selectedDay !== 'all' && (
-                    <View className="gap-1">
-                      <Pressable
-                        onPress={() => onMovePlace(place.id, -1)}
-                        disabled={index === 0}
-                        accessibilityLabel={`${place.name} 위로`}
-                        style={{
-                          backgroundColor: index === 0 ? '#F1F5F9' : '#fff',
-                          opacity: index === 0 ? 0.4 : 1,
-                        }}
-                        className="h-7 w-7 items-center justify-center rounded-lg border-2 border-pixel-navy"
-                      >
-                        <Text className="text-[10px] font-black text-pixel-navy">▲</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => onMovePlace(place.id, 1)}
-                        disabled={index === places.length - 1}
-                        accessibilityLabel={`${place.name} 아래로`}
-                        style={{
-                          backgroundColor: index === places.length - 1 ? '#F1F5F9' : '#fff',
-                          opacity: index === places.length - 1 ? 0.4 : 1,
-                        }}
-                        className="h-7 w-7 items-center justify-center rounded-lg border-2 border-pixel-navy"
-                      >
-                        <Text className="text-[10px] font-black text-pixel-navy">▼</Text>
-                      </Pressable>
-                    </View>
-                  )}
-
-                  {/* 팀 기록 · 바로 촬영 */}
-                  <View className="items-end gap-1">
-                    <View className="flex-row items-center gap-1">
-                      {/* 장소 삭제. 되돌릴 수 없어서 누르면 확인을 한 번 받는다. */}
-                      <Pressable
-                        onPress={() => onDeletePlace(place)}
-                        accessibilityLabel={`${place.name} 삭제`}
-                        hitSlop={6}
-                        className="h-7 w-7 items-center justify-center rounded-xl border border-rose-300 bg-white active:bg-rose-50"
-                      >
-                        <Text className="text-[11px] font-black text-rose-500">✕</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => onOpenTeamRecord(place)}
-                        className="flex-row items-center gap-1 rounded-xl border border-teal-600 bg-white px-2.5 py-1.5 active:translate-y-0.5 active:bg-teal-50"
-                      >
-                        <Text className="text-[10px] font-black text-teal-900">👥 기록</Text>
-                        {recordsCount > 0 && (
-                          <View className="rounded-full bg-teal-700 px-1">
-                            <Text className="font-pixel text-[8px] text-white">{recordsCount}</Text>
-                          </View>
-                        )}
-                      </Pressable>
-                    </View>
-                    <PixelPressable
-                      shadowColor="#075953"
-                      offset={2}
-                      radius={12}
-                      accessibilityLabel={`${place.name}에서 바로 촬영`}
-                      className="rounded-xl border-2 border-pixel-navy bg-rose-500 px-2.5 py-1.5"
-                      onPress={() => onOpenCamera(place)}
-                    >
-                      <Text className="text-[9px] font-black text-white">● 바로 촬영</Text>
-                    </PixelPressable>
-                  </View>
-                </Pressable>
-
-                {/* 장소 간 이동 수단 */}
-                {place.transitToNext && (
-                  <View className="relative my-0.5 flex-row items-center gap-2.5 py-1.5 pl-6">
-                    <DashedVLine />
-                    <View className="z-10 h-7 w-7 items-center justify-center rounded-full border-2 border-pixel-navy bg-white">
-                      <Text className="text-sm">{place.transitToNext.type === 'car' ? '🚗' : '🚶'}</Text>
-                    </View>
-                    <View className="flex-row items-center gap-1.5 rounded-xl border border-teal-200 bg-white/95 px-2.5 py-1">
-                      <Text className="text-[10px] font-black text-slate-800">{place.transitToNext.label}</Text>
-                      <View className="rounded bg-[#B4FAF0] px-1.5">
-                        <Text className="font-pixel text-[9px] text-[#075953]">{place.transitToNext.duration}</Text>
-                      </View>
-                      {place.transitToNext.distance ? (
-                        <Text className="text-[9px] text-slate-400">({place.transitToNext.distance})</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                )}
-              </React.Fragment>
-            );
-          })
+                  {group.places.map(renderPlace)}
+                </View>
+              ))
+            : places.map(renderPlace)
         )}
       </ScrollView>
     </View>

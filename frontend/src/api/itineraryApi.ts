@@ -1,6 +1,6 @@
 import api from './axios';
 import { fileUrl } from './fileApi';
-import { PlaceItem, TransitInfo } from '../data/mockData';
+import { PlaceItem } from '../data/mockData';
 
 /** 서버가 내려주는 장소. 좌표는 실제 위경도(WGS84) 다. */
 export interface Place {
@@ -11,6 +11,11 @@ export interface Place {
   latitude: number;
   longitude: number;
   categoryName: string | null;
+  /** 서버가 정한 장소 종류 코드(FD6, CE7 … ETC). 앱에서 해석하지 않고 묶는 기준으로만 쓴다. */
+  category?: string | null;
+  categoryLabel?: string | null;
+  /** 종류 정렬 순서(0 맛집 … 8 기타) */
+  categoryOrder?: number | null;
   phone: string | null;
   placeUrl: string | null;
 }
@@ -33,8 +38,6 @@ export interface ItineraryItem {
   /** 'HH:mm:ss' */
   plannedArrivalTime: string | null;
   stayMinutes: number | null;
-  /** CAR / WALK / BUS / TRAIN */
-  transportMode: string | null;
   memo: string | null;
   addedBy: string | null;
   /** 팀원 기록 별점 평균. 기록이 없으면 null */
@@ -91,8 +94,6 @@ export interface ItineraryItemCreatePayload {
   /** 'HH:mm' */
   plannedArrivalTime?: string;
   stayMinutes?: number;
-  /** CAR / WALK / BUS / TRAIN */
-  transportMode?: string;
   memo?: string;
 }
 
@@ -156,13 +157,6 @@ export async function fetchItineraryItems(tripId: number): Promise<ItineraryItem
 const FALLBACK_THUMBNAIL =
   'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80';
 
-const TRANSIT_BY_MODE: Record<string, { type: TransitInfo['type']; label: string }> = {
-  CAR: { type: 'car', label: '차량 이동' },
-  WALK: { type: 'walk', label: '도보 이동' },
-  BUS: { type: 'bus', label: '버스 이동' },
-  TRAIN: { type: 'bus', label: '기차 이동' },
-};
-
 /** 'HH:mm:ss' → 'HH:mm'. 서버가 초를 빼고 줄 때도 있어 그대로 흘려보낸다. */
 function timeLabel(value: string | null): string | undefined {
   if (!value) {return undefined;}
@@ -176,12 +170,11 @@ function timeLabel(value: string | null): string | undefined {
  * lat/lng 는 실제 위경도(WGS84)를 그대로 넘긴다. 예전 일러스트 지도는 캔버스
  * 백분율을 썼고 그래서 투영이 필요했지만, 카카오맵으로 바뀌면서 그 변환이 없어졌다.
  *
- * 이동 수단은 서버가 종류만 주고 소요 시간·거리는 주지 않아서 라벨만 채운다.
+ * 서버가 주는 이동 수단(transportMode)은 화면에 쓰지 않아 무시한다.
  * 날짜를 안 정한 핀(dayNumber 가 null)은 0 으로 두어 day 필터에 걸리지 않게 한다.
  */
 export function toPlaceItems(items: ItineraryItem[]): PlaceItem[] {
   return items.map((item, index) => {
-    const transit = item.transportMode ? TRANSIT_BY_MODE[item.transportMode] : undefined;
     return {
       id: item.id,
       name: item.place.name,
@@ -197,7 +190,9 @@ export function toPlaceItems(items: ItineraryItem[]): PlaceItem[] {
       order: item.visitOrder ?? index + 1,
       day: item.dayNumber ?? 0,
       time: timeLabel(item.plannedArrivalTime),
-      transitToNext: transit && { ...transit, duration: '' },
+      categoryCode: item.place.category ?? undefined,
+      categoryLabel: item.place.categoryLabel ?? undefined,
+      categoryOrder: item.place.categoryOrder ?? undefined,
       note: item.memo ?? undefined,
     };
   });

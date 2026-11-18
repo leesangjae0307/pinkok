@@ -10,7 +10,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ModalBackdrop } from '../../../components/pixel/Primitives';
 import { errorMessage } from '../../../api/axios';
-import { placeAddress, searchPlaces, type PlaceSearchResult } from '../../../api/placeApi';
+import {
+  fetchPlaceCategories,
+  placeAddress,
+  searchPlaces,
+  type PlaceCategory,
+  type PlaceSearchResult,
+} from '../../../api/placeApi';
+
+/** 종류 목록을 못 받았을 때의 대비. 기본 종류는 늘 기타다. */
+const DEFAULT_CATEGORY: PlaceCategory = { code: 'ETC', label: '기타', order: 8 };
 
 export default function AddPlaceModal({
   tripTitle,
@@ -28,6 +37,32 @@ export default function AddPlaceModal({
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
+  /** 주소로 찾은 위치를 골랐을 때: 이름과 종류를 입력받는 단계 */
+  const [namingPlace, setNamingPlace] = useState<PlaceSearchResult | null>(null);
+  const [placeName, setPlaceName] = useState('');
+  const [categories, setCategories] = useState<PlaceCategory[]>([DEFAULT_CATEGORY]);
+  const [categoryCode, setCategoryCode] = useState(DEFAULT_CATEGORY.code);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPlaceCategories()
+      .then((list) => {
+        if (!cancelled && list.length > 0) {setCategories(list);}
+      })
+      .catch(() => {
+        // 못 받아도 기타로는 추가할 수 있다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const isAddress = (place: PlaceSearchResult) => place.type === 'ADDRESS';
+  const startNaming = (place: PlaceSearchResult) => {
+    setNamingPlace(place);
+    setPlaceName(place.name);
+    setCategoryCode(DEFAULT_CATEGORY.code);
+  };
 
   /** 타자마다 요청하면 금방 쌓이므로 300ms 쉬고 보낸다. */
   useEffect(() => {
@@ -96,6 +131,72 @@ export default function AddPlaceModal({
           </Pressable>
         </View>
 
+        {namingPlace ? (
+          <View className="gap-3 p-4">
+            <Text className="text-sm font-black text-slate-900">장소 이름을 입력하세요</Text>
+            <View className="rounded-xl border border-[#82F0DC] bg-white px-3 py-2">
+              <Text numberOfLines={2} className="text-[10px] font-semibold text-slate-500">
+                📍 {placeAddress(namingPlace)}
+              </Text>
+            </View>
+            <TextInput
+              value={placeName}
+              onChangeText={setPlaceName}
+              placeholder="장소 이름"
+              placeholderTextColor="#94A3B8"
+              maxLength={100}
+              autoFocus
+              className="h-12 rounded-2xl border-2 border-pixel-navy bg-white px-3 py-0 text-sm font-bold text-slate-900"
+            />
+            <Text className="text-[11px] font-black text-slate-700">장소 종류</Text>
+            <View className="flex-row flex-wrap gap-1.5">
+              {categories.map((c) => {
+                const on = c.code === categoryCode;
+                return (
+                  <Pressable
+                    key={c.code}
+                    onPress={() => setCategoryCode(c.code)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: on }}
+                    style={{ backgroundColor: on ? '#56EADD' : '#fff' }}
+                    className={`rounded-full border-2 px-3 py-1.5 ${on ? 'border-pixel-navy' : 'border-slate-200'}`}
+                  >
+                    <Text className={`text-[11px] font-black ${on ? 'text-pixel-navy' : 'text-slate-600'}`}>{c.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View className="flex-row gap-2">
+              <Pressable
+                onPress={() => setNamingPlace(null)}
+                disabled={addingId !== null}
+                className="h-11 flex-1 items-center justify-center rounded-xl border-2 border-slate-300 bg-white"
+              >
+                <Text className="text-xs font-black text-slate-600">뒤로</Text>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  handleAdd({
+                    ...namingPlace,
+                    name: placeName.trim(),
+                    categoryGroupCode: categoryCode,
+                    categoryName: categories.find((c) => c.code === categoryCode)?.label ?? null,
+                  })
+                }
+                disabled={!placeName.trim() || addingId !== null}
+                style={{ opacity: !placeName.trim() || addingId !== null ? 0.5 : 1 }}
+                className="h-11 flex-[2] items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD]"
+              >
+                {addingId !== null ? (
+                  <ActivityIndicator size="small" color="#075953" />
+                ) : (
+                  <Text className="text-xs font-black text-pixel-navy">추가</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+        <>
         <View className="p-4">
           <TextInput
             value={keyword}
@@ -118,7 +219,7 @@ export default function AddPlaceModal({
             </View>
           ) : results.length > 0 ? (
             results.slice(0, 8).map((place) => {
-              const key = place.kakaoPlaceId ?? place.name;
+              const key = place.kakaoPlaceId ?? `${place.name}:${place.latitude},${place.longitude}`;
               const busy = addingId === key;
               return (
                 <View
@@ -132,6 +233,11 @@ export default function AddPlaceModal({
                     <Text numberOfLines={1} className="mt-1 text-[10px] font-semibold text-slate-500">
                       📍 {placeAddress(place)}
                     </Text>
+                    {isAddress(place) ? (
+                      <Text numberOfLines={1} className="mt-0.5 text-[9px] font-black text-amber-700">
+                        🏠 주소로 찾은 위치
+                      </Text>
+                    ) : null}
                     {place.categoryName ? (
                       <Text numberOfLines={1} className="mt-0.5 text-[9px] font-bold text-[#075953]">
                         {place.categoryName}
@@ -139,7 +245,7 @@ export default function AddPlaceModal({
                     ) : null}
                   </View>
                   <Pressable
-                    onPress={() => handleAdd(place)}
+                    onPress={() => (isAddress(place) ? startNaming(place) : handleAdd(place))}
                     disabled={addingId !== null}
                     className="h-9 items-center justify-center rounded-xl border-2 border-pixel-navy bg-[#56EADD] px-3 active:translate-y-0.5"
                   >
@@ -160,6 +266,8 @@ export default function AddPlaceModal({
             </View>
           )}
         </View>
+        </>
+        )}
       </View>
     </ModalBackdrop>
   );

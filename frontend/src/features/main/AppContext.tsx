@@ -14,15 +14,26 @@ import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 import { Me, fetchAvatars, logout } from '../../api/authApi';
 import { deleteAccount, selectAvatar, updateNickname, updateProfileImage } from '../../api/userApi';
-import { fileUrl, uploadFile, uploadFiles, type PickedFile } from '../../api/fileApi';
+import { fileUrl, uploadEach, uploadFile, uploadFiles, type PickedFile } from '../../api/fileApi';
 import {
   createDiary,
   deleteDiary,
+  fetchPlaceDiaries,
   fetchTripDiaries,
   toPlaceRecord,
   updateDiary,
+  type Diary,
   type DiaryMediaPayload,
 } from '../../api/diaryApi';
+import {
+  isRemoteUri,
+  loadRecordDraft,
+  loadRecordDrafts,
+  pruneMissingMedia,
+  removeRecordDraft,
+  saveRecordDraft,
+  type RecordDraft,
+} from '../../services/recordDrafts';
 import {
   createTrip,
   deleteTrip,
@@ -50,9 +61,17 @@ import type { ItineraryDay } from '../../api/itineraryApi';
 import type { PlaceSearchResult } from '../../api/placeApi';
 import { fetchTripStyles, replaceTripStyles } from '../../api/travelStyleApi';
 import { addDays } from '../../components/pixel/PixelCalendar';
-import { fetchPinlogs, pinlogThumbnailUrl, pinlogVideoUrl } from '../../api/pinlogApi';
+import {
+  deletePinlog,
+  fetchMyPinlogs,
+  fetchPinlogs,
+  pinlogThumbnailUrl,
+  pinlogVideoUrl,
+  type Pinlog,
+} from '../../api/pinlogApi';
 import {
   addCandidatesToTrip,
+  type AddCandidatesToTripResult,
   createAiRequest,
   fetchAiRequest,
   loadPlaceCandidates,
@@ -107,6 +126,31 @@ import { EMPTY_PROFILE_STATS, loadProfileStats, type ProfileStats } from './prof
 import type { SynthesizedVlog } from './modals/PinLogSynthesisModal';
 import type { QuickClip } from './modals/QuickPinLogCameraModal';
 import type { InvitedTripMember, NewTripPayload } from './screens/CreateTripScreen';
+
+/**
+ * 후보를 핀으로 보낸 결과를 사람이 읽을 문장으로 바꾼다.
+ *
+ * 서버는 좌표를 못 찾은 후보를 말없이 건너뛴다. 그대로 두면 아무 일도 안 일어난 것처럼
+ * 보여서 "버튼이 안 먹네" 로 오해하게 되므로, 몇 곳이 왜 빠졌는지 반드시 알려준다.
+ */
+function addToTripMessage(result: AddCandidatesToTripResult): string {
+  const added = result.added.length;
+  const noCoordinate = result.skippedNoCoordinate.length;
+  const duplicate = result.skippedDuplicate.length;
+
+  const reasons: string[] = [];
+  if (noCoordinate > 0) {reasons.push(`${noCoordinate}곳은 지도에서 위치를 찾지 못했어요`);}
+  if (duplicate > 0) {reasons.push(`${duplicate}곳은 이미 그 여행에 있어요`);}
+
+  if (added === 0) {
+    // 하나도 못 넣은 경우. 이유가 없을 수는 없지만, 혹시 모를 응답에도 말은 되게 둔다.
+    return reasons.length > 0 ? `추가된 곳이 없어요. ${reasons.join(', ')}.` : '추가된 곳이 없어요.';
+  }
+  if (reasons.length === 0) {
+    return `${added}곳을 여행에 추가했어요.`;
+  }
+  return `${added}곳을 추가했어요. ${reasons.join(', ')}.`;
+}
 
 export type NotificationType = 'TRIP_INVITED' | 'TRIP_REMINDER' | 'TRIP_PLACE_ADDED';
 
@@ -322,8 +366,18 @@ function useAppState(me: Me, onLogout: () => void) {
   const [selectedMapPin, setSelectedMapPin] = useState<PlaceItem | null>(null);
   const [isPlaceDetailModalOpen, setIsPlaceDetailModalOpen] = useState(false);
   const [startPlaceCamera, setStartPlaceCamera] = useState(false);
+  /** true 면 장소 기록 창을 편집 화면으로 바로 연다 ("저장 실패 · 다시 시도") */
+  const [startPlaceEdit, setStartPlaceEdit] = useState(false);
   const [placeRecords, setPlaceRecords] = useState<PlaceRecord[]>([]);
-  const [isSavingRecord, setIsSavingRecord] = useState(false);
+  /** 저장에 실패해 다시 시도를 기다리는 기록. 핀 ID → 임시저장본 */
+  const [recordDrafts, setRecordDrafts] = useState<Record<number, RecordDraft>>({});
+  /** 지금 뒤에서 저장 중인 기록. 핀 ID → 올린 파일 수 / 올릴 파일 수 */
+  const [savingRecords, setSavingRecords] = useState<Record<number, { done: number; total: number }>>({});
+  /**
+   * 저장 중인 핀. 상태(state)는 다음 렌더에야 바뀌어서 연달아 누르면 둘 다 통과하므로
+   * 중복 실행은 ref 로 즉시 막는다.
+   */
+  const savingPinsRef = useRef(new Set<number>());
   const [isPinLogMakerOpen, setIsPinLogMakerOpen] = useState(false);
   // 홈 빠른 촬영: 촬영 대상 여행과 열림 여부
   const [pinLogTrip, setPinLogTrip] = useState<TripFolder | null>(null);
@@ -348,6 +402,12 @@ function useAppState(me: Me, onLogout: () => void) {
   const [vlogClips, setVlogClips] = useState<VlogClip[]>([]);
   const [isVlogClipsLoading, setIsVlogClipsLoading] = useState(false);
   const [activeClipModal, setActiveClipModal] = useState<VlogClip | null>(null);
+  /** 내가 참여 중인 모든 여행의 완성된 PinLog (여행별 폴더의 원본 데이터) */
+  const [myPinlogs, setMyPinlogs] = useState<Pinlog[]>([]);
+  const [isMyPinlogsLoading, setIsMyPinlogsLoading] = useState(false);
+  const [myPinlogsError, setMyPinlogsError] = useState<string | null>(null);
+  /** 핀로그 탭에서 열어 둔 여행 폴더. null 이면 폴더 목록을 보여준다. */
+  const [pinlogFolderTripId, setPinlogFolderTripId] = useState<number | null>(null);
   const [selectedProfileAvatar, setSelectedProfileAvatar] = useState<ProfileAvatar>(() => profileAvatarOf(me));
   const [pendingProfileAvatar, setPendingProfileAvatar] = useState<ProfileAvatar>(() => profileAvatarOf(me));
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
@@ -403,7 +463,7 @@ function useAppState(me: Me, onLogout: () => void) {
 
   /** 갤러리에서 고른 사진을 올려 프로필 사진 후보로 잡아둔다. 저장은 saveProfile 이 한다. */
   const pickProfilePhoto = async () => {
-    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
+    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, assetRepresentationMode: 'compatible' });
     const asset = res.assets?.[0];
     if (res.didCancel || !asset?.uri) {return;}
     setIsUploadingProfilePhoto(true);
@@ -431,6 +491,32 @@ function useAppState(me: Me, onLogout: () => void) {
     setToastMessage(msg);
     toastTimer.current = setTimeout(() => setToastMessage(null), 2800);
   };
+
+  /**
+   * 앱을 켤 때 저장하지 못한 기록을 되살린다. "저장 중" 으로 남아 있던 것은 그 사이 앱이
+   * 꺼진 것이므로 실패로 본다. 이번 실행에서 이미 다시 저장 중인 핀은 건드리지 않는다.
+   */
+  useEffect(() => {
+    let alive = true;
+    loadRecordDrafts(me.id)
+      .then((drafts) => {
+        if (!alive || drafts.length === 0) {return;}
+        setRecordDrafts((cur) => {
+          const next = { ...cur };
+          drafts.forEach((d) => {
+            if (savingPinsRef.current.has(d.pinId) || next[d.pinId]) {return;}
+            next[d.pinId] = { ...d, status: 'failed' };
+          });
+          return next;
+        });
+      })
+      .catch(() => {
+        // 임시저장을 못 읽어도 앱 사용은 막지 않는다.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [me.id]);
 
   /** GET /trips. 실패하면 목록 자리에 다시 시도할 수 있는 안내를 띄운다. */
   const reloadTrips = useCallback(async () => {
@@ -502,6 +588,7 @@ function useAppState(me: Me, onLogout: () => void) {
             time: p.createdAt.slice(0, 10).replace(/-/g, '.'),
             location: p.title ?? 'PinLog',
             thumbnail: pinlogThumbnailUrl(p) ?? pinlogVideoUrl(p) ?? '',
+            videoUrl: pinlogVideoUrl(p) ?? undefined,
             selected: false,
           })),
       );
@@ -560,6 +647,43 @@ function useAppState(me: Me, onLogout: () => void) {
     [],
   );
 
+  /** GET /pinlogs?mine=true. 새로고침 중에도 이전 목록은 그대로 보여준다. */
+  const reloadMyPinlogs = useCallback(async () => {
+    setIsMyPinlogsLoading(true);
+    setMyPinlogsError(null);
+    try {
+      setMyPinlogs(await fetchMyPinlogs());
+    } catch (e) {
+      setMyPinlogsError(errorMessage(e, 'PinLog 를 불러오지 못했어요.'));
+    } finally {
+      setIsMyPinlogsLoading(false);
+    }
+  }, []);
+
+  // 핀로그 탭에 들어올 때마다 폴더 데이터를 받는다.
+  useEffect(() => {
+    if (activeTab === 'pinlog') {reloadMyPinlogs();}
+  }, [activeTab, reloadMyPinlogs]);
+
+  /**
+   * 선택한 PinLog 를 지운다. 다중 삭제 API 가 없어서 기존 개별 삭제(DELETE /pinlogs/{id})를
+   * 하나씩 부른다. 여행·원본 기록은 건드리지 않는다(서버가 합성 영상 파일만 같이 지운다).
+   * 서버가 성공한 것만 목록에서 빼고, 실패한 ID 를 돌려준다.
+   */
+  const deleteMyPinlogs = async (ids: number[]): Promise<number[]> => {
+    const results = await Promise.allSettled(ids.map((id) => deletePinlog(id)));
+    const deleted = new Set<number>();
+    const failed: number[] = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {deleted.add(ids[i]);} else {failed.push(ids[i]);}
+    });
+    if (deleted.size > 0) {
+      setMyPinlogs((cur) => cur.filter((p) => !deleted.has(p.id)));
+      setVlogClips((cur) => cur.filter((c) => !deleted.has(c.id)));
+    }
+    return failed;
+  };
+
   // 핀로그 탭은 고른 여행이 바뀔 때마다 그 여행의 완성본을 다시 받는다.
   useEffect(() => {
     if (pinLogTrip) {reloadVlogClips(pinLogTrip.id);}
@@ -599,7 +723,11 @@ function useAppState(me: Me, onLogout: () => void) {
         ? undefined
         : itineraryDays.find((d) => d.dayNumber === selectedDayFilter)?.id;
     try {
-      await createItineraryItem({ tripId: activeTrip.id, place, dayId: targetDay });
+      // 서버 PlaceInput 에 없는 type 은 빼고 필요한 필드만 보낸다. 주소로 찾은 장소(ADDRESS)는
+      // kakaoPlaceId 가 null 이라 그대로 두면 서버가 새 장소로 만든다.
+      const { type, kakaoPlaceId, ...rest } = place;
+      const input = type === 'ADDRESS' ? rest : { kakaoPlaceId, ...rest };
+      await createItineraryItem({ tripId: activeTrip.id, place: input, dayId: targetDay });
       await loadItinerary(activeTrip.id);
       setTrips((cur) =>
         cur.map((t) => (t.id === activeTrip.id ? { ...t, placesCount: t.placesCount + 1 } : t)),
@@ -676,6 +804,35 @@ function useAppState(me: Me, onLogout: () => void) {
       await loadItinerary(activeTrip.id);
     } catch (e) {
       showToast(errorMessage(e, '순서를 바꾸지 못했어요.'));
+    }
+  };
+
+  /**
+   * 끌어서 바꾼 순서를 저장한다. orderedIds 는 지금 보는 일자의 핀 ID 를 새 방문 순서대로 담는다.
+   *
+   * 화면부터 바꾸고(손을 놓자마자 제자리에 있어야 한다) 서버에 보낸다. 실패하면 이전
+   * 순서로 되돌리고 알려준다. 같은 일자의 순서만 바꾸고, 일자를 넘나드는 이동은 하지 않는다.
+   */
+  const handleReorderPlaces = async (orderedIds: number[]) => {
+    if (selectedDayFilter === 'all') {return;}
+    const day = itineraryDays.find((d) => d.dayNumber === selectedDayFilter);
+    if (!day) {return;}
+    const previous = mapPlaces;
+    const byId = new Map(previous.map((p) => [p.id, p]));
+    let cursor = 0;
+    setMapPlaces(
+      previous.map((p) => {
+        if (p.day !== selectedDayFilter || !orderedIds.includes(p.id)) {return p;}
+        const next = byId.get(orderedIds[cursor]);
+        cursor += 1;
+        return next ? { ...next, order: cursor } : p;
+      }),
+    );
+    try {
+      await reorderItineraryItems(day.id, orderedIds);
+    } catch (e) {
+      setMapPlaces(previous);
+      showToast(errorMessage(e, '순서를 저장하지 못했어요. 원래 순서로 되돌렸어요.'));
     }
   };
 
@@ -925,31 +1082,66 @@ function useAppState(me: Me, onLogout: () => void) {
 
   // 장소 기록 저장 (1인 1기록 규칙)
   /**
-   * 장소 기록을 저장한다. 사진·영상은 먼저 POST /files 로 올리고 받은 주소를 함께 보낸다.
+   * 장소 기록을 저장한다. 작성 화면은 이미 닫혔고, 업로드와 저장은 뒤에서 진행된다.
    *
-   * 서버는 핀 하나에 사람당 기록 하나만 두므로, 이미 내 기록이 있으면 PATCH 로 고친다.
-   * 화면이 들고 있던 기록은 로컬 파일 주소라, 저장 뒤에는 서버가 돌려준 값으로 바꿔
-   * 끼운다. 그래야 다시 열었을 때와 같은 것을 보게 된다.
+   * 1. 요청을 보내기 전에 작성 내용을 임시저장한다 (실패해도, 앱이 꺼져도 남는다).
+   * 2. 아직 안 올린 사진·영상만 파일마다 따로 올린다. 올라간 파일은 바로 임시저장에 적어
+   *    다시 시도할 때 또 올리지 않는다.
+   * 3. 기록을 만들거나(POST) 고친다(PATCH). 기록 저장은 자동으로 다시 보내지 않는다.
+   * 4. 성공했을 때만 임시저장을 지운다. 실패하면 장소에 "저장 실패 · 다시 시도" 를 띄운다.
+   *
+   * 같은 핀의 저장이 겹치면 막는다. 다른 장소의 기록은 동시에 저장해도 된다.
    */
   const handleSavePlaceRecord = async (record: PlaceRecord) => {
-    // 저장이 겹치면 그냥 버리지 말고 알려준다. 조용히 빠져나가면 사용자는 눌렀는데
-    // 아무 일도 안 일어난 것으로 보인다.
-    if (isSavingRecord) {
+    const pinId = record.pinId;
+    if (savingPinsRef.current.has(pinId)) {
       showToast('아직 저장 중이에요. 잠시 후 다시 시도해 주세요.');
       return;
     }
-    setIsSavingRecord(true);
+    savingPinsRef.current.add(pinId);
+    setSavingRecords((cur) => ({ ...cur, [pinId]: { done: 0, total: 0 } }));
+    // 다시 시도하는 동안에는 실패 표시를 내려 둔다.
+    setRecordDrafts((cur) => {
+      if (!cur[pinId]) {return cur;}
+      const next = { ...cur };
+      delete next[pinId];
+      return next;
+    });
+
+    // 임시저장 쓰기는 한 줄로 세운다. 파일 두 개가 거의 동시에 끝나면 쓰기가 겹치는데,
+    // 순서가 뒤바뀌면 먼저 끝난 파일이 기록에서 빠질 수 있다. 늘 마지막 값을 쓴다.
+    let draft: RecordDraft = {
+      userId: me.id,
+      pinId,
+      record,
+      uploaded: {},
+      status: 'saving',
+      updatedAt: Date.now(),
+    };
+    let writes: Promise<void> = Promise.resolve();
+    const persist = (patch: Partial<RecordDraft>) => {
+      draft = { ...draft, ...patch, updatedAt: Date.now() };
+      writes = writes.then(() => saveRecordDraft(draft)).catch(() => {
+        // 기기 저장소에 못 써도 업로드·저장은 계속한다.
+      });
+      return writes;
+    };
+
     try {
-      const media = await uploadRecordMedia(record);
-      const existing = placeRecords.find((r) => r.pinId === record.pinId && r.userId === me.id);
-      const saved = existing
-        ? await updateDiary(existing.id, { content: record.memo, rating: record.rating, media })
-        : await createDiary({
-            itineraryItemId: record.pinId,
-            content: record.memo,
-            rating: record.rating,
-            media,
-          });
+      // 앞선 시도에서 이미 올린 파일 목록을 이어받는다 (같은 파일을 두 번 올리지 않게).
+      const previous = await loadRecordDraft(me.id, pinId).catch(() => null);
+      await persist({ uploaded: previous?.uploaded ?? {} });
+
+      const media = await uploadRecordMedia(
+        record,
+        draft.uploaded,
+        (localUri, payload) => {
+          persist({ uploaded: { ...draft.uploaded, [localUri]: payload } });
+        },
+        (done, total) => setSavingRecords((cur) => ({ ...cur, [pinId]: { done, total } })),
+      );
+
+      const saved = await saveDiary(record, media);
       const mapped = toPlaceRecord(saved);
       setPlaceRecords((prev) => {
         const idx = prev.findIndex((r) => r.id === mapped.id);
@@ -960,38 +1152,119 @@ function useAppState(me: Me, onLogout: () => void) {
         }
         return [mapped, ...prev];
       });
-    } catch (e) {
-      showToast(errorMessage(e, '기록을 저장하지 못했어요.'));
+      // 성공을 확인한 뒤에만 지운다. 앞서 걸어 둔 쓰기가 끝난 다음에 지워야 되살아나지 않는다.
+      writes = writes.then(() => removeRecordDraft(me.id, pinId)).catch(() => {});
+      await writes;
+    } catch {
+      await persist({ status: 'failed' });
+      setRecordDrafts((cur) => ({ ...cur, [pinId]: draft }));
+      showToast('기록을 저장하지 못했어요. 장소에서 다시 시도할 수 있어요.');
     } finally {
-      setIsSavingRecord(false);
+      savingPinsRef.current.delete(pinId);
+      setSavingRecords((cur) => {
+        const next = { ...cur };
+        delete next[pinId];
+        return next;
+      });
     }
   };
 
   /**
-   * 기록에 붙은 사진·영상 중 아직 안 올린 것만 올린다.
+   * 기록을 서버에 만든다(POST) 또는 고친다(PATCH). 자동으로 다시 보내지 않는다.
    *
-   * 이미 서버에 있는 파일은 주소가 BASE_URL 로 시작하므로 그대로 다시 보내고,
-   * 갤러리·카메라에서 막 고른 것(file://, content://)만 업로드한다. 고칠 때마다
-   * 같은 사진을 다시 올리면 서버에 똑같은 파일이 쌓인다.
+   * 앞선 시도가 서버에서는 만들어졌는데 응답만 못 받았을 수 있다. 그러면 다시 만들 때
+   * 409(이미 내 기록이 있음)가 온다. 이때 새로 만들지 않고 그 기록을 고쳐서,
+   * 같은 장소에 내 기록이 두 개 생기지 않게 한다.
    */
-  const uploadRecordMedia = async (record: PlaceRecord): Promise<DiaryMediaPayload[]> => {
-    const isUploaded = (uri: string) => uri.startsWith(BASE_URL);
-    const toServerPath = (uri: string) => uri.slice(BASE_URL.length);
-
-    const newPhotos = record.photos.filter((uri) => !isUploaded(uri));
-    const uploaded = newPhotos.length > 0 ? await uploadFiles(newPhotos.map((uri) => ({ uri }))) : [];
-    let next = 0;
-    const photos: DiaryMediaPayload[] = record.photos.map((uri) =>
-      isUploaded(uri) ? { fileUrl: toServerPath(uri) } : { fileUrl: uploaded[next++].url },
-    );
-
-    const clip = record.videoClip;
-    if (!clip?.videoUrl) {return photos;}
-    if (isUploaded(clip.videoUrl)) {
-      return [...photos, { fileUrl: toServerPath(clip.videoUrl), durationMs: Math.round(clip.duration * 1000) }];
+  const saveDiary = async (record: PlaceRecord, media: DiaryMediaPayload[]): Promise<Diary> => {
+    const payload = { content: record.memo, rating: record.rating, media };
+    const existing = placeRecords.find((r) => r.pinId === record.pinId && r.userId === me.id);
+    if (existing) {return updateDiary(existing.id, payload);}
+    try {
+      return await createDiary({ itineraryItemId: record.pinId, ...payload });
+    } catch (e) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      if (status !== 409) {throw e;}
+      const mine = (await fetchPlaceDiaries(record.pinId)).find((d) => d.mine);
+      if (!mine) {throw e;}
+      return updateDiary(mine.id, payload);
     }
-    const video = await uploadFile({ uri: clip.videoUrl, type: 'video/mp4' });
-    return [...photos, { fileUrl: video.url, durationMs: video.durationMs ?? Math.round(clip.duration * 1000) }];
+  };
+
+  /**
+   * 기록에 붙은 사진·영상 중 아직 안 올린 것만 올리고, 기록 저장에 넣을 목록을 만든다.
+   *
+   * - 이미 서버에 있는 파일(http/https)은 다시 올리지 않고 주소만 돌려보낸다. 배포 서버는
+   *   Cloud Storage 주소(https://storage.googleapis.com/…)를 주므로 BASE_URL 로 시작하는지로
+   *   가리면 안 된다 — 그렇게 하면 고칠 때마다 기존 사진·영상을 전부 내려받아 다시 올리게 된다.
+   * - 이전 시도에서 올린 로컬 파일(uploaded)도 다시 올리지 않는다.
+   * - 나머지는 파일마다 따로 올린다. 하나라도 실패하면 오류를 던지되, 성공한 파일은
+   *   onUploaded 로 바로 알려 임시저장에 남긴다.
+   */
+  const uploadRecordMedia = async (
+    record: PlaceRecord,
+    uploaded: Record<string, DiaryMediaPayload>,
+    onUploaded: (localUri: string, payload: DiaryMediaPayload) => void,
+    onProgress: (done: number, total: number) => void,
+  ): Promise<DiaryMediaPayload[]> => {
+    // 화면용으로 BASE_URL 을 붙였던 상대 경로(/files/…)는 서버가 준 모양으로 되돌린다.
+    const toServerUrl = (uri: string) => (uri.startsWith(BASE_URL) ? uri.slice(BASE_URL.length) : uri);
+    const clip = record.videoClip;
+    const clipDurationMs = clip ? Math.round(clip.duration * 1000) : undefined;
+    const known: Record<string, DiaryMediaPayload> = { ...uploaded };
+
+    const items = [
+      ...record.photos.map((uri) => ({ uri, isVideo: false })),
+      ...(clip?.videoUrl ? [{ uri: clip.videoUrl, isVideo: true }] : []),
+    ];
+    const pending = items.filter((it) => !isRemoteUri(it.uri) && !known[it.uri]);
+
+    let done = 0;
+    onProgress(0, pending.length);
+    const results = await uploadEach(
+      pending.map((it) => (it.isVideo ? { uri: it.uri, type: 'video/mp4' } : { uri: it.uri })),
+      (index, outcome) => {
+        done += 1;
+        onProgress(done, pending.length);
+        if (!outcome.ok) {return;}
+        const it = pending[index];
+        const payload: DiaryMediaPayload = it.isVideo
+          ? { fileUrl: outcome.file.url, durationMs: outcome.file.durationMs ?? clipDurationMs }
+          : { fileUrl: outcome.file.url };
+        known[it.uri] = payload;
+        onUploaded(it.uri, payload);
+      },
+    );
+    const failed = results.find((r) => !r.ok);
+    if (failed && !failed.ok) {throw failed.error;}
+
+    const resolve = (uri: string, isVideo: boolean): DiaryMediaPayload => {
+      if (!isRemoteUri(uri)) {return known[uri];}
+      return isVideo ? { fileUrl: toServerUrl(uri), durationMs: clipDurationMs } : { fileUrl: toServerUrl(uri) };
+    };
+
+    const photos = record.photos.map((uri) => resolve(uri, false));
+    return clip?.videoUrl ? [...photos, resolve(clip.videoUrl, true)] : photos;
+  };
+
+  /**
+   * 장소의 "저장 실패 · 다시 시도". 임시저장한 내용을 채운 편집 화면을 연다.
+   * 앱을 다시 켜는 사이 사라진 로컬 사진·영상은 빼고, 몇 개가 빠졌는지 알려준다.
+   */
+  const handleRetryRecord = async (place: PlaceItem) => {
+    const current = recordDrafts[place.id] ?? (await loadRecordDraft(me.id, place.id).catch(() => null));
+    if (current) {
+      const { draft: pruned, removed } = await pruneMissingMedia(current);
+      setRecordDrafts((cur) => ({ ...cur, [place.id]: pruned }));
+      if (removed > 0) {
+        saveRecordDraft(pruned).catch(() => {});
+        showToast(`사진·영상 ${removed}개를 기기에서 찾지 못해 뺐어요. 다시 골라 주세요.`);
+      }
+    }
+    setSelectedMapPin(place);
+    setStartPlaceCamera(false);
+    setStartPlaceEdit(true);
+    setIsPlaceDetailModalOpen(true);
   };
 
   /** 'D-28' → 28. 형식이 다르면 맨 뒤로 보낸다. */
@@ -1133,6 +1406,7 @@ function useAppState(me: Me, onLogout: () => void) {
       selected: true,
     };
     setVlogClips((prev) => [newClip, ...prev]);
+    reloadMyPinlogs();
   };
 
   /**
@@ -1221,18 +1495,63 @@ function useAppState(me: Me, onLogout: () => void) {
     );
   };
 
+  /** 전체 선택 / 해제. 하나라도 빠져 있으면 모두 선택하고, 이미 모두 선택돼 있으면 모두 해제한다. */
+  const handleToggleAllExtractedPlaces = () => {
+    setSelectedExtractedPlaceIds((cur) =>
+      extractedPlaces.length > 0 && cur.length >= extractedPlaces.length && extractedPlaces.every((p) => cur.includes(p.id))
+        ? []
+        : extractedPlaces.map((p) => p.id),
+    );
+  };
+
+  /**
+   * 새 여행을 만들고, 선택한 후보를 곧바로 그 여행에 보낸다.
+   *
+   * 여행 만들기가 실패하면 아무것도 바뀌지 않고, 후보 선택도 그대로 남는다.
+   * 여행은 만들어졌는데 보내기가 실패하면 여행은 그대로 두고(목록에 남는다) 선택도 유지해서,
+   * 같은 여행에 다시 보낼 수 있게 한다.
+   */
+  const [isCreatingExtractTrip, setIsCreatingExtractTrip] = useState(false);
+  /** 여행이 만들어졌으면 true. 만들지 못했으면 false 라서 입력한 이름을 그대로 둔다. */
+  const handleCreateTripAndAdd = async (title: string): Promise<boolean> => {
+    const name = title.trim();
+    if (!name || isCreatingExtractTrip || selectedExtractedPlaceIds.length === 0) {return false;}
+    setIsCreatingExtractTrip(true);
+    try {
+      const created = await createTrip({ title: name });
+      setTrips((cur) => [toTripFolder(created), ...cur]);
+      setSelectedTripForExtract(created.id);
+      try {
+        await handleAddPlaceToTripOrThrow(created.id);
+      } catch (e) {
+        showToast(errorMessage(e, '여행은 만들었지만 장소를 추가하지 못했어요. 다시 보내 주세요.'));
+      }
+      return true;
+    } catch (e) {
+      showToast(errorMessage(e, '여행을 만들지 못했어요.'));
+      return false;
+    } finally {
+      setIsCreatingExtractTrip(false);
+    }
+  };
+
   /** 체크한 후보를 여행에 핀으로 추가한다. 좌표를 못 찾은 것은 서버가 건너뛴다. */
+  const handleAddPlaceToTripOrThrow = async (tripId: number) => {
+    // 몇 개가 들어갔는지 앱에서 세지 않는다. 서버가 좌표를 못 찾은 후보를 건너뛰므로
+    // 고른 개수와 실제 개수가 다를 수 있어, 서버가 알려준 결과를 그대로 쓴다.
+    const result = await addCandidatesToTrip(tripId, selectedExtractedPlaceIds);
+    await reloadTrips();
+    setSelectedTripForExtract(tripId);
+    setIsTripPickerOpen(false);
+    // 지금 보고 있는 여행이면 지도에도 바로 반영한다.
+    if (activeTrip?.id === tripId) {loadItinerary(tripId);}
+    showToast(addToTripMessage(result));
+  };
+
   const handleAddPlaceToTrip = async (tripId: number) => {
     if (selectedExtractedPlaceIds.length === 0) {return;}
     try {
-      await addCandidatesToTrip(tripId, selectedExtractedPlaceIds);
-      // 몇 개가 들어갔는지 앱에서 세지 않는다. 서버가 좌표를 못 찾은 후보를 건너뛰므로
-      // 고른 개수와 실제 개수가 다를 수 있어, 목록을 다시 받아 그대로 쓴다.
-      await reloadTrips();
-      setSelectedTripForExtract(tripId);
-      setIsTripPickerOpen(false);
-      // 지금 보고 있는 여행이면 지도에도 바로 반영한다.
-      if (activeTrip?.id === tripId) {loadItinerary(tripId);}
+      await handleAddPlaceToTripOrThrow(tripId);
     } catch (e) {
       showToast(errorMessage(e, '장소를 추가하지 못했어요.'));
     }
@@ -1489,6 +1808,7 @@ function useAppState(me: Me, onLogout: () => void) {
    * 모달(RN Modal)은 저마다 onRequestClose 로 뒤로가기를 직접 받으므로 여기 없다.
    * 여기서 다루는 건 탭 위를 덮는 보통 화면들이다.
    */
+  const lastBackPressRef = useRef(0);
   useEffect(() => {
     const onBack = () => {
       if (isCreateTripOpen) {
@@ -1507,20 +1827,28 @@ function useAppState(me: Me, onLogout: () => void) {
         setIsTripMapOpen(false);
         return true;
       }
+      if (activeTab === 'pinlog' && pinlogFolderTripId !== null) {
+        setPinlogFolderTripId(null);
+        return true;
+      }
       if (activeTab !== 'home') {
         setActiveTab('home');
         return true;
       }
-      Alert.alert('앱을 종료할까요?', '', [
-        { text: '취소', style: 'cancel' },
-        { text: '종료', style: 'destructive', onPress: () => BackHandler.exitApp() },
-      ]);
+      // 최상위 화면: 2초 안에 한 번 더 누르면 종료, 아니면 토스트만 띄운다.
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        BackHandler.exitApp();
+        return true;
+      }
+      lastBackPressRef.current = now;
+      showToast('앱을 종료하려면 뒤로가기 버튼을 한 번 더 눌러주세요.');
       return true;
     };
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
     return () => sub.remove();
-  }, [activeTab, isCreateTripOpen, isNotificationOpen, isSettingsOpen, isTripMapOpen, closeCreateTrip]);
+  }, [activeTab, pinlogFolderTripId, isCreateTripOpen, isNotificationOpen, isSettingsOpen, isTripMapOpen, closeCreateTrip]);
 
   return {
     /** 로그인한 실제 사용자. 목업이 아니다. */
@@ -1547,6 +1875,7 @@ function useAppState(me: Me, onLogout: () => void) {
     handleDeletePlace,
     handleAssignDay,
     handleMovePlace,
+    handleReorderPlaces,
     assigningPlace, setAssigningPlace,
     editingTimePlace, setEditingTimePlace,
     handleSetPlaceTime,
@@ -1592,7 +1921,10 @@ function useAppState(me: Me, onLogout: () => void) {
     selectedMapPin, setSelectedMapPin,
     isPlaceDetailModalOpen, setIsPlaceDetailModalOpen,
     startPlaceCamera, setStartPlaceCamera,
+    startPlaceEdit, setStartPlaceEdit,
     placeRecords,
+    recordDrafts,
+    savingRecords,
     isPinLogMakerOpen, setIsPinLogMakerOpen,
     pinLogTrip, setPinLogTrip,
     isQuickPinLogCameraOpen, setIsQuickPinLogCameraOpen,
@@ -1607,6 +1939,13 @@ function useAppState(me: Me, onLogout: () => void) {
     vlogClips,
     isVlogClipsLoading,
     reloadVlogClips,
+    myPinlogs,
+    isMyPinlogsLoading,
+    myPinlogsError,
+    reloadMyPinlogs,
+    deleteMyPinlogs,
+    pinlogFolderTripId,
+    setPinlogFolderTripId,
     activeClipModal, setActiveClipModal,
     selectedProfileAvatar, setSelectedProfileAvatar,
     pendingProfileAvatar, setPendingProfileAvatar,
@@ -1631,6 +1970,7 @@ function useAppState(me: Me, onLogout: () => void) {
     // 핸들러
     showToast,
     handleSavePlaceRecord,
+    handleRetryRecord,
     handleDeletePlaceRecord,
     openQuickPinLogCamera,
     closeCreateTrip,
@@ -1641,6 +1981,9 @@ function useAppState(me: Me, onLogout: () => void) {
     handleSynthesizeComplete,
     handleExtractSubmit,
     handleToggleExtractedPlace,
+    handleToggleAllExtractedPlaces,
+    handleCreateTripAndAdd,
+    isCreatingExtractTrip,
     handleAddPlaceToTrip,
     handleClearCache,
     handleClearAllTrips,

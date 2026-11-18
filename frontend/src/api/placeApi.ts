@@ -7,6 +7,11 @@ import api from './axios';
  * POST /itinerary-items 의 place 에 넣으면 된다.
  */
 export interface PlaceSearchResult {
+  /**
+   * PLACE: 카카오맵에 등록된 장소. ADDRESS: 주소로만 찾은 위치(kakaoPlaceId 와 카테고리가 비어 있고,
+   * 이름은 임시라서 사용자가 입력한 이름으로 바꿔 추가한다). 옛 서버는 값을 주지 않는다.
+   */
+  type?: 'PLACE' | 'ADDRESS';
   kakaoPlaceId: string | null;
   name: string;
   roadAddress: string | null;
@@ -31,6 +36,20 @@ export async function searchPlaces(keyword: string, page?: number, size?: number
     params: { keyword, page, size },
   });
   return data;
+}
+
+/** 장소 종류. code 는 장소를 추가할 때 categoryGroupCode 로 보낸다. */
+export interface PlaceCategory {
+  code: string;
+  label: string;
+  tasteLabel?: string;
+  order: number;
+}
+
+/** GET /places/categories. 장소 종류 9개(맛집·카페 … 기타)를 순서대로 준다. */
+export async function fetchPlaceCategories(): Promise<PlaceCategory[]> {
+  const { data } = await api.get<PlaceCategory[]>('/places/categories');
+  return [...data].sort((a, b) => a.order - b.order);
 }
 
 /** 목록에 보여줄 주소. 도로명이 없으면 지번으로 대신한다. */

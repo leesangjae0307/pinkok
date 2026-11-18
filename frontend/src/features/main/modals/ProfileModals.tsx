@@ -360,7 +360,7 @@ export function ClipPlaybackModal() {
 /** 비밀번호 변경 모달. 서버에 비밀번호 변경 API 가 아직 없어서 입력 검증과 토스트까지만 동작한다. */
 export function PasswordModal() {
   const insets = useSafeAreaInsets();
-  const { isPasswordModalOpen, setIsPasswordModalOpen, showToast } = useApp();
+  const { isPasswordModalOpen, setIsPasswordModalOpen } = useApp();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');

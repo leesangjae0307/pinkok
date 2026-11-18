@@ -27,7 +27,6 @@ export default function ExtractTab() {
     setExtractImageNames,
     extractImages,
     setExtractImages,
-    showToast,
     handleExtractSubmit,
     handleToggleExtractedPlace,
     handleToggleAllExtractedPlaces,

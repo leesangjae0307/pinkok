@@ -90,7 +90,6 @@ import {
 import {
   applyRouteOptimization,
   createRouteOptimization,
-  savedDistanceM,
 } from '../../api/routeOptimizationApi';
 import {
   acceptInvitation,
@@ -1321,10 +1320,11 @@ function useAppState(me: Me, onLogout: () => void) {
     setActiveTab('pinlog');
   };
 
-  const closeCreateTrip = () => {
+  /** 안에서 setState 만 쓰므로 참조가 늘 같다. 뒤로가기 구독(useEffect)이 렌더마다 다시 걸리지 않게 한다. */
+  const closeCreateTrip = useCallback(() => {
     setIsCreateTripOpen(false);
     setNewTripMembers([]);
-  };
+  }, []);
 
   const addNewTripMember = (member: InvitedTripMember) =>
     setNewTripMembers((cur) => (cur.some((m) => m.loginId === member.loginId) ? cur : [...cur, member]));

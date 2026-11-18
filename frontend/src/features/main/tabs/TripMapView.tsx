@@ -48,7 +48,6 @@ export default function TripMapView() {
     setTripsSheetHeight,
     handleOptimizeRoute,
     isOptimizingRoute,
-    showToast,
   } = useApp();
   const [layout, setLayout] = useState({ width: 0, height: 0 });
 

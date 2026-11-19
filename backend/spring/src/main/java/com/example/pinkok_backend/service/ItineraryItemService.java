@@ -1,5 +1,6 @@
 package com.example.pinkok_backend.service;
 
+import com.example.pinkok_backend.category.PlaceCategory;
 import com.example.pinkok_backend.dto.ItineraryItemCreateRequest;
 import com.example.pinkok_backend.dto.ItineraryItemResponse;
 import com.example.pinkok_backend.dto.ItineraryItemUpdateRequest;
@@ -118,6 +119,17 @@ public class ItineraryItemService {
         if (request.getStayMinutes() != null) item.setStayMinutes(request.getStayMinutes());
         if (request.getTransportMode() != null) item.setTransportMode(request.getTransportMode());
         if (request.getMemo() != null) item.setMemo(request.getMemo());
+        if (request.isCategoryGroupCodePresent()) {
+            // 이 핀에서만 종류를 바꾼다. 장소(places)는 다른 여행 핀과 같이 쓰므로 건드리지 않는다
+            String code = request.getCategoryGroupCode();
+            if (code == null || code.isBlank()) {
+                item.setCategoryOverride(null);   // 장소 기본 분류로 되돌리기
+            } else {
+                PlaceCategory category = PlaceCategory.ofCode(code).orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "categoryGroupCode 는 GET /places/categories 의 code 중 하나여야 합니다."));
+                item.setCategoryOverride(category.code());
+            }
+        }
 
         ItineraryItem saved = itineraryItemRepository.saveAndFlush(item);
         // 원래 있던 날짜에서 빠졌으면 그 날짜에 남은 핀들의 번호를 1 부터 다시 붙인다

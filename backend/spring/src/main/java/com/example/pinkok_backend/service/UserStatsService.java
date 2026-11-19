@@ -100,7 +100,7 @@ public class UserStatsService {
     private List<TasteEntry> tastesOf(List<ItineraryItem> pins) {
         Map<PlaceCategory, Integer> counts = new LinkedHashMap<>();
         for (ItineraryItem pin : pins) {
-            PlaceCategory category = PlaceCategoryClassifier.classify(pin.getPlace());
+            PlaceCategory category = PlaceCategoryClassifier.classifyPin(pin.getPlace(), pin.getCategoryOverride());
             if (category != PlaceCategory.ETC) {
                 counts.merge(category, 1, Integer::sum);
             }

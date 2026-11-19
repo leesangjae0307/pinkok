@@ -31,7 +31,7 @@ public class PlaceResponse {
     private final String phone;
     private final String placeUrl;
 
-    private PlaceResponse(Place place) {
+    private PlaceResponse(Place place, PlaceCategory kind) {
         this.id = place.getId();
         this.name = place.getName();
         this.roadAddress = place.getRoadAddress();
@@ -39,7 +39,6 @@ public class PlaceResponse {
         this.latitude = place.getLatitude();
         this.longitude = place.getLongitude();
         this.categoryName = place.getCategoryName();
-        PlaceCategory kind = PlaceCategoryClassifier.classify(place);
         this.category = kind.code();
         this.categoryLabel = kind.label();
         this.categoryOrder = kind.order();
@@ -48,6 +47,11 @@ public class PlaceResponse {
     }
 
     public static PlaceResponse from(Place place) {
-        return new PlaceResponse(place);
+        return new PlaceResponse(place, PlaceCategoryClassifier.classify(place));
+    }
+
+    /** 핀에서 종류를 바꿨으면 그 종류로 보여준다 (장소 자체는 그대로) */
+    public static PlaceResponse from(Place place, String categoryOverride) {
+        return new PlaceResponse(place, PlaceCategoryClassifier.classifyPin(place, categoryOverride));
     }
 }

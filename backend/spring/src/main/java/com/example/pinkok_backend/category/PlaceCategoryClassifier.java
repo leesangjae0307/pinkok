@@ -73,6 +73,14 @@ public final class PlaceCategoryClassifier {
         return classify(place.getCategoryGroupCode(), place.getCategoryName());
     }
 
+    /**
+     * 핀의 종류. 그 핀에서 사용자가 직접 바꾼 값(override)이 있으면 그것, 없으면 장소의 기본 분류.
+     * 여행 "전체" 탭 묶음과 프로필 취향 모두 이걸 쓴다.
+     */
+    public static PlaceCategory classifyPin(Place place, String override) {
+        return PlaceCategory.ofCode(override).orElseGet(() -> classify(place));
+    }
+
     /** 분류 정보가 아예 없으면(직접 추가하고 종류를 안 고른 장소 등) 기타. */
     public static PlaceCategory classify(String groupCode, String path) {
         String code = StringUtils.hasText(groupCode) ? groupCode.trim() : null;

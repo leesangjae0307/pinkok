@@ -15,6 +15,7 @@ import com.example.pinkok_backend.repository.UserRepository;
 import com.example.pinkok_backend.security.TripAccessGuard;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -66,7 +67,14 @@ public class DiaryService {
         ItineraryItem item = getItemOrThrow(request.getItineraryItemId());
         tripAccessGuard.requireMember(item.getTrip().getId(), userId);
 
-        if (diaryRepository.existsByItineraryItem_IdAndUser_Id(item.getId(), userId)) {
+        String requestId = StringUtils.hasText(request.getClientRequestId()) ? request.getClientRequestId().trim() : null;
+        Diary existing = diaryRepository.findByItineraryItem_IdAndUser_Id(item.getId(), userId).orElse(null);
+        if (existing != null) {
+            // 같은 요청을 다시 보낸 것이면(응답을 못 받은 재시도) 이미 만든 기록을 그대로 돌려준다
+            if (requestId != null && requestId.equals(existing.getClientRequestId())) {
+                return DiaryResponse.of(existing,
+                        diaryMediaRepository.findAllByDiary_IdOrderByDisplayOrderAsc(existing.getId()), userId);
+            }
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "이 장소에는 이미 기록을 남겼습니다. 수정해 주세요.");
         }
@@ -80,6 +88,7 @@ public class DiaryService {
         diary.setUser(user);
         diary.setContent(request.getContent());
         diary.setRating(request.getRating());
+        diary.setClientRequestId(requestId);
         diary.setCreatedAt(now);
         diary.setUpdatedAt(now);
         diaryRepository.save(diary);

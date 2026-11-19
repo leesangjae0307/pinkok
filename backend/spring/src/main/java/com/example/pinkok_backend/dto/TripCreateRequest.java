@@ -39,4 +39,7 @@ public class TripCreateRequest {
      * 앱에서는 GET /users/search 로 찾아 고르게 하고, 고른 사람의 username 을 보내면 된다.
      */
     private List<String> inviteeUsernames;
+
+    /** 자유 해시태그. 최대 10개, 각 20자. 앞의 # 과 공백은 서버가 정리한다 (예: "#부산 여행" → "부산여행") */
+    private List<String> tags;
 }

@@ -101,9 +101,14 @@ public class FfmpegVideoComposer implements VideoComposer {
         double seconds = lengthOf(clip);
 
         List<String> command = new ArrayList<>(List.of(ffmpegPath, "-y"));
+        String videoFilter = scaleFilter;
         if (clip.photo()) {
-            // 사진 한 장을 지정한 시간만큼 반복해서 "정지 장면"으로 만든다
-            command.addAll(List.of("-loop", "1", "-t", format(seconds), "-i", clip.file().toString()));
+            // 사진 한 장을 지정한 시간만큼 반복해서 "정지 장면"으로 만든다.
+            // 세로로 찍은 폰 사진(EXIF 회전 표시)은 FFmpeg 버전마다 다르게 다뤄져서(서버 4.4 는 무시),
+            // 미리 바로 세운 사본을 만들어 넘긴다. 회전 표시가 없으면 원본 그대로 쓴다
+            Path photo = ExifOrientation.upright(clip.file(),
+                    output.resolveSibling(output.getFileName() + "_upright.jpg"), Math.max(width, height) * 2);
+            command.addAll(List.of("-loop", "1", "-t", format(seconds), "-i", photo.toString()));
         } else {
             // -ss 를 -i 앞에 두면 그 지점까지 빨리 건너뛴다
             command.addAll(List.of("-ss", format(clip.startMs() / 1000.0),
@@ -120,7 +125,7 @@ public class FfmpegVideoComposer implements VideoComposer {
         command.addAll(List.of(
                 "-map", "0:v:0",
                 "-map", hasAudio ? "0:a:0" : "1:a:0",
-                "-vf", scaleFilter,
+                "-vf", videoFilter,
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k",
                 "-shortest",

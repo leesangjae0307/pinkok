@@ -98,6 +98,29 @@ class FfmpegVideoComposerTest {
     }
 
     @Test
+    @DisplayName("세로로 찍은 폰 사진(EXIF 회전 6)은 PinLog 에서도 세워서 들어간다")
+    void composesExifRotatedPhoto() throws Exception {
+        Assumptions.assumeTrue(commandExists("ffmpeg") && commandExists("ffprobe"),
+                "FFmpeg 가 설치돼 있지 않아 건너뜁니다.");
+
+        // 픽셀은 가로 800×400 (왼쪽 빨강·오른쪽 파랑), EXIF 는 "시계방향 90도"
+        Path photo = workDir.resolve("portrait.jpg");
+        Files.write(photo, ExifTestImages.leftRedRightBlue(800, 400, 6));
+
+        Path output = workDir.resolve("rotated-pinlog.mp4");
+        VideoComposer composer = new FfmpegVideoComposer("ffmpeg", "ffprobe", 600, 1280, 720);
+        composer.compose(List.of(new VideoComposer.Clip(photo, true, 0, null)), output,
+                workDir.resolve("rotated-pinlog_thumb.jpg"));
+
+        // 첫 장면을 뽑아 가운데 위·아래 색을 본다. 세워졌으면 위=빨강, 아래=파랑 (눕혀졌으면 둘 다 빨강)
+        Path frame = workDir.resolve("frame.png");
+        run(List.of("ffmpeg", "-y", "-i", output.toString(), "-frames:v", "1", frame.toString()));
+        BufferedImage image = ImageIO.read(frame.toFile());
+        assertThat(ExifTestImages.isRed(image.getRGB(630, 120))).isTrue();
+        assertThat(ExifTestImages.isBlue(image.getRGB(630, 600))).isTrue();
+    }
+
+    @Test
     @DisplayName("WebP 사진(인스타그램 사진)도 PinLog 의 정지 장면으로 합성된다")
     void composesWebpPhoto() throws Exception {
         Assumptions.assumeTrue(commandExists("ffmpeg") && commandExists("ffprobe"),

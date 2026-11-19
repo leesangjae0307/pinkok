@@ -2,6 +2,7 @@ package com.example.pinkok_backend.service;
 
 import com.example.pinkok_backend.dto.FileUploadResponse;
 import com.example.pinkok_backend.exception.FileUploadException;
+import com.example.pinkok_backend.pinlog.ExifOrientation;
 import com.example.pinkok_backend.pinlog.HeicConverter;
 import com.example.pinkok_backend.pinlog.ImageProbe;
 import com.example.pinkok_backend.pinlog.VideoProbe;
@@ -167,8 +168,10 @@ public class FileService {
             ImageFormat format = ImageFormat.detect(bytes);
             if (format == ImageFormat.HEIC) {
                 // 아이폰 사진(HEIC)은 안드로이드·FFmpeg 가 못 읽을 수 있어서 고화질 JPEG 로 바꿔서 저장한다
-                bytes = heicConverter.toJpeg(bytes).orElseThrow(() -> new FileUploadException(
+                byte[] converted = heicConverter.toJpeg(bytes).orElseThrow(() -> new FileUploadException(
                         name + ": HEIC 사진을 변환하지 못했습니다. JPG 로 바꿔서 올려 주세요."));
+                // heif-convert 는 픽셀을 이미 바로 세운다. 회전 표시가 남아 있으면 앱이 한 번 더 돌리므로 지운다
+                bytes = ExifOrientation.stripExif(converted);
                 format = ImageFormat.JPEG;
             }
 
@@ -230,10 +233,20 @@ public class FileService {
                 int height = reader.getHeight(0);
 
                 ImageReadParam param = reader.getDefaultReadParam();
-                int step = Math.max(1, width / (THUMBNAIL_WIDTH * 2));
+                int step = Math.max(1, Math.max(width, height) / (THUMBNAIL_WIDTH * 2));
                 param.setSourceSubsampling(step, step, 0, 0);
                 BufferedImage preview = reader.read(0, param);
-                return preview == null ? null : new ImageInfo(width, height, preview, format);
+                if (preview == null) {
+                    return null;
+                }
+
+                // 폰은 세로 사진의 픽셀을 돌리지 않고 "돌려서 보여줘라"는 EXIF 표시만 붙인다.
+                // 자바는 그 표시를 무시하므로, 썸네일과 가로·세로 크기를 실제로 보이는 방향으로 맞춘다
+                int orientation = format == ImageFormat.JPEG ? ExifOrientation.read(bytes) : 1;
+                preview = ExifOrientation.apply(preview, orientation);
+                return ExifOrientation.swapsSides(orientation)
+                        ? new ImageInfo(height, width, preview, format)
+                        : new ImageInfo(width, height, preview, format);
             } finally {
                 reader.dispose();
             }

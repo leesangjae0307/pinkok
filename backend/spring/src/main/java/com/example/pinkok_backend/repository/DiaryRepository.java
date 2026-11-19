@@ -13,6 +13,8 @@ public interface DiaryRepository extends JpaRepository<Diary, Long> {
     /** 한 핀에 한 사람은 기록 하나만 쓸 수 있으므로, 만들기 전에 이미 썼는지 확인한다. */
     boolean existsByItineraryItem_IdAndUser_Id(Long itineraryItemId, Long userId);
 
+    java.util.Optional<Diary> findByItineraryItem_IdAndUser_Id(Long itineraryItemId, Long userId);
+
     /**
      * 여행 하나에 달린 팀원 전체의 기록을 동선 순서대로 가져온다.
      *

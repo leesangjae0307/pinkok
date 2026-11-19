@@ -1,6 +1,7 @@
 package com.example.pinkok_backend.controller;
 
 import com.example.pinkok_backend.dto.ClipOptionResponse;
+import com.example.pinkok_backend.dto.PinlogBulkDeleteRequest;
 import com.example.pinkok_backend.dto.PinlogCreateRequest;
 import com.example.pinkok_backend.dto.PinlogResponse;
 import com.example.pinkok_backend.security.CurrentUserId;
@@ -83,12 +84,17 @@ public class PinlogController {
     @GetMapping
     public List<PinlogResponse> list(@CurrentUserId Long userId,
                                      @RequestParam(required = false) Long tripId,
-                                     @RequestParam(defaultValue = "false") boolean mine) {
+                                     @RequestParam(defaultValue = "false") boolean mine,
+                                     @RequestParam(defaultValue = "DONE") String status) {
         if (tripId != null) {
             return pinlogService.list(tripId, userId);
         }
         if (mine) {
-            return pinlogService.listMine(userId);
+            // status=DONE(기본): 완성본만 / status=ALL: 만드는 중·실패까지 함께
+            if (!"DONE".equalsIgnoreCase(status) && !"ALL".equalsIgnoreCase(status)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "status 는 DONE 또는 ALL 이어야 합니다.");
+            }
+            return pinlogService.listMine(userId, "ALL".equalsIgnoreCase(status));
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "tripId 또는 mine=true 중 하나가 필요합니다.");
     }
@@ -119,6 +125,17 @@ public class PinlogController {
     @DeleteMapping("/{pinlogId}")
     public ResponseEntity<Void> delete(@CurrentUserId Long userId, @PathVariable Long pinlogId) {
         pinlogService.delete(pinlogId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 여러 개 한 번에 삭제 (앱 폴더의 "선택 삭제"). body: {@code {"ids":[1,2,3]}}.
+     * 하나라도 없거나(404) 내가 만든 것이 아니면(403) 아무것도 지우지 않는다.
+     */
+    @DeleteMapping
+    public ResponseEntity<Void> deleteAll(@CurrentUserId Long userId,
+                                          @Valid @RequestBody PinlogBulkDeleteRequest request) {
+        pinlogService.deleteAll(request.ids(), userId);
         return ResponseEntity.noContent().build();
     }
 }

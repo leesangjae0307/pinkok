@@ -29,11 +29,12 @@ public interface PinlogRepository extends JpaRepository<Pinlog, Long> {
             join fetch p.user
             join fetch p.trip t
             where t.deletedAt is null
-              and p.status = :status
+              and p.status in :statuses
               and exists (select 1 from TripMember m where m.trip = t and m.user.id = :userId)
             order by p.createdAt desc
             """)
-    List<Pinlog> findAllInMyTripsByStatus(@Param("userId") Long userId, @Param("status") String status);
+    List<Pinlog> findAllInMyTripsByStatusIn(@Param("userId") Long userId,
+                                            @Param("statuses") Collection<String> statuses);
 
     /**
      * 합성할 PinLog 를 여행·만든 사람과 함께 읽는다.

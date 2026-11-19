@@ -43,4 +43,11 @@ public class Diary {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    /**
+     * 앱이 저장 요청마다 붙인 고유 값 (멱등 키). 응답을 못 받은 앱이 같은 요청을 다시 보내면
+     * 이 값으로 "이미 만든 그 기록"임을 알아보고 새로 만들지 않고 그대로 돌려준다.
+     */
+    @Column(name = "client_request_id", length = 64)
+    private String clientRequestId;
 }

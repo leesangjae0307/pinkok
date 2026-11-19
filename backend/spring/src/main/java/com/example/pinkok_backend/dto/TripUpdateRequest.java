@@ -29,4 +29,7 @@ public class TripUpdateRequest {
     private String coverImageUrl;
 
     private Boolean isPublic;
+
+    /** 자유 해시태그. 안 보내면(null) 그대로, 빈 배열([])이면 전부 지운다. 규칙은 만들 때와 같다 */
+    private java.util.List<String> tags;
 }

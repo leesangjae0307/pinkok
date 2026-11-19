@@ -141,6 +141,15 @@ CREATE TABLE trips (
 ) COMMENT='여행';
 
 
+CREATE TABLE trip_tags (
+    trip_id    BIGINT      NOT NULL COMMENT '여행 ID',
+    sort_order INT         NOT NULL COMMENT '태그 순서 (0부터)',
+    tag        VARCHAR(20) NOT NULL COMMENT '자유 해시태그 (# 없이)',
+    PRIMARY KEY (trip_id, sort_order),
+    CONSTRAINT fk_trip_tags_trip FOREIGN KEY (trip_id) REFERENCES trips (id)
+) COMMENT='여행 자유 해시태그';
+
+
 CREATE TABLE trip_members (
     trip_id   BIGINT      NOT NULL COMMENT '여행 ID',
     user_id   BIGINT      NOT NULL COMMENT '참여자 ID',
@@ -278,6 +287,7 @@ CREATE TABLE itinerary_items (
     stay_minutes         INT          NULL COMMENT '예상 체류 시간(분)',
     transport_mode       VARCHAR(20)  NULL COMMENT '직전 장소에서의 이동수단 CAR / WALK / BUS / TRAIN',
     memo                 VARCHAR(500) NULL COMMENT '계획 단계 메모',
+    category_override    VARCHAR(10)  NULL COMMENT '이 핀에서만 바꾼 장소 종류 (FD6/CE7/AD5/AT4/NATURE/SEA/CT1/MT1/ETC). NULL 이면 장소 기본 분류',
     added_by             VARCHAR(10)  NOT NULL DEFAULT 'AI' COMMENT 'AI / USER',
     created_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -336,6 +346,7 @@ CREATE TABLE diaries (
     user_id           BIGINT      NOT NULL COMMENT '작성자 ID',
     content           TEXT        NULL COMMENT '메모 본문',
     rating            TINYINT     NULL COMMENT '만족도 1~5',
+    client_request_id VARCHAR(64) NULL COMMENT '앱이 저장 요청마다 붙인 고유 값 (재시도 시 같은 기록을 돌려주기 위한 멱등 키)',
     created_at        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

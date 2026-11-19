@@ -69,6 +69,7 @@ public class TripService {
         trip.setIsPublic(request.getIsPublic() != null && request.getIsPublic());
         trip.setCreatedAt(now);
         trip.setUpdatedAt(now);
+        trip.replaceTags(TripTags.normalize(request.getTags()));
         trip = tripRepository.save(trip);
 
         TripMember owner = new TripMember();
@@ -127,6 +128,7 @@ public class TripService {
         if (request.getStatus() != null) trip.setStatus(request.getStatus());
         if (request.getCoverImageUrl() != null) trip.setCoverImageUrl(request.getCoverImageUrl());
         if (request.getIsPublic() != null) trip.setIsPublic(request.getIsPublic());
+        if (request.getTags() != null) trip.replaceTags(TripTags.normalize(request.getTags()));
         trip.setUpdatedAt(LocalDateTime.now());
 
         return TripResponse.of(tripRepository.save(trip), OWNER, itineraryItemRepository.countByTrip_Id(tripId));

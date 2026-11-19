@@ -29,4 +29,11 @@ public class DiaryCreateRequest {
     /** 사진 여러 장 + 영상 1개까지. 순서는 보낸 순서대로 저장된다. */
     @Valid
     private List<DiaryMediaRequest> media;
+
+    /**
+     * (선택) 저장 요청마다 앱이 만든 고유 값 (UUID 등, 64자 이하). 같은 값으로 다시 보내면(응답을 못 받아 재시도한 경우)
+     * 이미 만든 기록을 그대로 돌려준다 — 409 를 받고 수정으로 우회하지 않아도 된다.
+     */
+    @Size(max = 64)
+    private String clientRequestId;
 }

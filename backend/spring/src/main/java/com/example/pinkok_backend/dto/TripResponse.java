@@ -23,6 +23,8 @@ public class TripResponse {
     /** 이 여행에 꽂힌 핀 개수 (목록·바텀시트의 "장소 N개") */
     private final int placesCount;
     private final LocalDateTime createdAt;
+    /** 자유 해시태그 (# 없이, 보낸 순서대로). 앱이 # 을 붙여 보여준다 */
+    private final java.util.List<String> tags;
 
     private TripResponse(Trip trip, String myRole, int placesCount) {
         this.id = trip.getId();
@@ -37,6 +39,7 @@ public class TripResponse {
         this.myRole = myRole;
         this.placesCount = placesCount;
         this.createdAt = trip.getCreatedAt();
+        this.tags = java.util.List.copyOf(trip.getTags());
     }
 
     public static TripResponse of(Trip trip, String myRole, int placesCount) {

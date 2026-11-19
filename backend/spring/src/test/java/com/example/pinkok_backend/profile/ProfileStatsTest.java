@@ -388,6 +388,99 @@ class ProfileStatsTest {
 
     // ---------- 내 PinLog 모아보기 ----------
 
+    private Long pinlogIdByTitle(String title) {
+        return jdbcTemplate.queryForObject("SELECT id FROM pinlogs WHERE title = ?", Long.class, title);
+    }
+
+    @Test
+    @DisplayName("GET /pinlogs?mine=true&status=ALL - 만드는 중·실패한 PinLog 도 함께 (기본은 완성본만)")
+    void myPinlogsIncludingUnfinished() throws Exception {
+        String me = signupAndLogin("gamjieun");
+        Long trip = createTrip(me, "제주", "제주");
+        insertPinlog(trip, "gamjieun", "완성", "DONE");
+        insertPinlog(trip, "gamjieun", "만드는 중", "PROCESSING");
+        insertPinlog(trip, "gamjieun", "대기", "QUEUED");
+        insertPinlog(trip, "gamjieun", "실패", "FAILED");
+
+        assertThat((List<String>) JsonPath.read(getJson(me, "/pinlogs?mine=true"), "$[*].title"))
+                .containsExactly("완성");
+        assertThat((List<String>) JsonPath.read(getJson(me, "/pinlogs?mine=true&status=ALL"), "$[*].status"))
+                .containsExactlyInAnyOrder("DONE", "PROCESSING", "QUEUED", "FAILED");
+        mockMvc.perform(get("/pinlogs?mine=true&status=WHAT").header("Authorization", "Bearer " + me))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("DELETE /pinlogs - 여러 개 한 번에 지운다. 하나라도 남의 것이면 아무것도 지우지 않는다")
+    void bulkDeletePinlogs() throws Exception {
+        String me = signupAndLogin("gamjieun");
+        String mate = signupAndLogin("jeonghun");
+        Long trip = createTrip(me, "제주", "제주");
+        jdbcTemplate.update("INSERT INTO trip_members (trip_id, user_id, role, joined_at) VALUES (?, ?, 'MEMBER', CURRENT_TIMESTAMP)",
+                trip, userIdOf("jeonghun"));
+        insertPinlog(trip, "gamjieun", "내 것 1", "DONE");
+        insertPinlog(trip, "gamjieun", "내 것 2", "FAILED");
+        insertPinlog(trip, "gamjieun", "남길 것", "DONE");
+        insertPinlog(trip, "jeonghun", "팀원 것", "DONE");
+
+        // 팀원 것이 섞이면 403, 아무것도 안 지워진다
+        mockMvc.perform(delete("/pinlogs")
+                        .header("Authorization", "Bearer " + me)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"ids\":[%d,%d]}", pinlogIdByTitle("내 것 1"), pinlogIdByTitle("팀원 것"))))
+                .andExpect(status().isForbidden());
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM pinlogs", Integer.class)).isEqualTo(4);
+
+        // 내 것만이면 한 번에 지운다
+        mockMvc.perform(delete("/pinlogs")
+                        .header("Authorization", "Bearer " + me)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"ids\":[%d,%d]}", pinlogIdByTitle("내 것 1"), pinlogIdByTitle("내 것 2"))))
+                .andExpect(status().isNoContent());
+        assertThat(jdbcTemplate.queryForList("SELECT title FROM pinlogs", String.class))
+                .containsExactlyInAnyOrder("남길 것", "팀원 것");
+
+        // 빈 목록이나 없는 id
+        mockMvc.perform(delete("/pinlogs").header("Authorization", "Bearer " + me)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[]}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(delete("/pinlogs").header("Authorization", "Bearer " + me)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[999999]}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /diaries 멱등 키 - 응답을 못 받고 같은 요청을 다시 보내면 409 대신 이미 만든 기록을 돌려준다")
+    void diaryIdempotency() throws Exception {
+        String me = signupAndLogin("gamjieun");
+        Long trip = createTrip(me, "제주", "제주");
+        Long pin = addPin(me, trip, null, "협재해수욕장");
+        String body = String.format("{\"itineraryItemId\":%d,\"content\":\"좋았다\",\"rating\":5,\"media\":[],"
+                + "\"clientRequestId\":\"6f1c2a9e-retry-test\"}", pin);
+
+        String first = mockMvc.perform(post("/diaries").header("Authorization", "Bearer " + me)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        // 같은 요청을 한 번 더 (앱이 응답을 못 받아 재시도) → 같은 기록
+        String again = mockMvc.perform(post("/diaries").header("Authorization", "Bearer " + me)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        assertThat((Integer) JsonPath.read(again, "$.id")).isEqualTo((Integer) JsonPath.read(first, "$.id"));
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM diaries", Integer.class)).isEqualTo(1);
+
+        // 키가 다르거나 없으면 지금처럼 409 (진짜로 두 번째 기록을 쓰려는 것)
+        mockMvc.perform(post("/diaries").header("Authorization", "Bearer " + me)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body.replace("6f1c2a9e-retry-test", "another-key")))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/diaries").header("Authorization", "Bearer " + me)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"itineraryItemId\":%d,\"content\":\"또\",\"media\":[]}", pin)))
+                .andExpect(status().isConflict());
+    }
+
     @Test
     @DisplayName("GET /pinlogs?mine=true - 내 여행들의 완성된 PinLog 만, 남의 여행 것은 빠진다")
     void myPinlogs() throws Exception {

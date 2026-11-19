@@ -421,7 +421,18 @@ public class PinlogService {
      */
     @Transactional(readOnly = true)
     public List<PinlogResponse> listMine(Long userId) {
-        return toResponses(pinlogRepository.findAllInMyTripsByStatus(userId, STATUS_DONE), userId);
+        return listMine(userId, false);
+    }
+
+    /**
+     * @param includeUnfinished true 면 만드는 중(QUEUED·PROCESSING)·실패(FAILED)도 함께 (앱 폴더에서 진행 상황을 보여줄 때)
+     */
+    @Transactional(readOnly = true)
+    public List<PinlogResponse> listMine(Long userId, boolean includeUnfinished) {
+        List<String> statuses = includeUnfinished
+                ? List.of(STATUS_QUEUED, STATUS_PROCESSING, STATUS_DONE, STATUS_FAILED)
+                : List.of(STATUS_DONE);
+        return toResponses(pinlogRepository.findAllInMyTripsByStatusIn(userId, statuses), userId);
     }
 
     /** 클립은 PinLog 마다 따로 읽지 않고 한 번에 모아 읽는다 (N+1 방지). */
@@ -500,11 +511,34 @@ public class PinlogService {
     @Transactional
     public void delete(Long pinlogId, Long userId) {
         Pinlog pinlog = getOrThrow(pinlogId);
+        checkDeletable(pinlog, userId);
+        deleteChecked(pinlog);
+    }
+
+    /**
+     * 여러 개를 한 번에 지운다. <b>전부 지울 수 있을 때만</b> 지운다 — 하나라도 없거나 남의 것이면 아무것도 지우지 않고
+     * 그 이유로 실패한다 (일부만 지워져서 앱 화면과 어긋나는 일을 막기 위해).
+     */
+    @Transactional
+    public void deleteAll(List<Long> pinlogIds, Long userId) {
+        List<Pinlog> pinlogs = new ArrayList<>();
+        for (Long id : new java.util.LinkedHashSet<>(pinlogIds)) {
+            Pinlog pinlog = getOrThrow(id);
+            checkDeletable(pinlog, userId);
+            pinlogs.add(pinlog);
+        }
+        pinlogs.forEach(this::deleteChecked);
+    }
+
+    private void checkDeletable(Pinlog pinlog, Long userId) {
         tripAccessGuard.requireMember(pinlog.getTrip().getId(), userId);
         if (!pinlog.getUser().getId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "본인이 만든 PinLog만 삭제할 수 있습니다.");
         }
+    }
 
+    private void deleteChecked(Pinlog pinlog) {
+        Long pinlogId = pinlog.getId();
         String videoUrl = pinlog.getVideoUrl();
         pinlogClipRepository.deleteAllByPinlog_Id(pinlogId);
         pinlogRepository.delete(pinlog);

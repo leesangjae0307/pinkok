@@ -21,6 +21,14 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
+    <!--
+      enableOnBackInvokedCallback 은 꺼 둔다.
+      안드로이드 16(API 36) 부터는 targetSdk 가 36 이면 예측형 뒤로가기가 기본으로
+      켜진다. 그러면 시스템이 뒤로가기를 직접 처리해서 Activity 의 onBackPressed 가
+      호출되지 않고, 그 위에 얹힌 RN 의 BackHandler 도 신호를 받지 못한다. 화면
+      하나만 보고 있어도 앱이 통째로 꺼지던 이유가 이것이다. 예측형 뒤로가기
+      애니메이션을 아직 지원하지 않으므로 끈다.
+    -->
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"
@@ -28,7 +36,8 @@
       android:roundIcon="@mipmap/ic_launcher_round"
       android:allowBackup="false"
       android:theme="@style/AppTheme"
-      android:supportsRtl="true">
+      android:supportsRtl="true"
+      android:enableOnBackInvokedCallback="false">
       <!--
         화면은 세로로 고정한다. 모든 화면이 세로 기준으로 짜여 있고, 촬영 화면에서
         휴대폰을 돌려도 촬영 버튼이 좌우로 따라다니면 안 되기 때문이다.

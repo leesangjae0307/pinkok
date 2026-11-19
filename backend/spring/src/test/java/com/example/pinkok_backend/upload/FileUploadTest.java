@@ -154,6 +154,28 @@ class FileUploadTest {
     }
 
     @Test
+    @DisplayName("세로로 찍은 폰 사진(EXIF 회전 6): 크기는 보이는 방향(세로)으로, 썸네일도 돌려서 만든다")
+    void exifRotatedPhoto() throws Exception {
+        // 픽셀은 가로 800×400 (왼쪽 빨강·오른쪽 파랑), EXIF 는 "시계방향 90도로 보여줘라"
+        byte[] photo = com.example.pinkok_backend.pinlog.ExifTestImages.leftRedRightBlue(800, 400, 6);
+        MvcResult result = upload(new MockMultipartFile("file", "portrait.jpg", "image/jpeg", photo));
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+
+        String json = result.getResponse().getContentAsString();
+        assertThat((Integer) JsonPath.read(json, "$[0].width")).isEqualTo(400);    // 보이는 방향: 세로 사진
+        assertThat((Integer) JsonPath.read(json, "$[0].height")).isEqualTo(800);
+        // 원본은 손대지 않는다 (앱·브라우저가 EXIF 를 보고 돌려서 보여준다)
+        assertThat(Files.readAllBytes(stored(JsonPath.read(json, "$[0].url")))).isEqualTo(photo);
+
+        BufferedImage thumbnail = ImageIO.read(stored(JsonPath.read(json, "$[0].thumbnailUrl")).toFile());
+        assertThat(thumbnail.getWidth()).isEqualTo(300);
+        assertThat(thumbnail.getHeight()).isEqualTo(600);
+        // 시계방향으로 돌렸으니 왼쪽(빨강)이 위, 오른쪽(파랑)이 아래
+        assertThat(com.example.pinkok_backend.pinlog.ExifTestImages.isRed(thumbnail.getRGB(150, 100))).isTrue();
+        assertThat(com.example.pinkok_backend.pinlog.ExifTestImages.isBlue(thumbnail.getRGB(150, 500))).isTrue();
+    }
+
+    @Test
     @DisplayName("작은 사진은 썸네일도 원래 크기 그대로")
     void smallPhoto() throws Exception {
         String json = upload(png("small.png", 120, 80)).getResponse().getContentAsString();

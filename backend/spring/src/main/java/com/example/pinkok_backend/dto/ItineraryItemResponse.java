@@ -27,13 +27,16 @@ public class ItineraryItemResponse {
     /** 이 핀의 첫 번째 기록 사진·영상 썸네일 주소. 없으면 null (앱이 기본 이미지를 보여준다) */
     private final String thumbnailUrl;
     private final LocalDateTime createdAt;
+    /** 이 핀에서 장소 종류를 직접 바꿨는지 (true 면 place.category 가 사용자가 고른 값) */
+    private final boolean categoryOverridden;
 
     private ItineraryItemResponse(ItineraryItem item, Stats stats) {
         this.id = item.getId();
         this.tripId = item.getTrip().getId();
         this.dayId = item.getDay() == null ? null : item.getDay().getId();
         this.dayNumber = item.getDay() == null ? null : item.getDay().getDayNumber();
-        this.place = PlaceResponse.from(item.getPlace());
+        this.place = PlaceResponse.from(item.getPlace(), item.getCategoryOverride());
+        this.categoryOverridden = item.getCategoryOverride() != null;
         this.visitOrder = item.getVisitOrder();
         this.plannedArrivalTime = item.getPlannedArrivalTime();
         this.stayMinutes = item.getStayMinutes();

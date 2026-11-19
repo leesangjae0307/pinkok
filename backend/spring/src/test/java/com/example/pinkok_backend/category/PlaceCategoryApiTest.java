@@ -125,6 +125,84 @@ class PlaceCategoryApiTest {
         assertThat((List<?>) JsonPath.read(stats, "$.tastes")).isEmpty();
     }
 
+    private String patchPin(long pinId, String body) throws Exception {
+        return mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/itinerary-items/" + pinId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    @Test
+    @DisplayName("핀에서 종류를 바꾸면 그 핀에만 적용되고, 같은 카카오 장소를 쓰는 다른 여행 핀은 그대로")
+    void overrideCategoryPerPin() throws Exception {
+        String kakaoCafe = "{\"kakaoPlaceId\":\"777\",\"name\":\"바다뷰 카페\",\"latitude\":37.7,\"longitude\":128.9,"
+                + "\"categoryGroupCode\":\"CE7\",\"categoryName\":\"음식점 > 카페\"}";
+        long pinId = ((Number) JsonPath.read(addPin(kakaoCafe), "$.id")).longValue();
+
+        // 다른 여행에 같은 카카오 장소를 담는다 (places 행을 같이 쓴다)
+        MvcResult otherTrip = mockMvc.perform(post("/trips")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"다른 여행\"}"))
+                .andReturn();
+        long otherTripId = ((Number) JsonPath.read(otherTrip.getResponse().getContentAsString(), "$.id")).longValue();
+        String otherPin = mockMvc.perform(post("/itinerary-items")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"tripId\":%d,\"place\":%s}", otherTripId, kakaoCafe)))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((Integer) JsonPath.read(otherPin, "$.place.id")).isEqualTo((Integer) JsonPath.read(
+                mockMvc.perform(get("/itinerary-items").param("tripId", tripId.toString())
+                        .header("Authorization", "Bearer " + token)).andReturn().getResponse().getContentAsString(),
+                "$[0].place.id"));
+
+        // 이 핀만 숙소로
+        String patched = patchPin(pinId, "{\"categoryGroupCode\":\"AD5\"}");
+        assertThat((String) JsonPath.read(patched, "$.place.category")).isEqualTo("AD5");
+        assertThat((String) JsonPath.read(patched, "$.place.categoryLabel")).isEqualTo("숙소");
+        assertThat((Integer) JsonPath.read(patched, "$.place.categoryOrder")).isEqualTo(2);
+        assertThat((Boolean) JsonPath.read(patched, "$.categoryOverridden")).isTrue();
+
+        // 다른 여행 핀은 여전히 카페
+        String others = mockMvc.perform(get("/itinerary-items").param("tripId", String.valueOf(otherTripId))
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(others, "$[0].place.category")).isEqualTo("CE7");
+        assertThat((Boolean) JsonPath.read(others, "$[0].categoryOverridden")).isFalse();
+
+        // 취향에도 반영: 숙소는 "숙박", 다른 여행 핀은 카페
+        String stats = mockMvc.perform(get("/users/me/stats").header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(stats, "$.tastes[*].name")).containsExactlyInAnyOrder("숙박", "카페");
+
+        // 다른 필드만 고치면 종류는 그대로
+        assertThat((String) JsonPath.read(patchPin(pinId, "{\"memo\":\"전망 좋음\"}"), "$.place.category")).isEqualTo("AD5");
+
+        // null 을 보내면 장소 기본 분류(카페)로 되돌린다
+        String reverted = patchPin(pinId, "{\"categoryGroupCode\":null}");
+        assertThat((String) JsonPath.read(reverted, "$.place.category")).isEqualTo("CE7");
+        assertThat((Boolean) JsonPath.read(reverted, "$.categoryOverridden")).isFalse();
+    }
+
+    @Test
+    @DisplayName("주소로 직접 추가한 장소도 핀에서 종류를 바꿀 수 있고, 없는 코드는 400")
+    void overrideValidation() throws Exception {
+        long pinId = ((Number) JsonPath.read(
+                addPin("{\"name\":\"친구네 집\",\"latitude\":37.7,\"longitude\":128.9}"), "$.id")).longValue();
+
+        assertThat((String) JsonPath.read(patchPin(pinId, "{\"categoryGroupCode\":\"SEA\"}"), "$.place.categoryLabel"))
+                .isEqualTo("바다");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/itinerary-items/" + pinId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categoryGroupCode\":\"PK6\"}"))   // 카카오 코드지만 우리 9개 종류가 아니다
+                .andExpect(status().isBadRequest());
+    }
+
     @Test
     @DisplayName("GET /places/categories — 종류 9개를 보여줄 순서대로 (맛집 처음, 기타 마지막)")
     void categoryList() throws Exception {

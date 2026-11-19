@@ -55,6 +55,13 @@ public class ItineraryItem {
     @Column(length = 500)
     private String memo;
 
+    /**
+     * 이 핀에서만 바꾼 장소 종류 코드 (FD6·CE7·AD5 … {@link com.example.pinkok_backend.category.PlaceCategory}).
+     * null 이면 장소(places)의 기본 분류를 쓴다. 같은 장소를 쓰는 다른 여행의 핀에는 영향이 없다.
+     */
+    @Column(name = "category_override", length = 10)
+    private String categoryOverride;
+
     @Column(name = "added_by", nullable = false, length = 10)
     private String addedBy;
 

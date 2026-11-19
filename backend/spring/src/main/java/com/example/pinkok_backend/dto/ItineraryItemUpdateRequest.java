@@ -32,6 +32,12 @@ public class ItineraryItemUpdateRequest {
     @Size(max = 500)
     private String memo;
 
+    /**
+     * 이 핀의 장소 종류 바꾸기 (GET /places/categories 의 code). null 을 보내면 장소 기본 분류로 되돌린다.
+     * 키를 안 보내면 그대로.
+     */
+    private String categoryGroupCode;
+
     // 아래 두 값은 서버가 스스로 기록한다. 앱이 JSON 으로 직접 넣을 수 없게 setter 를 만들지 않는다.
 
     /** 요청에 dayId 키가 있었는지 (값이 null 이어도 true) */
@@ -40,6 +46,14 @@ public class ItineraryItemUpdateRequest {
     /** 요청에 plannedArrivalTime 키가 있었는지 (값이 null 이어도 true) */
     @Setter(AccessLevel.NONE)
     private boolean plannedArrivalTimePresent;
+    /** 요청에 categoryGroupCode 키가 있었는지 (값이 null 이어도 true) */
+    @Setter(AccessLevel.NONE)
+    private boolean categoryGroupCodePresent;
+
+    public void setCategoryGroupCode(String categoryGroupCode) {
+        this.categoryGroupCode = categoryGroupCode;
+        this.categoryGroupCodePresent = true;
+    }
 
     public void setDayId(Long dayId) {
         this.dayId = dayId;

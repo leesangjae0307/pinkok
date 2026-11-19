@@ -40,6 +40,8 @@ export interface ItineraryItem {
   stayMinutes: number | null;
   memo: string | null;
   addedBy: string | null;
+  /** 사용자가 이 핀의 분류를 직접 바꿨는지. true 면 '원래대로' 를 보여준다. */
+  categoryOverridden?: boolean;
   /** 팀원 기록 별점 평균. 기록이 없으면 null */
   rating: number | null;
   reviewsCount: number;
@@ -137,6 +139,22 @@ export async function updateItineraryItemTime(
   return data;
 }
 
+/**
+ * 핀 하나의 분류를 바꾼다. 같은 장소를 쓰는 다른 여행의 핀은 그대로다.
+ *
+ * code 는 GET /places/categories 의 code 중 하나이고, null 을 보내면 장소의
+ * 기본 분류로 되돌린다. 키를 빼면 서버가 "바꾸지 말라"로 읽는다.
+ */
+export async function updateItineraryItemCategory(
+  itemId: number,
+  code: string | null,
+): Promise<ItineraryItem> {
+  const { data } = await api.patch<ItineraryItem>(`/itinerary-items/${itemId}`, {
+    categoryGroupCode: code,
+  });
+  return data;
+}
+
 /** 한 일자 안의 핀 순서를 통째로 다시 정한다. itemIds 순서가 곧 방문 순서다. */
 export async function reorderItineraryItems(dayId: number, itemIds: number[]): Promise<ItineraryItem[]> {
   const { data } = await api.patch<ItineraryItem[]>('/itinerary-items/order', { dayId, itemIds });
@@ -193,6 +211,7 @@ export function toPlaceItems(items: ItineraryItem[]): PlaceItem[] {
       categoryCode: item.place.category ?? undefined,
       categoryLabel: item.place.categoryLabel ?? undefined,
       categoryOrder: item.place.categoryOrder ?? undefined,
+      categoryOverridden: item.categoryOverridden ?? false,
       note: item.memo ?? undefined,
     };
   });

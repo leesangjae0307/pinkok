@@ -20,6 +20,8 @@ export interface Trip {
   /** OWNER / MEMBER. 수정·삭제 버튼 노출 여부에 쓴다. */
   myRole: string;
   placesCount: number;
+  /** 해시태그. 서버는 # 없이 주므로 보여줄 때 앱이 붙인다. */
+  tags: string[];
   createdAt: string;
 }
 
@@ -35,6 +37,8 @@ export interface TripCreatePayload {
    * 만든 직후의 여행은 아직 나 혼자다.
    */
   inviteeUsernames?: string[];
+  /** 최대 10개, 정리 후 각 20자. # 없이 보낸다(서버가 앞의 # 는 떼어 준다). */
+  tags?: string[];
 }
 
 /** 내가 팀원으로 속한 여행 목록 */
@@ -65,6 +69,8 @@ export interface TripUpdatePayload {
   status?: string;
   coverImageUrl?: string;
   isPublic?: boolean;
+  /** 통째로 교체된다. 빼면 그대로 두고, [] 를 보내면 전부 지운다. */
+  tags?: string[];
 }
 
 /** 부분 수정. 보내지 않은 필드는 그대로 둔다. OWNER 만 가능하다. */
@@ -120,6 +126,7 @@ export function toTripFolder(
     image: fileUrl(trip.coverImageUrl) ?? local?.image ?? DEFAULT_COVERS[0].src,
     placesCount: trip.placesCount,
     tag: local?.tag ?? COMPANION_TAGS[trip.companionType ?? ''] ?? '여행',
+    tags: trip.tags ?? [],
     isOwner: trip.myRole === 'OWNER',
   };
 }

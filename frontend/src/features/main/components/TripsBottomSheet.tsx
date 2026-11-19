@@ -98,6 +98,7 @@ interface TripsBottomSheetProps {
   onDeleteDay: (day: number) => void;
   /** 장소의 일자를 고르는 창을 연다. */
   onAssignDay: (place: PlaceItem) => void;
+  onChangeCategory: (place: PlaceItem) => void;
   /** 일자 안에서 한 칸 위(-1)/아래(1)로 옮긴다. */
   onMovePlace: (placeId: number, direction: -1 | 1) => void;
   /** 끌어서 바꾼 순서. 그 일자의 핀 ID 를 새 방문 순서대로 준다. */
@@ -135,6 +136,7 @@ export default function TripsBottomSheet({
   isAddingDay,
   onDeleteDay,
   onAssignDay,
+  onChangeCategory,
   onMovePlace,
   onReorderPlaces,
   onEditTime,
@@ -439,6 +441,17 @@ export default function TripsBottomSheet({
                         >
                           <Text className="text-[9px] font-bold text-teal-800">
                             {place.day > 0 ? `${place.day}day` : '일자 지정'}
+                          </Text>
+                        </Pressable>
+                        {/* 분류는 "전체" 탭에서 핀을 묶는 기준이라 여기서 바로 바꿀 수 있게 한다. */}
+                        <Pressable
+                          onPress={() => onChangeCategory(place)}
+                          accessibilityLabel={`${place.name} 장소 종류 바꾸기`}
+                          className="rounded border border-[#82F0DC] bg-white px-1.5 py-0.5"
+                        >
+                          <Text className="text-[9px] font-bold text-teal-800">
+                            {place.categoryLabel ?? '분류'}
+                            {place.categoryOverridden ? ' ✎' : ''}
                           </Text>
                         </Pressable>
                         {isSelected && (

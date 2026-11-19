@@ -24,7 +24,10 @@ export interface TripFolder {
   /** 원격 URL 또는 로컬 이미지(기본 픽셀 표지). Image 에는 toImageSource() 로 넘긴다. */
   image: AvatarSource;
   placesCount: number;
+  /** 동행 유형 꼬리표(커플여행 등). 서버의 companionType 으로 만든다. */
   tag: string;
+  /** 사용자가 붙인 해시태그. 서버는 # 없이 주고 받는다. */
+  tags: string[];
   /** 내가 이 여행의 주인인지. 삭제처럼 OWNER 만 되는 동작을 가릴 때 쓴다. */
   isOwner?: boolean;
 }
@@ -49,6 +52,8 @@ export interface PlaceItem {
   categoryCode?: string;
   categoryLabel?: string;
   categoryOrder?: number;
+  /** 사용자가 이 핀의 분류를 직접 바꿨는지. '원래대로' 노출에 쓴다. */
+  categoryOverridden?: boolean;
   note?: string;
 }
 

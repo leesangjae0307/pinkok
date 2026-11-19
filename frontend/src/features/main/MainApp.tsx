@@ -26,6 +26,7 @@ import AddPlaceModal from './modals/AddPlaceModal';
 import QuickPinLogCameraModal from './modals/QuickPinLogCameraModal';
 import CreateTripScreen from './screens/CreateTripScreen';
 import PinLogTripPickerModal from './modals/PinLogTripPickerModal';
+import CategoryPickerModal from './modals/CategoryPickerModal';
 import DayPickerModal from './modals/DayPickerModal';
 import PlaceTimePicker from './modals/PlaceTimePicker';
 import DeleteAccountModal from './modals/DeleteAccountModal';
@@ -169,6 +170,11 @@ function GlobalModals() {
     isPinLogTripPickerOpen,
     setIsPinLogTripPickerOpen,
     assigningPlace,
+    categorizingPlace,
+    setCategorizingPlace,
+    placeCategories,
+    isPlaceCategoriesLoading,
+    handleSetPlaceCategory,
     setAssigningPlace,
     handleAssignDay,
     tripDayNumbers,
@@ -233,6 +239,16 @@ function GlobalModals() {
           dayNumbers={tripDayNumbers}
           onClose={() => setAssigningPlace(null)}
           onSelect={(day) => handleAssignDay(assigningPlace.id, day)}
+        />
+      )}
+
+      {categorizingPlace && (
+        <CategoryPickerModal
+          place={categorizingPlace}
+          categories={placeCategories}
+          isLoading={isPlaceCategoriesLoading}
+          onClose={() => setCategorizingPlace(null)}
+          onSelect={(code) => handleSetPlaceCategory(categorizingPlace.id, code)}
         />
       )}
 

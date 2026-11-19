@@ -223,6 +223,22 @@ export default function TripsListView() {
                     <Text className="text-[8px] font-bold text-slate-500">⏱️ {days}</Text>
                   </View>
 
+                  {/* 해시태그. 카드가 길어지지 않게 세 개까지만 보여 준다. */}
+                  {trip.tags.length > 0 && (
+                    <View className="mt-1.5 flex-row flex-wrap items-center gap-1">
+                      {trip.tags.slice(0, 3).map((tag) => (
+                        <View key={tag} className="rounded-full bg-[#E8FFFB] px-2 py-0.5">
+                          <Text className="text-[8px] font-bold text-teal-800">#{tag}</Text>
+                        </View>
+                      ))}
+                      {trip.tags.length > 3 && (
+                        <Text className="text-[8px] font-bold text-slate-400">
+                          +{trip.tags.length - 3}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
                   <View className="mt-1.5 flex-row items-center justify-end gap-1.5">
                     {trip.isOwner && (
                       <Pressable

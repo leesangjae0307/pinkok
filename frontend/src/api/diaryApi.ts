@@ -49,6 +49,12 @@ export interface DiaryCreatePayload {
   /** 1~5. 안 매겼으면 비운다. */
   rating?: number;
   media?: DiaryMediaPayload[];
+  /**
+   * 이 저장 시도를 가리키는 키(64자 이하). 응답을 못 받아 같은 키로 다시
+   * 보내면 409 대신 먼저 만들어진 기록이 온다. 기록 하나당 한 번 만들어
+   * 두고 재시도할 때도 같은 값을 쓴다.
+   */
+  clientRequestId?: string;
 }
 
 /** 여행 전체 기록을 동선 순서로. 팀원 것까지 모두 온다. */
@@ -63,7 +69,10 @@ export async function fetchPlaceDiaries(itineraryItemId: number): Promise<Diary[
   return data;
 }
 
-/** 같은 핀에 내 기록이 이미 있으면 409 가 온다. */
+/**
+ * 같은 핀에 내 기록이 이미 있으면 409 가 온다.
+ * 단 clientRequestId 가 같으면 그때 만든 기록을 그대로 돌려준다.
+ */
 export async function createDiary(payload: DiaryCreatePayload): Promise<Diary> {
   const { data } = await api.post<Diary>('/diaries', payload);
   return data;

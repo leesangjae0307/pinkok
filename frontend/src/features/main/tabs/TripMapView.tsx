@@ -26,6 +26,7 @@ export default function TripMapView() {
     isAddingDay,
     handleDeleteDay,
     setAssigningPlace,
+    openCategoryPicker,
     handleMovePlace,
     handleReorderPlaces,
     setEditingTimePlace,
@@ -177,6 +178,7 @@ export default function TripMapView() {
         isAddingDay={isAddingDay}
         onDeleteDay={handleDeleteDay}
         onAssignDay={setAssigningPlace}
+        onChangeCategory={openCategoryPicker}
         onMovePlace={handleMovePlace}
         onReorderPlaces={handleReorderPlaces}
         onEditTime={setEditingTimePlace}

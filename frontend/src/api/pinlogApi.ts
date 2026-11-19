@@ -74,11 +74,15 @@ export async function fetchPinlogs(tripId: number): Promise<Pinlog[]> {
 }
 
 /**
- * 내가 참여 중인 모든 여행에서 완성된(DONE) PinLog 만 최신순으로 받는다.
- * 여행 화면에서 쓰는 tripId 방식과 달리 만드는 중·실패한 것은 오지 않는다.
+ * 내가 참여 중인 모든 여행의 PinLog 를 최신순으로 받는다.
+ *
+ * 기본은 완성본(DONE)만이다. includeUnfinished 를 켜면 만드는 중(QUEUED·
+ * PROCESSING)과 실패(FAILED)한 것까지 와서, 진행 상황을 보여줄 수 있다.
  */
-export async function fetchMyPinlogs(): Promise<Pinlog[]> {
-  const { data } = await api.get<Pinlog[]>('/pinlogs', { params: { mine: true } });
+export async function fetchMyPinlogs(includeUnfinished = false): Promise<Pinlog[]> {
+  const { data } = await api.get<Pinlog[]>('/pinlogs', {
+    params: includeUnfinished ? { mine: true, status: 'ALL' } : { mine: true },
+  });
   return data;
 }
 
@@ -96,6 +100,16 @@ export async function createPinlog(payload: PinlogCreatePayload): Promise<Pinlog
 /** 만든 사람만 지울 수 있다. 합성된 영상 파일도 같이 지워진다. */
 export async function deletePinlog(pinlogId: number): Promise<void> {
   await api.delete(`/pinlogs/${pinlogId}`);
+}
+
+/**
+ * 여러 개를 한 번에 지운다(1~50개).
+ *
+ * 하나라도 남의 것이거나 없으면 아무것도 지워지지 않는다. 낱개로 여러 번
+ * 부르면 일부만 지워진 어중간한 상태가 생기는데, 그걸 막으려고 쓴다.
+ */
+export async function deletePinlogs(ids: number[]): Promise<void> {
+  await api.delete('/pinlogs', { data: { ids } });
 }
 
 /**

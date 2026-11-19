@@ -53,16 +53,18 @@ import {
   moveItineraryItemToDay,
   reorderItineraryItems,
   updateItineraryItemTime,
+  updateItineraryItemCategory,
   fetchItineraryDays,
   fetchItineraryItems,
   toPlaceItems,
 } from '../../api/itineraryApi';
 import type { ItineraryDay } from '../../api/itineraryApi';
-import type { PlaceSearchResult } from '../../api/placeApi';
+import { fetchPlaceCategories } from '../../api/placeApi';
+import type { PlaceCategory, PlaceSearchResult } from '../../api/placeApi';
 import { fetchTripStyles, replaceTripStyles } from '../../api/travelStyleApi';
 import { addDays } from '../../components/pixel/PixelCalendar';
 import {
-  deletePinlog,
+  deletePinlogs,
   fetchMyPinlogs,
   fetchPinlogs,
   pinlogThumbnailUrl,
@@ -301,6 +303,14 @@ export function avatarImageForCode(code: string | undefined | null): number | nu
   return AVATAR_IMAGE_BY_SERVER_CODE[code] ?? null;
 }
 
+/**
+ * 저장 한 번을 가리키는 키. 서버는 64자 이하만 받는다.
+ * 기기 안에서만 겹치지 않으면 되므로 시각과 난수를 붙여 만든다.
+ */
+function newRequestId(): string {
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+}
+
 function useAppState(me: Me, onLogout: () => void) {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -377,6 +387,11 @@ function useAppState(me: Me, onLogout: () => void) {
    * 중복 실행은 ref 로 즉시 막는다.
    */
   const savingPinsRef = useRef(new Set<number>());
+  /**
+   * 핀마다 "이번 기록 저장" 을 가리키는 키. 저장이 끝나면 지운다.
+   * 중간에 실패해 다시 보낼 때 같은 키를 써야 서버가 같은 기록으로 본다.
+   */
+  const diaryRequestIdsRef = useRef(new Map<number, string>());
   const [isPinLogMakerOpen, setIsPinLogMakerOpen] = useState(false);
   // 홈 빠른 촬영: 촬영 대상 여행과 열림 여부
   const [pinLogTrip, setPinLogTrip] = useState<TripFolder | null>(null);
@@ -665,17 +680,26 @@ function useAppState(me: Me, onLogout: () => void) {
   }, [activeTab, reloadMyPinlogs]);
 
   /**
-   * 선택한 PinLog 를 지운다. 다중 삭제 API 가 없어서 기존 개별 삭제(DELETE /pinlogs/{id})를
-   * 하나씩 부른다. 여행·원본 기록은 건드리지 않는다(서버가 합성 영상 파일만 같이 지운다).
-   * 서버가 성공한 것만 목록에서 빼고, 실패한 ID 를 돌려준다.
+   * 선택한 PinLog 를 지운다. 여행·원본 기록은 건드리지 않는다(서버가 합성 영상만 지운다).
+   *
+   * 서버가 한 번에 지워 주므로 낱개로 여러 번 부르지 않는다. 한 번에 50개까지라
+   * 그보다 많으면 나눠 보낸다. 묶음 안에 하나라도 지울 수 없는 게 있으면 서버가
+   * 그 묶음을 통째로 거절하므로, 그 묶음 전체를 실패로 돌려준다.
    */
   const deleteMyPinlogs = async (ids: number[]): Promise<number[]> => {
-    const results = await Promise.allSettled(ids.map((id) => deletePinlog(id)));
+    const chunks: number[][] = [];
+    for (let i = 0; i < ids.length; i += 50) {chunks.push(ids.slice(i, i + 50));}
+
     const deleted = new Set<number>();
     const failed: number[] = [];
-    results.forEach((r, i) => {
-      if (r.status === 'fulfilled') {deleted.add(ids[i]);} else {failed.push(ids[i]);}
-    });
+    for (const chunk of chunks) {
+      try {
+        await deletePinlogs(chunk);
+        chunk.forEach((id) => deleted.add(id));
+      } catch {
+        failed.push(...chunk);
+      }
+    }
     if (deleted.size > 0) {
       setMyPinlogs((cur) => cur.filter((p) => !deleted.has(p.id)));
       setVlogClips((cur) => cur.filter((c) => !deleted.has(c.id)));
@@ -743,6 +767,45 @@ function useAppState(me: Me, onLogout: () => void) {
 
   /** 어떤 핀의 시각을 고치는 중. null 이면 시간 선택기가 닫혀 있다. */
   const [editingTimePlace, setEditingTimePlace] = useState<PlaceItem | null>(null);
+
+  /** 어떤 핀의 장소 종류를 바꾸는 중. null 이면 고르는 창이 닫혀 있다. */
+  const [categorizingPlace, setCategorizingPlace] = useState<PlaceItem | null>(null);
+  const [placeCategories, setPlaceCategories] = useState<PlaceCategory[]>([]);
+  const [isPlaceCategoriesLoading, setIsPlaceCategoriesLoading] = useState(false);
+
+  /**
+   * 장소 종류 목록을 받아 둔다. 9종 고정이라 한 번만 받고 계속 쓴다.
+   * 창을 열 때 불러서, 안 쓰는 사용자에게는 요청이 가지 않게 한다.
+   */
+  const openCategoryPicker = async (place: PlaceItem) => {
+    setCategorizingPlace(place);
+    if (placeCategories.length > 0) {return;}
+    setIsPlaceCategoriesLoading(true);
+    try {
+      setPlaceCategories(await fetchPlaceCategories());
+    } catch {
+      // 목록을 못 받아도 창은 열려 있다. 되돌리기만 쓸 수 있다.
+    } finally {
+      setIsPlaceCategoriesLoading(false);
+    }
+  };
+
+  /**
+   * 핀 하나의 장소 종류를 바꾼다. code 에 null 을 넣으면 원래 분류로 되돌린다.
+   * 같은 장소를 쓰는 다른 여행의 핀은 그대로다.
+   */
+  const handleSetPlaceCategory = async (placeId: number, code: string | null) => {
+    if (!activeTrip) {return;}
+    setCategorizingPlace(null);
+    try {
+      await updateItineraryItemCategory(placeId, code);
+      await loadItinerary(activeTrip.id);
+      // 프로필 취향은 핀의 분류로 계산하므로 같이 새로 받는다.
+      reloadProfileStats();
+    } catch (e) {
+      showToast(errorMessage(e, '장소 종류를 바꾸지 못했어요.'));
+    }
+  };
 
   /**
    * 핀의 여행할 시각을 저장한다. 'HH:mm' 으로 보낸다.
@@ -1171,21 +1234,40 @@ function useAppState(me: Me, onLogout: () => void) {
   /**
    * 기록을 서버에 만든다(POST) 또는 고친다(PATCH). 자동으로 다시 보내지 않는다.
    *
-   * 앞선 시도가 서버에서는 만들어졌는데 응답만 못 받았을 수 있다. 그러면 다시 만들 때
-   * 409(이미 내 기록이 있음)가 온다. 이때 새로 만들지 않고 그 기록을 고쳐서,
-   * 같은 장소에 내 기록이 두 개 생기지 않게 한다.
+   * 앞선 시도가 서버에서는 만들어졌는데 응답만 못 받았을 수 있다. 그래서 핀마다 키를
+   * 하나 만들어 두고 다시 보낼 때도 같은 키를 쓴다. 서버는 같은 키를 보면 새로 만들지
+   * 않고 그때 만든 기록을 돌려주므로, 같은 장소에 내 기록이 두 개 생기지 않는다.
+   *
+   * 다시 보내는 경우에는 그사이 사용자가 메모를 고쳤을 수 있는데, 서버가 돌려주는 건
+   * 예전 내용이다. 그래서 재시도일 때는 받아온 기록을 지금 내용으로 한 번 더 고친다.
+   *
+   * 키가 없던 옛 서버를 만나면 전처럼 409 가 오므로, 그 처리도 남겨 둔다.
    */
   const saveDiary = async (record: PlaceRecord, media: DiaryMediaPayload[]): Promise<Diary> => {
     const payload = { content: record.memo, rating: record.rating, media };
     const existing = placeRecords.find((r) => r.pinId === record.pinId && r.userId === me.id);
     if (existing) {return updateDiary(existing.id, payload);}
+
+    const retry = diaryRequestIdsRef.current.has(record.pinId);
+    if (!retry) {
+      diaryRequestIdsRef.current.set(record.pinId, newRequestId());
+    }
+    const clientRequestId = diaryRequestIdsRef.current.get(record.pinId);
+
     try {
-      return await createDiary({ itineraryItemId: record.pinId, ...payload });
+      const saved = await createDiary({
+        itineraryItemId: record.pinId,
+        clientRequestId,
+        ...payload,
+      });
+      diaryRequestIdsRef.current.delete(record.pinId);
+      return retry ? await updateDiary(saved.id, payload) : saved;
     } catch (e) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       if (status !== 409) {throw e;}
       const mine = (await fetchPlaceDiaries(record.pinId)).find((d) => d.mine);
       if (!mine) {throw e;}
+      diaryRequestIdsRef.current.delete(record.pinId);
       return updateDiary(mine.id, payload);
     }
   };
@@ -1349,6 +1431,7 @@ function useAppState(me: Me, onLogout: () => void) {
         region: payload.location || undefined,
         startDate: payload.startDate,
         endDate: payload.endDate,
+        tags: payload.tags,
         inviteeUsernames: newTripMembers.map((m) => m.loginId),
       });
       if (payload.coverImageUrl) {
@@ -1878,6 +1961,11 @@ function useAppState(me: Me, onLogout: () => void) {
     handleReorderPlaces,
     assigningPlace, setAssigningPlace,
     editingTimePlace, setEditingTimePlace,
+    categorizingPlace, setCategorizingPlace,
+    placeCategories,
+    isPlaceCategoriesLoading,
+    openCategoryPicker,
+    handleSetPlaceCategory,
     handleSetPlaceTime,
     itineraryDays,
     isAddingDay,

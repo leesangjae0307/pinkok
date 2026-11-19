@@ -14,6 +14,7 @@ import PixelCalendar, { nightsLabel, toYmd } from '../../../components/pixel/Pix
 import { ModalBackdrop, PixelPressable } from '../../../components/pixel/Primitives';
 import { errorMessage } from '../../../api/axios';
 import { fetchTrip, updateTrip, type TripUpdatePayload } from '../../../api/tripApi';
+import TagsInput from '../components/TagsInput';
 import { fileUrl, uploadFile } from '../../../api/fileApi';
 import { TripFolder, toImageSource } from '../../../data/mockData';
 
@@ -44,6 +45,7 @@ export default function EditTripModal({
   /** 서버가 주는 상대 경로. 새로 고르면 업로드한 주소로 바뀐다. */
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +57,7 @@ export default function EditTripModal({
         if (detail.startDate) {setStartDate(detail.startDate);}
         if (detail.endDate) {setEndDate(detail.endDate);}
         setCoverImageUrl(detail.coverImageUrl ?? null);
+        setTags(detail.tags ?? []);
       })
       .catch((e) => {
         if (!cancelled) {setLoadError(errorMessage(e, '여행 정보를 불러오지 못했어요.'));}
@@ -79,6 +82,8 @@ export default function EditTripModal({
       region: region.trim(),
       startDate,
       endDate,
+      // 통째로 교체된다. 다 지웠으면 [] 로 보내야 서버에서도 지워진다.
+      tags,
     };
     // 표지를 안 건드렸으면 보내지 않는다. 보내지 않은 필드는 서버가 그대로 둔다.
     if (coverImageUrl) {payload.coverImageUrl = coverImageUrl;}
@@ -141,7 +146,7 @@ export default function EditTripModal({
         <View className="flex-row items-center justify-between border-b-2 border-pixel-navy bg-white px-4 py-3">
           <View className="flex-1 pr-2">
             <Text className="font-pixel text-[11px] text-[#075953]">여행 수정</Text>
-            <Text className="mt-2 text-[11px] font-bold text-slate-500">사진 · 제목 · 지역 · 날짜를 바꿀 수 있어요.</Text>
+            <Text className="mt-2 text-[11px] font-bold text-slate-500">사진 · 제목 · 지역 · 해시태그 · 날짜를 바꿀 수 있어요.</Text>
           </View>
           <Pressable
             onPress={onClose}
@@ -218,6 +223,8 @@ export default function EditTripModal({
                 className={`mt-1.5 h-11 rounded-xl border-2 bg-white px-3 py-0 text-sm font-bold text-slate-900 ${inputBorder('region')}`}
               />
             </View>
+
+            <TagsInput tags={tags} onChange={setTags} />
 
             <View>
               <Text className="text-[11px] font-black text-slate-700">여행 날짜</Text>

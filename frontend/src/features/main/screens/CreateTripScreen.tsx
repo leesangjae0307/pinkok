@@ -1,7 +1,7 @@
 /**
  * 새 여행 만들기 (웹 CreateTripScreen.tsx 이관)
  *
- * 표지 · 제목 · 지역 · 대표 이모지 · 날짜 · 팀원 · 테마 태그를 받아 onCreate 로 넘긴다.
+ * 표지 · 제목 · 지역 · 해시태그 · 대표 이모지 · 날짜 · 팀원 · 테마 태그를 받아 onCreate 로 넘긴다.
  * 웹과 다른 점
  * - 날짜: <input type="date"> 대신 PixelCalendar 모달
  * - 표지: 📷 촬영 / 🖼️ 갤러리가 실제 카메라·사진첩을 연다 (react-native-image-picker)
@@ -21,6 +21,7 @@ import PixelCalendar, { addDays, nightsLabel, toYmd } from '../../../components/
 import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { LinearGradient, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
 import { AvatarSource, isImageAvatar, toImageSource } from '../../../data/mockData';
+import TagsInput from '../components/TagsInput';
 
 export interface InvitedTripMember {
   nickname: string;
@@ -41,6 +42,8 @@ export interface NewTripPayload {
   coverImageUrl?: string;
   /** 서버 travel_styles 코드. GET /travel-styles 의 code 목록이다. */
   styleCodes: string[];
+  /** 해시태그. # 없이 담는다. */
+  tags: string[];
 }
 
 const BASE_EMOJIS = ['🌴', '🌊', '🗼', '✈️', '🍜', '☕', '🌲', '📷'];
@@ -85,6 +88,7 @@ export default function CreateTripScreen({
   const insets = useSafeAreaInsets();
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [emoji, setEmoji] = useState(BASE_EMOJIS[0]);
   const [customEmoji, setCustomEmoji] = useState('');
   const [emojis, setEmojis] = useState(BASE_EMOJIS);
@@ -170,6 +174,7 @@ export default function CreateTripScreen({
       coverImage,
       coverImageUrl: coverTab === 'upload' ? coverImageUrl : undefined,
       styleCodes: selectedStyleCodes,
+      tags,
     });
 
   const inputBorder = (key: typeof focused) => (focused === key ? 'border-[#56EADD]' : 'border-slate-200');
@@ -332,6 +337,8 @@ export default function CreateTripScreen({
               />
             </View>
           </View>
+
+          <TagsInput tags={tags} onChange={setTags} />
 
           <View>
             <Text className="text-xs font-black text-slate-700">대표 픽셀 이모지</Text>

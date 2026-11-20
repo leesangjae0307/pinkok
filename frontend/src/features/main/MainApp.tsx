@@ -167,6 +167,7 @@ function GlobalModals() {
     selectedProfileAvatar,
     setIsPinLogMakerOpen,
     isPinLogMakerOpen,
+    reloadMyPinlogs,
     isPinLogTripPickerOpen,
     setIsPinLogTripPickerOpen,
     assigningPlace,
@@ -287,7 +288,12 @@ function GlobalModals() {
           currentUserId={me.id}
           tripTitle={pinLogTrip.title}
           tripId={pinLogTrip.id}
-          onClose={() => setIsPinLogMakerOpen(false)}
+          onClose={() => {
+            setIsPinLogMakerOpen(false);
+            // 방금 만들기를 걸었을 수 있다. 목록을 다시 받아야 핀로그 탭에
+            // "만드는 중" 으로 뜬다. 안 그러면 탭을 다시 열기 전까지 안 보인다.
+            reloadMyPinlogs();
+          }}
           onSynthesizeComplete={handleSynthesizeComplete}
         />
       )}

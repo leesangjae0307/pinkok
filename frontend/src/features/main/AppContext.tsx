@@ -661,12 +661,17 @@ function useAppState(me: Me, onLogout: () => void) {
     [],
   );
 
-  /** GET /pinlogs?mine=true. 새로고침 중에도 이전 목록은 그대로 보여준다. */
+  /**
+   * GET /pinlogs?mine=true&status=ALL. 새로고침 중에도 이전 목록은 그대로 보여준다.
+   *
+   * 만드는 중이거나 실패한 것까지 받는다. 완성본만 받으면 합성을 걸어 둔 PinLog 가
+   * 목록에서 사라져, 사용자는 만들기를 누른 게 먹혔는지 알 수 없었다.
+   */
   const reloadMyPinlogs = useCallback(async () => {
     setIsMyPinlogsLoading(true);
     setMyPinlogsError(null);
     try {
-      setMyPinlogs(await fetchMyPinlogs());
+      setMyPinlogs(await fetchMyPinlogs(true));
     } catch (e) {
       setMyPinlogsError(errorMessage(e, 'PinLog 를 불러오지 못했어요.'));
     } finally {

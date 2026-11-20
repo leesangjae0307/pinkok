@@ -86,6 +86,16 @@ export async function fetchMyPinlogs(includeUnfinished = false): Promise<Pinlog[
   return data;
 }
 
+/** 아직 만드는 중이라 재생할 수 없다. */
+export function isPinlogPending(pinlog: Pinlog): boolean {
+  return pinlog.status === 'QUEUED' || pinlog.status === 'PROCESSING';
+}
+
+/** 합성이 끝내 실패했다. 다시 시도하거나 지울 수 있다. */
+export function isPinlogFailed(pinlog: Pinlog): boolean {
+  return pinlog.status === 'FAILED';
+}
+
 export async function fetchPinlog(pinlogId: number): Promise<Pinlog> {
   const { data } = await api.get<Pinlog>(`/pinlogs/${pinlogId}`);
   return data;

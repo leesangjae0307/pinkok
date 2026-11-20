@@ -1,14 +1,22 @@
 /**
  * 핀로그 탭: 여행별 폴더 → 그 여행의 핀로그 목록.
  *
- * 데이터는 GET /pinlogs?mine=true(내가 참여한 모든 여행의 완성된 PinLog)를 여행(tripId)별로
- * 묶은 것이다. 폴더 안에서 "선택"을 누르면 장소 추출처럼 여러 개를 골라 지울 수 있다.
+ * 데이터는 GET /pinlogs?mine=true&status=ALL(내가 참여한 모든 여행의 PinLog)를 여행(tripId)별로
+ * 묶은 것이다. 만드는 중이거나 실패한 것도 함께 와서, 카드가 상태를 대신 보여 준다.
+ * 폴더 안에서 "선택"을 누르면 장소 추출처럼 여러 개를 골라 지울 수 있다.
  * 삭제는 내가 만든 PinLog 만 되고(서버 규칙), 여행과 원본 기록은 지워지지 않는다.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
 
-import { pinlogThumbnailUrl, pinlogVideoUrl, type Pinlog } from '../../../api/pinlogApi';
+import {
+  isPinlogFailed,
+  isPinlogPending,
+  pinlogThumbnailUrl,
+  pinlogVideoUrl,
+  retryPinlog,
+  type Pinlog,
+} from '../../../api/pinlogApi';
 import { PixelBackArrow, PixelPinLogIcon } from '../../../components/pixel/PixelIcons';
 import { FadeIn, PixelPressable } from '../../../components/pixel/Primitives';
 import { TripFolder, VlogClip, toImageSource } from '../../../data/mockData';
@@ -18,11 +26,17 @@ function ClipCard({
   clip,
   onPress,
   selection,
+  progress,
 }: {
   clip: VlogClip;
   onPress: () => void;
   /** 선택 모드일 때만 준다. disabled 는 내가 만든 게 아니라 지울 수 없는 것 */
   selection?: { checked: boolean; disabled: boolean };
+  /**
+   * 아직 완성되지 않은 PinLog 일 때만 준다. 완성본이면 없다.
+   * failed 면 reason 에 서버가 알려준 이유가, onRetry 에 다시 시도가 들어 있다.
+   */
+  progress?: { failed: boolean; reason: string | null; onRetry?: () => void };
 }) {
   return (
     <PixelPressable
@@ -38,12 +52,41 @@ function ClipCard({
         <Text className="font-pixel text-[8px] text-[#FFC837]">{clip.time}</Text>
       </View>
       <View className="relative aspect-video overflow-hidden rounded-lg border-2 border-slate-600 bg-black">
-        <Image source={{ uri: clip.thumbnail }} resizeMode="cover" className="h-full w-full" />
-        <View className="absolute inset-0 items-center justify-center bg-black/20">
-          <View className="h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-black/55">
-            <Text className="text-sm text-white">▶</Text>
+        {clip.thumbnail ? (
+          <Image source={{ uri: clip.thumbnail }} resizeMode="cover" className="h-full w-full" />
+        ) : null}
+
+        {/* 완성본만 재생할 수 있다. 나머지는 지금 어떤 상태인지 대신 보여 준다. */}
+        {!progress ? (
+          <View className="absolute inset-0 items-center justify-center bg-black/20">
+            <View className="h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-black/55">
+              <Text className="text-sm text-white">▶</Text>
+            </View>
           </View>
-        </View>
+        ) : progress.failed ? (
+          <View className="absolute inset-0 items-center justify-center gap-2 bg-black/70 px-4">
+            <Text className="text-center text-xs font-black text-rose-300">만들지 못했어요</Text>
+            {progress.reason ? (
+              <Text numberOfLines={2} className="text-center text-[10px] text-slate-300">
+                {progress.reason}
+              </Text>
+            ) : null}
+            {progress.onRetry ? (
+              <Pressable
+                onPress={progress.onRetry}
+                accessibilityLabel="PinLog 다시 만들기"
+                className="rounded-lg border-2 border-white bg-black/60 px-3 py-1 active:opacity-70"
+              >
+                <Text className="text-[11px] font-black text-white">다시 시도</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <View className="absolute inset-0 items-center justify-center gap-2 bg-black/70">
+            <ActivityIndicator color="#56EADD" />
+            <Text className="text-[11px] font-black text-[#56EADD]">만드는 중…</Text>
+          </View>
+        )}
         {selection && (
           <View
             className={`absolute right-2 top-2 h-7 w-7 items-center justify-center rounded-md border-2 ${
@@ -196,6 +239,29 @@ export default function PinLogTab() {
   const toggle = (id: number) =>
     setSelectedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
 
+  /**
+   * 만드는 중인 게 있으면 주기적으로 목록을 다시 받는다.
+   *
+   * 서버가 완성을 알려주지 않으므로 앱이 물어보는 수밖에 없다. 다 끝나면 조건이
+   * 거짓이 되어 타이머가 걷힌다. 탭을 떠나면 이 화면이 사라지면서 같이 걷힌다.
+   */
+  const hasPending = myPinlogs.some(isPinlogPending);
+  useEffect(() => {
+    if (!hasPending) {return;}
+    const timer = setInterval(() => { reloadMyPinlogs(); }, 5000);
+    return () => clearInterval(timer);
+  }, [hasPending, reloadMyPinlogs]);
+
+  /** 실패한 PinLog 를 서버에 다시 걸어 둔다. 성공하면 다시 "만드는 중"이 된다. */
+  const retry = async (pinlogId: number) => {
+    try {
+      await retryPinlog(pinlogId);
+      await reloadMyPinlogs();
+    } catch {
+      showToast('다시 시도하지 못했어요. 잠시 후 다시 해주세요.');
+    }
+  };
+
   const confirmDelete = () => {
     if (selectedIds.length === 0 || isDeleting) {return;}
     Alert.alert(
@@ -321,6 +387,8 @@ export default function PinLogTab() {
           <View className="gap-3">
             {pinlogs.map((p) => {
               const clip = toClip(p);
+              const pending = isPinlogPending(p);
+              const failed = isPinlogFailed(p);
               return (
                 <ClipCard
                   key={p.id}
@@ -328,13 +396,27 @@ export default function PinLogTab() {
                   selection={
                     selectMode ? { checked: selectedIds.includes(p.id), disabled: !p.mine } : undefined
                   }
+                  progress={
+                    pending || failed
+                      ? {
+                          failed,
+                          reason: p.errorMessage,
+                          // 선택 모드에서는 카드가 고르는 용도라 버튼을 숨긴다.
+                          onRetry: failed && p.mine && !selectMode ? () => retry(p.id) : undefined,
+                        }
+                      : undefined
+                  }
                   onPress={() => {
-                    if (!selectMode) {
+                    if (selectMode) {
+                      if (p.mine) {
+                        toggle(p.id);
+                      } else {
+                        showToast('내가 만든 PinLog 만 삭제할 수 있어요.');
+                      }
+                    } else if (pending) {
+                      showToast('아직 만드는 중이에요. 다 되면 바로 보여드릴게요.');
+                    } else if (!failed) {
                       setActiveClipModal(clip);
-                    } else if (p.mine) {
-                      toggle(p.id);
-                    } else {
-                      showToast('내가 만든 PinLog 만 삭제할 수 있어요.');
                     }
                   }}
                 />

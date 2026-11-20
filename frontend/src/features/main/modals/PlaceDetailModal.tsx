@@ -44,6 +44,37 @@ interface PlaceDetailModalProps {
   startInEdit?: boolean;
 }
 
+/** 썸네일이 가질 수 있는 가로세로 비. 파노라마나 아주 긴 세로 사진에서 멈춘다. */
+const THUMB_MIN_RATIO = 0.6;
+const THUMB_MAX_RATIO = 2.2;
+
+/**
+ * 사진 비율을 지키는 썸네일.
+ *
+ * 정사각형 칸에 넣고 가운데를 잘라내면 가로로 찍은 사진은 양옆이 날아가
+ * 무엇을 찍었는지 알아볼 수 없다. 그래서 높이만 고정하고 너비는 사진 비율을
+ * 따라가게 둔다. 가로 스크롤 목록이라 사진마다 너비가 달라도 괜찮다.
+ *
+ * 비율은 사진을 읽어야 알 수 있으므로, 알기 전까지는 정사각형으로 둔다.
+ */
+function RatioThumb({ uri, height }: { uri: string; height: number }) {
+  const [ratio, setRatio] = useState(1);
+
+  return (
+    <Image
+      source={{ uri }}
+      resizeMode="cover"
+      onLoad={(e) => {
+        const { width, height: h } = e.nativeEvent.source;
+        if (width > 0 && h > 0) {
+          setRatio(Math.min(Math.max(width / h, THUMB_MIN_RATIO), THUMB_MAX_RATIO));
+        }
+      }}
+      style={{ height, width: Math.round(height * ratio) }}
+    />
+  );
+}
+
 export default function PlaceDetailModal({
   place,
   records,
@@ -369,14 +400,13 @@ export default function PlaceDetailModal({
                     ) : (
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
                         {photos.map((url, idx) => (
-                          <View key={`${url}-${idx}`} className="relative h-16 w-16 overflow-hidden rounded-xl border border-slate-200">
+                          <View key={`${url}-${idx}`} className="relative overflow-hidden rounded-xl border border-slate-200">
                             {/* 붙이기 전에도 눌러서 크게 볼 수 있다. ✕ 는 위에 떠 있어 따로 눌린다. */}
                             <Pressable
                               onPress={() => setViewerPhotos({ photos, index: idx })}
                               accessibilityLabel={`붙인 사진 ${idx + 1} 크게 보기`}
-                              className="h-full w-full"
                             >
-                              <Image source={{ uri: url }} resizeMode="cover" className="h-full w-full" />
+                              <RatioThumb uri={url} height={64} />
                             </Pressable>
                             <Pressable
                               onPress={() => setPhotos((prev) => prev.filter((_, i) => i !== idx))}
@@ -550,12 +580,9 @@ export default function PlaceDetailModal({
                                 key={`${img}-${i}`}
                                 onPress={() => setViewerPhotos({ photos: record.photos ?? [], index: i })}
                                 accessibilityLabel={`${record.authorName} 사진 ${i + 1} 크게 보기`}
+                                className="overflow-hidden rounded-xl border border-slate-200"
                               >
-                                <Image
-                                  source={{ uri: img }}
-                                  resizeMode="cover"
-                                  className="h-20 w-20 rounded-xl border border-slate-200"
-                                />
+                                <RatioThumb uri={img} height={80} />
                               </Pressable>
                             ))}
                           </ScrollView>

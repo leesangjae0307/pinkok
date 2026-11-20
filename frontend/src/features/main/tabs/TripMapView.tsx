@@ -121,7 +121,7 @@ export default function TripMapView() {
               </Text>
               <View className="rounded border border-[#50E6DC] bg-[#56EADD] px-1.5 py-0.5">
                 <Text className="font-pixel text-[9px] text-slate-900">
-                  {selectedDayFilter === 'all' ? '전체' : `${selectedDayFilter}D`}
+                  {selectedDayFilter === 'all' ? '전체' : `${selectedDayFilter}day`}
                 </Text>
               </View>
             </View>

@@ -95,7 +95,8 @@ export default function DeleteAccountModal({
       >
         <View className="flex-row items-center justify-between border-b-2 border-pixel-navy bg-white px-4 py-3">
           <View className="flex-1 pr-2">
-            <Text className="font-pixel text-[11px] text-rose-600">회원 탈퇴</Text>
+            {/* 무엇을 하려는 창인지 한눈에 들어오도록 제목만 키운다. */}
+            <Text className="font-pixel text-base text-rose-600">회원 탈퇴</Text>
             <Text className="mt-2 text-[11px] font-bold text-slate-500">되돌릴 수 없어요.</Text>
           </View>
           <Pressable

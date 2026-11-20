@@ -22,6 +22,7 @@ import {
   pinlogVideoUrl,
   type Pinlog,
 } from '../../../api/pinlogApi';
+import { serverDateLabel } from '../../../api/serverTime';
 import { GalleryPermissionError, savePinlogToGallery } from '../../../services/saveToGallery';
 
 interface PinLogSynthesisModalProps {
@@ -562,7 +563,7 @@ export default function PinLogSynthesisModal({
                               {pinlog.title ?? 'PinLog'}
                             </Text>
                             <Text className="mt-0.5 text-[9px] text-slate-500">
-                              {pinlog.createdAt.slice(0, 10).replace(/-/g, '.')}
+                              {serverDateLabel(pinlog.createdAt)}
                               {pinlog.durationMs ? ` · ${(pinlog.durationMs / 1000).toFixed(1)}초` : ''}
                             </Text>
                           </View>

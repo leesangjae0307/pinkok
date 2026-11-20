@@ -3,6 +3,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -29,6 +30,8 @@ interface PlaceDetailModalProps {
   onSaveRecord: (record: PlaceRecord) => void;
   onDeleteRecord: (recordId: number) => void;
   onOpenPinLogMaker: () => void;
+  /** 기록만 서버에서 다시 받는다. */
+  onReload: () => void | Promise<void>;
   currentUserAvatarUrl: AvatarSource;
   /** 로그인한 사용자. 내 기록인지 가릴 때 쓴다. */
   currentUserId: number;
@@ -82,6 +85,7 @@ export default function PlaceDetailModal({
   onSaveRecord,
   onDeleteRecord,
   onOpenPinLogMaker,
+  onReload,
   currentUserAvatarUrl,
   currentUserId,
   currentUserName,
@@ -103,6 +107,9 @@ export default function PlaceDetailModal({
   /** 크게 보고 있는 사진. 어느 기록의 몇 번째인지 함께 들고 있는다. */
   const [viewerPhotos, setViewerPhotos] = useState<{ photos: string[]; index: number } | null>(null);
   const [memoFocused, setMemoFocused] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
+  /** 제약 규칙 안내를 펼쳐 둘지. 처음에는 지금까지처럼 펼쳐 둔다. */
+  const [isRuleOpen, setIsRuleOpen] = useState(true);
 
   // 촬영
   const [isCameraActive, setIsCameraActive] = useState(startInCamera);
@@ -249,6 +256,24 @@ export default function PlaceDetailModal({
               </Text>
             </View>
 
+            {/* 팀원이 올린 기록이 늦게 보일 때 이것만 다시 받는다. */}
+            <Pressable
+              onPress={() => {
+                if (isReloading) {return;}
+                setIsReloading(true);
+                Promise.resolve(onReload()).finally(() => setIsReloading(false));
+              }}
+              disabled={isReloading}
+              accessibilityLabel="기록 새로고침"
+              className="mr-1.5 h-8 w-8 items-center justify-center rounded-lg border-2 border-pixel-navy bg-slate-100 active:translate-y-0.5 active:bg-slate-200"
+            >
+              {isReloading ? (
+                <ActivityIndicator size="small" color="#075953" />
+              ) : (
+                <Text className="text-[11px] font-black text-pixel-navy">↻</Text>
+              )}
+            </Pressable>
+
             <Pressable
               onPress={onOpenPinLogMaker}
               accessibilityLabel="팀원 영상으로 PinLog 합성"
@@ -267,15 +292,13 @@ export default function PlaceDetailModal({
                 <View className="self-start rounded-md bg-[#B4FAF0] px-2 py-0.5">
                   <Text className="text-[10px] font-bold text-teal-800">{place.category}</Text>
                 </View>
-                <Text numberOfLines={1} className="mt-0.5 text-sm font-black text-slate-800">
-                  {place.name}
-                </Text>
-                <Text numberOfLines={1} className="text-[10px] text-slate-500">
+                {/* 어디 기록인지가 가장 중요하므로 이름은 줄여 쓰지 않고 다 보여 준다. */}
+                <Text className="mt-0.5 text-sm font-black text-slate-800">{place.name}</Text>
+                <Text numberOfLines={2} className="text-[10px] text-slate-500">
                   {place.address}
                 </Text>
                 <View className="mt-1 flex-row items-center gap-2">
                   <Text className="font-pixel text-[9px] text-amber-500">★ {place.rating}</Text>
-                  <Text className="text-[10px] font-bold text-slate-400">·</Text>
                   <View className="rounded bg-teal-50 px-1.5">
                     <Text className="text-[10px] font-bold text-teal-900">팀 기록 {placeRecords.length}개</Text>
                   </View>
@@ -283,14 +306,24 @@ export default function PlaceDetailModal({
               </View>
             </View>
 
-            {/* 1인 1기록 규칙 안내 */}
+            {/* 1인 1기록 규칙 안내. 한 번 읽으면 되는 내용이라 접어 둘 수 있다. */}
             <View className="rounded-2xl border-2 border-pixel-navy bg-white p-3 shadow-md">
-              <View className="flex-row items-start gap-2">
+              <Pressable
+                onPress={() => setIsRuleOpen((v) => !v)}
+                accessibilityLabel={`제약 규칙 ${isRuleOpen ? '접기' : '펼치기'}`}
+                className="flex-row items-start gap-2 active:opacity-60"
+              >
                 <View className="rounded-lg bg-amber-100 p-1">
                   <Text className="text-base">⚖️</Text>
                 </View>
-                <View className="flex-1 gap-0.5">
-                  <Text className="text-xs font-black text-teal-900">1인 1기록 제약 규칙 (1 User = 1 Record)</Text>
+                <Text className="flex-1 text-xs font-black text-teal-900">
+                  1인 1기록 제약 규칙 (1 User = 1 Record)
+                </Text>
+                <Text className="font-pixel text-[10px] text-teal-900">{isRuleOpen ? '▾' : '▸'}</Text>
+              </Pressable>
+
+              {isRuleOpen ? (
+                <View className="mt-1 gap-0.5 pl-9">
                   <Text className="text-[11px] leading-4 text-slate-600">
                     [같은 핀 + 같은 유저] 당 <Text className="font-bold">오직 1개의 기록</Text>만 허용됩니다. 작성 후에는
                     자동으로 <Text className="font-bold">[수정]</Text> 모드로 전환됩니다.
@@ -303,7 +336,7 @@ export default function PlaceDetailModal({
                     <Text className="text-[10px] font-bold text-teal-800">🎥 최대 2s 영상 1개</Text>
                   </View>
                 </View>
-              </View>
+              ) : null}
             </View>
 
             {/* 내 기록 영역 */}

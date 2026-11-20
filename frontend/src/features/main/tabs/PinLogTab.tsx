@@ -17,6 +17,7 @@ import {
   retryPinlog,
   type Pinlog,
 } from '../../../api/pinlogApi';
+import { serverDateLabel } from '../../../api/serverTime';
 import { PixelBackArrow, PixelPinLogIcon } from '../../../components/pixel/PixelIcons';
 import { FadeIn, PixelPressable } from '../../../components/pixel/Primitives';
 import { TripFolder, VlogClip, toImageSource } from '../../../data/mockData';
@@ -120,7 +121,7 @@ function ClipCard({
 function toClip(p: Pinlog): VlogClip {
   return {
     id: p.id,
-    time: p.createdAt.slice(0, 10).replace(/-/g, '.'),
+    time: serverDateLabel(p.createdAt),
     location: p.title ?? 'PinLog',
     thumbnail: pinlogThumbnailUrl(p) ?? pinlogVideoUrl(p) ?? '',
     videoUrl: pinlogVideoUrl(p) ?? undefined,

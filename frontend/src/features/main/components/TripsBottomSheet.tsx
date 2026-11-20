@@ -57,6 +57,13 @@ function animateNextSheetChange() {
   }
 }
 
+/**
+ * 시트를 가장 크게 올렸을 때의 높이(화면 대비 %).
+ *
+ * 지도 위쪽의 여행 제목과 장소+ · 팀원+ · PinLog 버튼은 가리지 않아야 해서,
+ * 그 줄 바로 아래까지만 올라간다.
+ */
+const MAX_SHEET = 86;
 /** 카드 사이 간격(contentContainerStyle 의 gap) */
 const CARD_GAP = 8;
 /** 끌기가 시작되기까지 누르고 있어야 하는 시간 */
@@ -163,15 +170,15 @@ export default function TripsBottomSheet({
         onPanResponderMove: (_, g) => {
           const base = containerRef.current || 800;
           const deltaPercent = (-g.dy / base) * 100; // 위로 끌면 +
-          const next = Math.min(85, Math.max(22, startHeightRef.current + deltaPercent));
+          const next = Math.min(MAX_SHEET, Math.max(22, startHeightRef.current + deltaPercent));
           onChangeRef.current(next);
         },
         onPanResponderRelease: () => {
-          // 가까운 단계로 스냅: 접힘(25%) / 중간(50%) / 최대(78%)
+          // 가까운 단계로 스냅: 접힘(25%) / 중간(50%) / 최대(MAX_SHEET)
           const h = heightRef.current;
           animateNextSheetChange();
           if (h < 36) {onChangeRef.current(25);}
-          else if (h > 62) {onChangeRef.current(78);}
+          else if (h > 62) {onChangeRef.current(MAX_SHEET);}
           else {onChangeRef.current(50);}
         },
         onPanResponderTerminationRequest: () => false,
@@ -197,6 +204,14 @@ export default function TripsBottomSheet({
     });
     return [...map.values()].sort((a, b) => a.order - b.order);
   }, [places]);
+
+  /**
+   * 접어 둔 종류. 기본은 모두 펼쳐진 상태라 접은 것만 기억한다.
+   * 새로 생긴 종류가 저절로 접혀 있지 않게 하려는 것이다.
+   */
+  const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
+  const toggleCategory = (code: string) =>
+    setCollapsedCategories((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]));
 
   // ---- 길게 눌러 끌어서 순서 바꾸기 (같은 일자 안) ----
   const placesRef = useRef(places);
@@ -265,6 +280,9 @@ export default function TripsBottomSheet({
       drag.current.timer = setTimeout(() => {
         if (drag.current.id !== id) {return;}
         drag.current.active = true;
+        // 이 순간의 스크롤을 기준으로 삼는다. 이후 흐른 만큼이 카드 이동에 더해진다.
+        scrollAtDragStart.current = scrollY.current;
+        lastDy.current = 0;
         suppressPress.current = true;
         lift.setValue(0);
         Animated.spring(lift, { toValue: 1, useNativeDriver: true, friction: 7 }).start();
@@ -295,6 +313,94 @@ export default function TripsBottomSheet({
     },
   });
 
+  /* ---- 끌고 가다 목록 끝에 닿으면 목록도 같이 흐르게 한다 ----
+   *
+   * 끄는 동안에는 목록 스크롤을 꺼 두기 때문에(손가락 하나로 둘 다 할 수는 없다)
+   * 화면 밖으로는 옮길 수 없었다. 그래서 손가락이 위아래 가장자리에 닿아 있으면
+   * 앱이 대신 조금씩 스크롤해 준다.
+   *
+   * 스크롤이 움직이면 카드도 그만큼 따라가야 손가락 아래에 그대로 머문다. 그래서
+   * 자리 계산에는 손가락이 움직인 거리(g.dy)에 그동안 흐른 스크롤을 더해서 쓴다.
+   */
+  const listRef = useRef<ScrollView>(null);
+  const listHeight = useRef(0);
+  const scrollY = useRef(0);
+  const maxScrollY = useRef(0);
+  /** 끌기를 시작한 순간의 스크롤 위치 */
+  const scrollAtDragStart = useRef(0);
+  const autoScroll = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** 가장자리에서 자동 스크롤이 시작되는 거리와 한 번에 흐르는 양 */
+  const EDGE = 72;
+  const STEP = 14;
+
+  const stopAutoScroll = () => {
+    if (autoScroll.current) {
+      clearInterval(autoScroll.current);
+      autoScroll.current = null;
+    }
+  };
+
+  /** 마지막으로 본 손가락 위치. 자동 스크롤 중에는 손이 멈춰 있어도 자리를 다시 계산해야 한다. */
+  const lastMoveY = useRef(0);
+  const lastDy = useRef(0);
+  /** 목록의 화면상 위쪽 끝. 가장자리 판단에 쓴다. */
+  const listTop = useRef(0);
+
+  /** 손가락이 움직인 거리에 그동안 흐른 스크롤을 더해 카드 위치와 들어갈 자리를 정한다. */
+  const applyDrag = () => {
+    const d = drag.current;
+    if (!d.active) {return;}
+    const offset = lastDy.current + (scrollY.current - scrollAtDragStart.current);
+    dragY.setValue(offset);
+    const list = placesRef.current;
+    let over = d.from;
+    let acc = 0;
+    if (offset > 0) {
+      for (let i = d.from + 1; i < list.length; i++) {
+        const h = (cardHeights.current[list[i].id] ?? 0) + CARD_GAP;
+        if (offset > acc + h / 2) {over = i; acc += h;} else {break;}
+      }
+    } else {
+      for (let i = d.from - 1; i >= 0; i--) {
+        const h = (cardHeights.current[list[i].id] ?? 0) + CARD_GAP;
+        if (-offset > acc + h / 2) {over = i; acc += h;} else {break;}
+      }
+    }
+    if (over !== d.over) {
+      d.over = over;
+      settleShifts(list, d.from, over);
+    }
+  };
+
+  /** 손가락이 위아래 가장자리에 있으면 목록을 조금씩 흘린다. 벗어나면 멈춘다. */
+  const startOrStopAutoScroll = (moveY: number) => {
+    const top = listTop.current;
+    const bottom = top + listHeight.current;
+    const up = moveY < top + EDGE;
+    const down = moveY > bottom - EDGE;
+    if (!up && !down) {
+      stopAutoScroll();
+      return;
+    }
+    if (autoScroll.current) {return;}
+    autoScroll.current = setInterval(() => {
+      if (!drag.current.active) {
+        stopAutoScroll();
+        return;
+      }
+      const goingUp = lastMoveY.current < listTop.current + EDGE;
+      const next = goingUp ? scrollY.current - STEP : scrollY.current + STEP;
+      const clamped = Math.max(0, Math.min(maxScrollY.current, next));
+      if (clamped === scrollY.current) {
+        stopAutoScroll();
+        return;
+      }
+      scrollY.current = clamped;
+      listRef.current?.scrollTo({ y: clamped, animated: false });
+      applyDrag();
+    }, 16);
+  };
+
   const grips = useRef<Record<number, ReturnType<typeof PanResponder.create>>>({});
   const gripFor = (id: number) => {
     if (grips.current[id]) {return grips.current[id];}
@@ -306,28 +412,13 @@ export default function TripsBottomSheet({
       onPanResponderMove: (_, g) => {
         const d = drag.current;
         if (!d.active) {return;}
-        dragY.setValue(g.dy);
-        const list = placesRef.current;
-        let over = d.from;
-        let acc = 0;
-        if (g.dy > 0) {
-          for (let i = d.from + 1; i < list.length; i++) {
-            const h = (cardHeights.current[list[i].id] ?? 0) + CARD_GAP;
-            if (g.dy > acc + h / 2) {over = i; acc += h;} else {break;}
-          }
-        } else {
-          for (let i = d.from - 1; i >= 0; i--) {
-            const h = (cardHeights.current[list[i].id] ?? 0) + CARD_GAP;
-            if (-g.dy > acc + h / 2) {over = i; acc += h;} else {break;}
-          }
-        }
-        if (over !== d.over) {
-          d.over = over;
-          settleShifts(list, d.from, over);
-        }
+        lastMoveY.current = g.moveY;
+        lastDy.current = g.dy;
+        applyDrag();
+        startOrStopAutoScroll(g.moveY);
       },
-      onPanResponderRelease: () => endDrag(true),
-      onPanResponderTerminate: () => endDrag(false),
+      onPanResponderRelease: () => { stopAutoScroll(); endDrag(true); },
+      onPanResponderTerminate: () => { stopAutoScroll(); endDrag(false); },
     });
     return grips.current[id];
   };
@@ -432,7 +523,6 @@ export default function TripsBottomSheet({
 
                       <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
                         <Text className="font-pixel text-[9px] text-amber-500">★ {place.rating}</Text>
-                        <Text className="text-[10px] text-slate-300">·</Text>
                         {/* 날짜를 안 정한 핀은 day 가 0 이라 "0day" 로 보이면 안 된다. */}
                         <Pressable
                           onPress={() => onAssignDay(place)}
@@ -583,8 +673,16 @@ export default function TripsBottomSheet({
               }`}
             >
               <Text className={`font-pixel text-[10px] ${selectedDay === d ? 'text-pixel-navy' : 'text-slate-600'}`}>{d}day</Text>
+              {/* 눌러서 지우는 버튼. 전에는 그림일 뿐이라 눌러도 일자가 골라지기만 했다. */}
               {selectedDay === d && (
-                <Text className="text-[10px] font-black text-pixel-navy/50">✕</Text>
+                <Pressable
+                  onPress={() => onDeleteDay(d)}
+                  accessibilityLabel={`${d}일차 삭제`}
+                  hitSlop={8}
+                  className="active:opacity-50"
+                >
+                  <Text className="text-[10px] font-black text-pixel-navy/50">✕</Text>
+                </Pressable>
               )}
             </Pressable>
           ))}
@@ -604,23 +702,24 @@ export default function TripsBottomSheet({
           </Pressable>
         </ScrollView>
 
-        <View className="flex-row items-center gap-1 pl-2">
+        {/* 왼쪽 일자 칩 목록에 밀려 글자가 잘리지 않도록 줄어들지 않게 둔다. */}
+        <View className="shrink-0 flex-row items-center gap-1 pl-2">
           <Pressable
             onPress={onOptimizeRoute}
             disabled={isOptimizingRoute}
             // 조건부 className 으로 스타일 구조(opacity 유무)를 바꾸면 NativeWind 가
             // 그 렌더를 날려버린다. 흐리게 하는 건 style 로 준다.
             style={{ opacity: isOptimizingRoute ? 0.6 : 1 }}
-            className="h-8 items-center justify-center rounded-lg border-2 border-pixel-navy bg-[#56EADD] px-2"
+            className="h-8 shrink-0 items-center justify-center rounded-lg border-2 border-pixel-navy bg-[#56EADD] px-2.5"
           >
-            <Text className="text-[9px] font-black text-pixel-navy">
+            <Text numberOfLines={1} className="text-[9px] font-black text-pixel-navy">
               {isOptimizingRoute ? '최적화 중...' : '🪄 AI 동선 최적화'}
             </Text>
           </Pressable>
           <Pressable
             onPress={() => {
               animateNextSheetChange();
-              onHeightChange(sheetHeightPercent > 50 ? 25 : 78);
+              onHeightChange(sheetHeightPercent > 50 ? 25 : MAX_SHEET);
             }}
             accessibilityLabel="높이 전환"
             className="h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 active:bg-slate-100"
@@ -632,8 +731,24 @@ export default function TripsBottomSheet({
 
       {/* 3. 장소 타임라인 */}
       <ScrollView
+        ref={listRef}
         className="flex-1"
         scrollEnabled={draggingId === null}
+        onLayout={(e) => {
+          listHeight.current = e.nativeEvent.layout.height;
+          // 가장자리 판단은 화면 기준 좌표(g.moveY)와 견주므로 화면에서의 위치를 재둔다.
+          e.currentTarget?.measureInWindow?.((_x, y) => {
+            listTop.current = y;
+          });
+        }}
+        onScroll={(e) => {
+          scrollY.current = e.nativeEvent.contentOffset.y;
+          maxScrollY.current = Math.max(
+            0,
+            e.nativeEvent.contentSize.height - e.nativeEvent.layoutMeasurement.height,
+          );
+        }}
+        scrollEventThrottle={16}
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: CARD_GAP }}
         showsVerticalScrollIndicator={false}
       >
@@ -654,17 +769,26 @@ export default function TripsBottomSheet({
           </View>
         ) : (
           selectedDay === 'all'
-            ? categoryGroups.map((group) => (
-                <View key={group.code} className="gap-2">
-                  <View className="flex-row items-center gap-1.5 px-1 pt-1">
-                    <Text className="text-xs font-black text-[#075953]">{group.label}</Text>
-                    <View className="rounded-full bg-[#B4FAF0] px-1.5 py-0.5">
-                      <Text className="font-pixel text-[9px] text-[#075953]">{group.places.length}곳</Text>
-                    </View>
+            ? categoryGroups.map((group) => {
+                const isOpen = !collapsedCategories.includes(group.code);
+                return (
+                  <View key={group.code} className="gap-2">
+                    {/* 제목을 누르면 그 종류의 장소가 접혔다 펴진다. */}
+                    <Pressable
+                      onPress={() => toggleCategory(group.code)}
+                      accessibilityLabel={`${group.label} ${isOpen ? '접기' : '펼치기'}`}
+                      className="flex-row items-center gap-1.5 px-1 pt-1 active:opacity-60"
+                    >
+                      <Text className="text-xs font-black text-[#075953]">{group.label}</Text>
+                      <View className="rounded-full bg-[#B4FAF0] px-1.5 py-0.5">
+                        <Text className="font-pixel text-[9px] text-[#075953]">{group.places.length}곳</Text>
+                      </View>
+                      <Text className="font-pixel text-[9px] text-[#075953]">{isOpen ? '▾' : '▸'}</Text>
+                    </Pressable>
+                    {isOpen ? group.places.map(renderPlace) : null}
                   </View>
-                  {group.places.map(renderPlace)}
-                </View>
-              ))
+                );
+              })
             : places.map(renderPlace)
         )}
       </ScrollView>

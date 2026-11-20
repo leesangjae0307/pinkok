@@ -3,7 +3,7 @@
  * 상단 토스트 · 화면 영역(알림/설정/5개 탭) · 하단 5탭 네비 · 각종 모달
  */
 import React, { useState } from 'react';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Me } from '../../api/authApi';
@@ -70,6 +70,7 @@ function ScreenBody() {
     reloadNotifications,
     reloadProfileStats,
     reloadMyPinlogs,
+    resetExtract,
   } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
   /**
@@ -79,6 +80,15 @@ function ScreenBody() {
    */
   const refreshers: Partial<Record<string, () => Promise<unknown>>> = {
     notification: () => reloadNotifications(),
+    // 추출 결과는 서버에서 다시 받아올 수 있는 목록이 아니라 이번에 돌린 결과다.
+    // 그래서 새로 시작할지 먼저 물어보고, 그렇다고 할 때만 화면을 비운다.
+    extract: () =>
+      new Promise<void>((resolve) => {
+        Alert.alert('새로운 추출을 진행하시겠습니까?', '지금 화면의 링크와 결과가 지워져요.', [
+          { text: '아니오', style: 'cancel', onPress: () => resolve() },
+          { text: '예', onPress: () => { resetExtract(); resolve(); } },
+        ]);
+      }),
     home: () => Promise.all([reloadTrips(), reloadInvitations()]),
     trips: () => Promise.all([reloadTrips(), reloadInvitations()]),
     pinlog: () => Promise.all([reloadMyPinlogs(), reloadTrips()]),
@@ -117,7 +127,7 @@ function ScreenBody() {
   }
 
   const key = isNotificationOpen ? 'notification' : isSettingsOpen ? 'settings' : activeTab;
-  const canRefresh = !isSettingsOpen && (isNotificationOpen || activeTab !== 'extract');
+  const canRefresh = !isSettingsOpen;
 
   return (
     <ScrollView
@@ -164,6 +174,7 @@ function GlobalModals() {
     recordDrafts,
     handleSavePlaceRecord,
     handleDeletePlaceRecord,
+    reloadPlaceRecords,
     selectedProfileAvatar,
     setIsPinLogMakerOpen,
     isPinLogMakerOpen,
@@ -224,6 +235,7 @@ function GlobalModals() {
           draft={recordDrafts[selectedMapPin.id]?.record}
           onSaveRecord={handleSavePlaceRecord}
           onDeleteRecord={handleDeletePlaceRecord}
+          onReload={reloadPlaceRecords}
           currentUserAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
           currentUserId={me.id}
           currentUserName={me.nickname}
@@ -339,6 +351,8 @@ function GlobalModals() {
         <TeamInviteModal
           tripTitle="새 여행"
           currentAvatarUrl={profileAvatarSource(selectedProfileAvatar)}
+          // 이게 없으면 목록에 내가 "나" 로만 떴다.
+          currentNickname={me.nickname}
           onClose={() => setIsCreateTripInviteOpen(false)}
           onInvite={(nickname, loginId, avatar) => addNewTripMember({ nickname, loginId, avatar })}
         />

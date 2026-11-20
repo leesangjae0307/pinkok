@@ -13,6 +13,7 @@ import avatarMapPhone from '../../assets/images/avatar-map-phone.png';
 import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 import { Me, fetchAvatars, logout } from '../../api/authApi';
+import { serverDateLabel } from '../../api/serverTime';
 import { deleteAccount, selectAvatar, updateNickname, updateProfileImage } from '../../api/userApi';
 import { fileUrl, uploadEach, uploadFile, uploadFiles, type PickedFile } from '../../api/fileApi';
 import {
@@ -599,7 +600,7 @@ function useAppState(me: Me, onLogout: () => void) {
           .filter((p) => p.status === 'DONE')
           .map((p) => ({
             id: p.id,
-            time: p.createdAt.slice(0, 10).replace(/-/g, '.'),
+            time: serverDateLabel(p.createdAt),
             location: p.title ?? 'PinLog',
             thumbnail: pinlogThumbnailUrl(p) ?? pinlogVideoUrl(p) ?? '',
             videoUrl: pinlogVideoUrl(p) ?? undefined,
@@ -1000,6 +1001,24 @@ function useAppState(me: Me, onLogout: () => void) {
         },
       ],
     );
+  };
+
+  /**
+   * 장소 기록만 다시 받는다.
+   *
+   * 기록 화면은 모달이라 당겨서 새로고침이 닿지 않는다. 팀원이 올린 기록이
+   * 늦게 보일 때 헤더의 새로고침으로 이것만 다시 받는다. 지도와 일정은
+   * 건드리지 않는다.
+   */
+  const reloadPlaceRecords = async () => {
+    const tripId = activeTrip?.id;
+    if (tripId === undefined) {return;}
+    try {
+      const diaries = await fetchTripDiaries(tripId);
+      setPlaceRecords(diaries.map(toPlaceRecord));
+    } catch (e) {
+      showToast(errorMessage(e, '기록을 다시 불러오지 못했어요.'));
+    }
   };
 
   /** 여행의 일자와 핀을 받아 지도·바텀시트에 올린다. */
@@ -1532,6 +1551,23 @@ function useAppState(me: Me, onLogout: () => void) {
     return true;
   };
 
+  /**
+   * 추출 화면을 처음 상태로 되돌린다.
+   *
+   * 추출 결과는 서버에서 다시 받아올 수 있는 목록이 아니라 이번에 돌린 결과라서,
+   * 당겨서 새로고침해도 "다시 받을" 것이 없다. 그래서 새로 시작할지 물어보고,
+   * 그렇다고 하면 넣었던 링크·사진과 결과를 비운다.
+   */
+  const resetExtract = () => {
+    setInputUrl('');
+    setExtractedPlaces([]);
+    setSelectedExtractedPlaceIds([]);
+    setExtractError(null);
+    setLastAiRequestId(null);
+    setExtractImages([]);
+    setExtractImageNames([]);
+  };
+
   const handleExtractSubmit = async () => {
     if (isExtracting) {return;}
     if (!inputUrl.trim() && extractImages.length === 0) {return;}
@@ -2014,6 +2050,7 @@ function useAppState(me: Me, onLogout: () => void) {
     startPlaceCamera, setStartPlaceCamera,
     startPlaceEdit, setStartPlaceEdit,
     placeRecords,
+    reloadPlaceRecords,
     recordDrafts,
     savingRecords,
     isPinLogMakerOpen, setIsPinLogMakerOpen,
@@ -2071,6 +2108,7 @@ function useAppState(me: Me, onLogout: () => void) {
     handleQuickPinLogUpload,
     handleSynthesizeComplete,
     handleExtractSubmit,
+    resetExtract,
     handleToggleExtractedPlace,
     handleToggleAllExtractedPlaces,
     handleCreateTripAndAdd,

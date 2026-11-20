@@ -1,4 +1,5 @@
 import api from './axios';
+import { parseServerTime, serverDateLabel } from './serverTime';
 
 export interface NotificationResponse {
   id: number;
@@ -33,7 +34,7 @@ export async function markAllNotificationsRead(): Promise<void> {
 
 /** '방금 전' / '2시간 전' / '어제' / '3일 전'. 그보다 오래되면 날짜로 보여준다. */
 export function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
+  const then = parseServerTime(iso);
   if (Number.isNaN(then)) {return '';}
   const minutes = Math.floor((Date.now() - then) / 60000);
   if (minutes < 1) {return '방금 전';}
@@ -43,5 +44,5 @@ export function relativeTime(iso: string): string {
   const days = Math.floor(hours / 24);
   if (days === 1) {return '어제';}
   if (days < 7) {return `${days}일 전`;}
-  return iso.slice(0, 10).replace(/-/g, '.');
+  return serverDateLabel(iso);
 }

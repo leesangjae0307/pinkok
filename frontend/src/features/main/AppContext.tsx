@@ -1891,7 +1891,6 @@ function useAppState(me: Me, onLogout: () => void) {
    * 모달(RN Modal)은 저마다 onRequestClose 로 뒤로가기를 직접 받으므로 여기 없다.
    * 여기서 다루는 건 탭 위를 덮는 보통 화면들이다.
    */
-  const lastBackPressRef = useRef(0);
   useEffect(() => {
     const onBack = () => {
       if (isCreateTripOpen) {
@@ -1918,14 +1917,13 @@ function useAppState(me: Me, onLogout: () => void) {
         setActiveTab('home');
         return true;
       }
-      // 최상위 화면: 2초 안에 한 번 더 누르면 종료, 아니면 토스트만 띄운다.
-      const now = Date.now();
-      if (now - lastBackPressRef.current < 2000) {
-        BackHandler.exitApp();
-        return true;
-      }
-      lastBackPressRef.current = now;
-      showToast('앱을 종료하려면 뒤로가기 버튼을 한 번 더 눌러주세요.');
+      // 최상위 화면: 더 걷어낼 게 없으니 정말 끌 건지 물어본다.
+      // 이 창이 떠 있는 동안 뒤로가기는 안드로이드가 창을 닫는 데 쓰므로,
+      // 여러 번 눌러도 창이 겹치지 않는다.
+      Alert.alert('앱을 종료할까요?', '', [
+        { text: '취소', style: 'cancel' },
+        { text: '종료', style: 'destructive', onPress: () => BackHandler.exitApp() },
+      ]);
       return true;
     };
 

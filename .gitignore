@@ -19,6 +19,9 @@ backend/spring/postman/
 frontend/node_modules/
 frontend/dist/
 
+# 저장소 맨 위에서 npm 을 실행하면 생기는 것들. 앱과는 상관이 없다.
+/node_modules/
+
 ############################
 # Logs
 ############################

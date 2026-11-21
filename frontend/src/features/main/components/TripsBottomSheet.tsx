@@ -323,9 +323,16 @@ export default function TripsBottomSheet({
    * 자리 계산에는 손가락이 움직인 거리(g.dy)에 그동안 흐른 스크롤을 더해서 쓴다.
    */
   const listRef = useRef<ScrollView>(null);
+  /** 목록을 감싼 상자. 화면에서의 위치를 재는 데 쓴다. */
+  const listBoxRef = useRef<View>(null);
   const listHeight = useRef(0);
+  const contentHeight = useRef(0);
   const scrollY = useRef(0);
   const maxScrollY = useRef(0);
+  /** 더 내려갈 수 있는 거리. 이 값이 0이면 자동 스크롤은 바로 멈춘다. */
+  const recomputeMaxScroll = () => {
+    maxScrollY.current = Math.max(0, contentHeight.current - listHeight.current);
+  };
   /** 끌기를 시작한 순간의 스크롤 위치 */
   const scrollAtDragStart = useRef(0);
   const autoScroll = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -729,24 +736,35 @@ export default function TripsBottomSheet({
         </View>
       </View>
 
-      {/* 3. 장소 타임라인 */}
+      {/* 3. 장소 타임라인.
+          가장자리 판단은 화면 기준 좌표(g.moveY)와 견주므로, 목록이 화면 어디에
+          있는지 감싼 View 로 재둔다. ScrollView 자체는 이 측정을 내주지 않는다. */}
+      <View
+        ref={listBoxRef}
+        className="flex-1"
+        onLayout={() => {
+          listBoxRef.current?.measureInWindow((_x, y, _w, h) => {
+            listTop.current = y;
+            listHeight.current = h;
+            recomputeMaxScroll();
+          });
+        }}
+      >
       <ScrollView
         ref={listRef}
         className="flex-1"
         scrollEnabled={draggingId === null}
-        onLayout={(e) => {
-          listHeight.current = e.nativeEvent.layout.height;
-          // 가장자리 판단은 화면 기준 좌표(g.moveY)와 견주므로 화면에서의 위치를 재둔다.
-          e.currentTarget?.measureInWindow?.((_x, y) => {
-            listTop.current = y;
-          });
+        // 내용 높이는 여기서 정해진다. 손으로 한 번도 스크롤하지 않아도 알 수 있어야
+        // 끌 때 자동 스크롤이 움직인다.
+        onContentSizeChange={(_w, h) => {
+          contentHeight.current = h;
+          recomputeMaxScroll();
         }}
         onScroll={(e) => {
           scrollY.current = e.nativeEvent.contentOffset.y;
-          maxScrollY.current = Math.max(
-            0,
-            e.nativeEvent.contentSize.height - e.nativeEvent.layoutMeasurement.height,
-          );
+          contentHeight.current = e.nativeEvent.contentSize.height;
+          listHeight.current = e.nativeEvent.layoutMeasurement.height;
+          recomputeMaxScroll();
         }}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: CARD_GAP }}
@@ -792,6 +810,7 @@ export default function TripsBottomSheet({
             : places.map(renderPlace)
         )}
       </ScrollView>
+      </View>
     </View>
   );
 }

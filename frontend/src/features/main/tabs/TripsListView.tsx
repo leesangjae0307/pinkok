@@ -48,6 +48,9 @@ export default function TripsListView() {
     setRecommendationStyle,
     recommendationRegion,
     setRecommendationRegion,
+    isRecommending,
+    recommendationError,
+    hasRequestedRecommendation,
     handleAiTripRecommendation,
     recommendations,
     handleAcceptRecommendation,
@@ -335,23 +338,67 @@ export default function TripsListView() {
               onChange={setRecommendationStyle}
               options={TRAVEL_STYLES.map((s) => ({ value: s.code, label: s.label }))}
             />
-            <PixelSelect
-              className="flex-1"
-              accessibilityLabel="여행 지역"
-              value={recommendationRegion}
-              onChange={setRecommendationRegion}
-              options={['제주', '부산', '서울', '강릉'].map((v) => ({ value: v, label: v }))}
-            />
           </View>
+
+          {/* 지역은 고른 목록에 매이지 않게 직접 적는다. "부산 해운대" 처럼 세세하게도 적을 수 있다. */}
+          <TextInput
+            value={recommendationRegion}
+            onChangeText={setRecommendationRegion}
+            placeholder="여행할 지역을 입력해 주세요"
+            placeholderTextColor="#5D9C96"
+            returnKeyType="done"
+            onSubmitEditing={handleAiTripRecommendation}
+            accessibilityLabel="여행 지역"
+            className="mt-2 h-10 rounded-xl border-2 border-[#075953] bg-white px-3 text-xs font-bold text-slate-900"
+          />
+
           <Pressable
             onPress={handleAiTripRecommendation}
-            className="mt-3 h-10 w-full items-center justify-center rounded-xl border-2 border-pixel-navy bg-slate-900 active:translate-y-0.5"
+            disabled={isRecommending}
+            // 못 누르는 상태를 className 으로 바꾸면 NativeWind 가 그 렌더를 날려버린다.
+            style={{ opacity: isRecommending ? 0.6 : 1 }}
+            className="mt-3 h-10 w-full flex-row items-center justify-center gap-2 rounded-xl border-2 border-pixel-navy bg-slate-900 active:translate-y-0.5"
           >
-            <Text className="text-xs font-black text-[#56EADD]">AI 추천 장소 추출하기</Text>
+            {isRecommending ? <ActivityIndicator size="small" color="#56EADD" /> : null}
+            <Text className="text-xs font-black text-[#56EADD]">
+              {isRecommending ? 'AI 가 장소를 고르는 중…' : 'AI 추천 장소 추출하기'}
+            </Text>
           </Pressable>
 
+          {/* 돌아가는 중 */}
+          {isRecommending ? (
+            <View className="mt-3 items-center gap-2 rounded-2xl border-2 border-dashed border-[#075953] bg-white/70 p-5">
+              <ActivityIndicator color="#075953" />
+              <Text className="text-[10px] font-bold text-[#075953]">
+                취향에 맞는 장소를 찾고 있어요. 잠시만요.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* 실패. 다시 누르면 그대로 재시도된다. */}
+          {!isRecommending && recommendationError ? (
+            <View className="mt-3 gap-2 rounded-2xl border-2 border-rose-300 bg-white p-4">
+              <Text className="text-[11px] font-bold leading-4 text-rose-700">{recommendationError}</Text>
+              <Pressable
+                onPress={handleAiTripRecommendation}
+                className="self-start rounded-lg border-2 border-[#075953] bg-[#56EADD] px-3 py-1.5 active:scale-95"
+              >
+                <Text className="text-[10px] font-black text-[#075953]">다시 시도</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {/* 돌렸는데 건질 게 없었던 경우. 처음 화면과 구분한다. */}
+          {!isRecommending && !recommendationError && hasRequestedRecommendation && recommendations.length === 0 ? (
+            <View className="mt-3 rounded-2xl border-2 border-dashed border-[#075953] bg-white/70 p-5">
+              <Text className="text-center text-[10px] font-bold text-[#075953]">
+                추천할 만한 장소를 찾지 못했어요. 지역이나 취향을 바꿔 다시 해보세요.
+              </Text>
+            </View>
+          ) : null}
+
           {/* 추천 결과. 수락하면 지금 보고 있는 여행의 일정에 핀으로 들어간다. */}
-          {recommendations.length > 0 && (
+          {!isRecommending && recommendations.length > 0 && (
             <View className="mt-3 gap-2">
               {recommendations.map((rec) => (
                 <View key={rec.id} className="rounded-2xl border-2 border-[#075953] bg-white p-3">

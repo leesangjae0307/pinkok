@@ -26,6 +26,28 @@ export interface RecommendationCreatePayload {
   styleCodes?: string[];
   /** 1~10, 비우면 5 */
   count?: number;
+  /**
+   * 사용자가 직접 적은 여행 지역("부산 해운대", "전주 한옥마을").
+   *
+   * 아직 서버 명세에 없는 자리다. 스프링은 모르는 필드를 기본으로 버리므로
+   * 보내도 탈이 없고, 서버가 받기 시작하면 그대로 쓰인다. 지금은 추천 결과가
+   * 이 지역을 따르지 않는다.
+   */
+  region?: string;
+}
+
+/**
+ * 화면의 인원 수를 서버의 동행 유형으로 옮긴다.
+ *
+ * 서버에는 사람 수를 받는 자리가 없고 동행 유형(SOLO/COUPLE/FAMILY/FRIEND)만
+ * 있다. 그래서 1명은 혼자, 2명은 커플, 그보다 많으면 우정여행으로 본다.
+ * 가족 여행은 이 화면에서 고를 수 없다.
+ */
+export function companionTypeOf(people: string): string {
+  const n = Number(people);
+  if (n <= 1) {return 'SOLO';}
+  if (n === 2) {return 'COUPLE';}
+  return 'FRIEND';
 }
 
 /**

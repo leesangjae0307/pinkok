@@ -85,6 +85,7 @@ import {
 } from '../../api/aiRequestApi';
 import {
   acceptRecommendation,
+  companionTypeOf,
   createRecommendation,
   fetchRecommendations,
   rejectRecommendation,
@@ -328,7 +329,18 @@ function useAppState(me: Me, onLogout: () => void) {
   const [tripSearchQuery, setTripSearchQuery] = useState('');
   const [recommendationPeople, setRecommendationPeople] = useState('2');
   const [recommendationStyle, setRecommendationStyle] = useState<string>(TRAVEL_STYLES[0].code);
-  const [recommendationRegion, setRecommendationRegion] = useState('제주');
+  /** 직접 입력하는 여행 지역. 고정 목록에 매이지 않는다. */
+  const [recommendationRegion, setRecommendationRegion] = useState('');
+  /**
+   * 추천은 추출 탭과 상태를 따로 쓴다.
+   *
+   * 전에는 추출 탭의 isExtracting·extractError 를 같이 썼고, 그래서 추천을 걸면
+   * 추출 탭으로 넘어가야 진행 상황이 보였다. 이제 여행 탭 안에서만 돈다.
+   */
+  const [isRecommending, setIsRecommending] = useState(false);
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  /** 한 번이라도 추천을 돌렸는지. 처음 화면과 "결과 없음"을 가르는 데 쓴다. */
+  const [hasRequestedRecommendation, setHasRequestedRecommendation] = useState(false);
   const [inviteTrip, setInviteTrip] = useState<TripFolder | null>(null);
   /** 수정 모달을 띄울 여행. null 이면 닫혀 있다. */
   const [editingTrip, setEditingTrip] = useState<TripFolder | null>(null);
@@ -1862,41 +1874,52 @@ function useAppState(me: Me, onLogout: () => void) {
    * 추천은 AI 요청과 같은 파이프라인이라 상태를 똑같이 폴링한다. 다만 결과는
    * place-candidates 가 아니라 /recommendations 에서 읽는다.
    */
+  /**
+   * 여행 탭의 AI 추천. 탭을 옮기지 않고 여기서 요청·대기·결과까지 끝낸다.
+   *
+   * 인원은 서버의 동행 유형(companionType)으로 옮겨 보낸다. 서버에는 사람 수를
+   * 받는 자리가 없고 동행 유형만 있어서, 1명은 혼자, 2명은 커플, 그보다 많으면
+   * 우정여행으로 본다.
+   */
   const handleAiTripRecommendation = async () => {
-    if (isExtracting) {return;}
-    const trip = activeTrip ?? trips[0];
-    if (!trip) {
-      showToast('먼저 여행을 만들어 주세요.');
+    if (isRecommending) {return;}
+    const region = recommendationRegion.trim();
+    if (!region) {
+      setRecommendationError('여행할 지역을 입력해 주세요.');
       return;
     }
-    setIsExtracting(true);
-    setExtractError(null);
-    setActiveTab('extract');
-    setInputUrl(
-      `${recommendationPeople}명 · ${recommendationRegion} · ${travelStyleLabel(recommendationStyle)} 여행 추천`,
-    );
+    const trip = activeTrip ?? trips[0];
+    if (!trip) {
+      setRecommendationError('먼저 여행을 만들어 주세요.');
+      return;
+    }
+    setIsRecommending(true);
+    setRecommendationError(null);
+    setHasRequestedRecommendation(true);
+    setRecommendations([]);
     try {
       const request = await createRecommendation({
         tripId: trip.id,
         styleCodes: [recommendationStyle],
+        companionType: companionTypeOf(recommendationPeople),
+        region,
       });
       const finished = await waitForAiRequest(request.id);
       if (finished.status !== 'SUCCESS') {
         // 추천에는 다시 시도 API 가 없다. 실패하면 처음부터 새로 요청해야 한다.
-        setExtractError(
+        setRecommendationError(
           finished.status === 'FAILED'
-            ? `${aiErrorMessage(finished.errorCode)} (추천은 다시 요청해 주세요)`
+            ? `${aiErrorMessage(finished.errorCode)} 다시 요청해 주세요.`
             : '추천이 너무 오래 걸려 멈췄어요. 다시 요청해 주세요.',
         );
         return;
       }
       const list = await fetchRecommendations(trip.id);
-      const suggested = list.filter((r) => r.status === 'SUGGESTED');
-      setRecommendations(suggested);
+      setRecommendations(list.filter((r) => r.status === 'SUGGESTED'));
     } catch (e) {
-      showToast(errorMessage(e, '추천을 받지 못했어요.'));
+      setRecommendationError(errorMessage(e, '추천을 받지 못했어요.'));
     } finally {
-      setIsExtracting(false);
+      setIsRecommending(false);
     }
   };
 
@@ -1906,6 +1929,9 @@ function useAppState(me: Me, onLogout: () => void) {
       await acceptRecommendation(recommendationId);
       setRecommendations((cur) => cur.filter((r) => r.id !== recommendationId));
       if (activeTrip) {loadItinerary(activeTrip.id);}
+      // 여행 탭에서 바로 넣었을 때도 위 카드의 "장소 N개" 가 따라 오르도록.
+      // 알림창 대신 이것이 들어갔다는 표시가 된다.
+      reloadTrips();
     } catch (e) {
       showToast(errorMessage(e, '추천 장소를 추가하지 못했어요.'));
     }
@@ -2023,6 +2049,9 @@ function useAppState(me: Me, onLogout: () => void) {
     recommendationPeople, setRecommendationPeople,
     recommendationStyle, setRecommendationStyle,
     recommendationRegion, setRecommendationRegion,
+    isRecommending,
+    recommendationError,
+    hasRequestedRecommendation,
     inviteTrip, setInviteTrip,
     isCreateTripOpen, setIsCreateTripOpen,
     isCreateTripInviteOpen, setIsCreateTripInviteOpen,

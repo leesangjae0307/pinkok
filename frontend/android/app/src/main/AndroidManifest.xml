@@ -22,6 +22,20 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <!--
+      아래 둘은 우리가 적은 적이 없는데도 "필수" 로 딸려 들어가, Play 가 설치
+      가능한 기기를 좁힌다고 막았다.
+
+      portrait 는 액티비티를 세로로 고정(screenOrientation="portrait")하면
+      생긴다. 세로로만 쓰는 앱이 맞지만, 그렇다고 세로 고정을 못 하는 기기에
+      아예 설치가 안 될 이유는 없다.
+
+      wifi 는 라이브러리가 넣는 ACCESS_WIFI_STATE 권한에서 따라온다. 우리가
+      와이파이를 직접 다루지 않으므로 없어도 그만이다.
+    -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
+
+    <!--
       enableOnBackInvokedCallback 은 꺼 둔다.
       안드로이드 16(API 36) 부터는 targetSdk 가 36 이면 예측형 뒤로가기가 기본으로
       켜진다. 그러면 시스템이 뒤로가기를 직접 처리해서 Activity 의 onBackPressed 가

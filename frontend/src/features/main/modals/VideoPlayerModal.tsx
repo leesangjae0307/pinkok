@@ -4,6 +4,8 @@
  * 외부 앱으로 넘기지 않고 react-native-video 로 바로 튼다. 재생·일시정지·이동 막대는
  * 플레이어 기본 컨트롤을 쓴다. 불러오는 동안은 로딩을, 실패하면 다시 시도를 보여준다.
  * 기기를 눕히면 가로로 돌아가고, 영상은 비율을 지킨 채 잘리지 않는다(contain).
+ * 제목·닫기 줄은 영상 위에 겹쳐 띄운다. 줄이 자리를 차지하면 특히 가로에서 영상이
+ * 그만큼 작아져 화면이 비어 보이기 때문이다.
  */
 import React, { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, Text, View } from 'react-native';
@@ -40,8 +42,12 @@ export default function VideoPlayerModal({
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View className="flex-1 bg-black">
           <View
-            className="flex-row items-center justify-between px-4 py-3"
-            style={{ paddingTop: insets.top + 12 }}
+            className="absolute left-0 right-0 top-0 z-10 flex-row items-center justify-between py-3"
+            style={{
+              paddingTop: insets.top + 12,
+              paddingLeft: insets.left + 16,
+              paddingRight: insets.right + 16,
+            }}
           >
             <Text numberOfLines={1} className="mr-3 min-w-0 flex-1 font-pixel text-[10px] text-white/70">
               {title ?? '영상'}

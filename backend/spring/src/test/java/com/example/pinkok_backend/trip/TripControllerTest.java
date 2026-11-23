@@ -1,5 +1,10 @@
 package com.example.pinkok_backend.trip;
 
+import com.example.pinkok_backend.entity.TripMember;
+import com.example.pinkok_backend.entity.User;
+import com.example.pinkok_backend.repository.TripMemberRepository;
+import com.example.pinkok_backend.repository.TripRepository;
+import com.example.pinkok_backend.repository.UserRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,6 +16,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -87,6 +94,76 @@ class TripControllerTest {
         mockMvc.perform(get("/trips").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    @Autowired
+    TripRepository tripRepository;
+    @Autowired
+    UserRepository userRepository;
+    @Autowired
+    TripMemberRepository tripMemberRepository;
+
+    @Test
+    @DisplayName("여행 목록 - 함께 가는 팀원(members, memberCount)이 같이 온다")
+    void list_includesMembers() throws Exception {
+        String ownerToken = signupAndLogin("mowner@pinkok.com", "mowneruser");
+        String friendToken = signupAndLogin("mfriend@pinkok.com", "mfrienduser");
+        Long tripId = createTrip(ownerToken, "같이 가는 여행");
+
+        // 혼자일 때는 나 한 명
+        mockMvc.perform(get("/trips").header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].memberCount").value(1))
+                .andExpect(jsonPath("$[0].members.length()").value(1))
+                .andExpect(jsonPath("$[0].members[0].role").value("OWNER"))
+                .andExpect(jsonPath("$[0].members[0].me").value(true))
+                .andExpect(jsonPath("$[0].members[0].nickname").value("닉네임"));
+
+        // 친구가 팀원이 되면 두 명 (초대 수락과 같은 결과를 직접 만든다)
+        User friend = userRepository.findByEmail("mfriend@pinkok.com").orElseThrow();
+        TripMember member = new TripMember();
+        member.setId(new TripMember.TripMemberId());
+        member.getId().setTripId(tripId);
+        member.getId().setUserId(friend.getId());
+        member.setTrip(tripRepository.getReferenceById(tripId));
+        member.setUser(friend);
+        member.setRole("MEMBER");
+        member.setJoinedAt(LocalDateTime.now());
+        tripMemberRepository.save(member);
+
+        mockMvc.perform(get("/trips").header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].memberCount").value(2))
+                .andExpect(jsonPath("$[0].members.length()").value(2))
+                .andExpect(jsonPath("$[0].members[?(@.role=='OWNER')].me").value(true))
+                .andExpect(jsonPath("$[0].members[?(@.role=='MEMBER')].me").value(false))
+                // 다른 팀원에게 이메일 같은 개인정보는 내려가지 않는다
+                .andExpect(jsonPath("$[0].members[0].email").doesNotExist());
+
+        // 친구가 보면 "나"는 친구 쪽이다
+        mockMvc.perform(get("/trips").header("Authorization", "Bearer " + friendToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].members[?(@.role=='MEMBER')].me").value(true));
+    }
+
+    @Test
+    @DisplayName("여행 상세·생성 응답에도 팀원이 들어 있다")
+    void getAndCreate_includeMembers() throws Exception {
+        String token = signupAndLogin("mdetail@pinkok.com", "mdetailuser");
+
+        mockMvc.perform(post("/trips")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"혼자 여행\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.memberCount").value(1))
+                .andExpect(jsonPath("$.members[0].me").value(true));
+
+        Long tripId = createTrip(token, "상세 확인");
+        mockMvc.perform(get("/trips/" + tripId).header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.memberCount").value(1))
+                .andExpect(jsonPath("$.members[0].role").value("OWNER"));
     }
 
     @Test

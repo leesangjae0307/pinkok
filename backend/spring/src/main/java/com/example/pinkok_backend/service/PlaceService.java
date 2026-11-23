@@ -17,8 +17,11 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class PlaceService {
@@ -61,7 +64,45 @@ public class PlaceService {
         }
 
         boolean hasMore = response.getMeta() != null && !response.getMeta().isEnd();
+
+        // 키워드 검색은 도로명 주소를 해석하지 못한다 (장소 이름에 우연히 섞여 있을 때만 걸린다).
+        // 그래서 결과가 있어도 첫 페이지에는 주소 검색 결과를 뒤에 붙인다 - 키워드 결과가 위, 주소 결과가 아래.
+        // 다음 페이지는 키워드 결과만 이어지고, 주소 결과는 한 번만 붙는다.
+        if (safePage == 1) {
+            places = appendAddressResults(places, keyword, safeSize);
+        }
         return new PlaceSearchPageResponse(places, hasMore);
+    }
+
+    /** 키워드 결과 뒤에 주소 검색 결과를 붙인다. 이미 키워드 결과에 있는 주소는 건너뛴다. */
+    private List<PlaceSearchResponse> appendAddressResults(List<PlaceSearchResponse> places, String keyword, int size) {
+        List<PlaceSearchResponse> addressHits = searchAddress(keyword, 1, size).getPlaces();
+        if (addressHits.isEmpty()) {
+            return places;
+        }
+        Set<String> knownAddresses = new HashSet<>();
+        for (PlaceSearchResponse place : places) {
+            addAddressKey(knownAddresses, place.getRoadAddress());
+            addAddressKey(knownAddresses, place.getLotAddress());
+        }
+        List<PlaceSearchResponse> merged = new ArrayList<>(places);
+        for (PlaceSearchResponse hit : addressHits) {
+            boolean duplicate = isKnown(knownAddresses, hit.getRoadAddress()) || isKnown(knownAddresses, hit.getLotAddress());
+            if (!duplicate) {
+                merged.add(hit);
+            }
+        }
+        return merged;
+    }
+
+    private static void addAddressKey(Set<String> keys, String address) {
+        if (StringUtils.hasText(address)) {
+            keys.add(address.replaceAll("\\s+", ""));
+        }
+    }
+
+    private static boolean isKnown(Set<String> keys, String address) {
+        return StringUtils.hasText(address) && keys.contains(address.replaceAll("\\s+", ""));
     }
 
     /** 주소 검색 결과(type=ADDRESS). 주소 검색이 실패해도 원래 검색은 성공했으니 빈 목록으로 돌려준다. */

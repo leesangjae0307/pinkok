@@ -108,9 +108,9 @@ export default function HomeTab() {
           <View className="flex-1">
             <Text className="font-pixel text-[9px] text-[#075953]">QUICK AI EXTRACT</Text>
             <Text className="mt-1 text-sm font-black text-slate-900">링크 한 번으로 여행 장소 찾기</Text>
-            {/* 인스타그램은 링크로 읽지 못한다. 캡처를 올리는 길을 알려 준다. */}
-            <Text className="mt-1 text-[10px] font-semibold text-[#075953]">
-              유튜브는 링크로, 인스타그램은 캡처로 분석해요.
+            {/* 인스타그램은 링크로 읽지 못한다. 한 줄 문장은 눈에 안 들어와 두 줄로 나눈다. */}
+            <Text className="mt-1 text-[10px] font-black text-[#075953]">
+              유튜브는 링크, 인스타그램은 캡처!
             </Text>
           </View>
           <PixelExtractIcon size={48} active />
@@ -140,11 +140,21 @@ export default function HomeTab() {
         <View className="h-10 w-10 items-center justify-center rounded-xl bg-[#56EADD]/30">
           <Text className="text-lg">💡</Text>
         </View>
-        <View className="flex-1">
+        <View className="flex-1 gap-1.5">
           <Text className="font-pixel text-[9px] text-[#075953]">PINKOK AI TIP</Text>
-          <Text className="mt-1 text-xs leading-snug text-slate-700">
-            유튜브는 링크를 복사해 추출 탭에 붙여넣고, 인스타그램은 게시물 화면을 캡처해 사진으로 올려주세요!
-          </Text>
+          {/* 한 문장에 두 플랫폼을 다 담으면 읽히지 않는다. 플랫폼마다 한 줄씩 끊는다. */}
+          <View className="flex-row items-center gap-2">
+            <View className="w-[62px] items-center rounded-md bg-[#56EADD]/35 px-1 py-0.5">
+              <Text className="text-[10px] font-black text-[#075953]">▶ 유튜브</Text>
+            </View>
+            <Text className="flex-1 text-[11px] font-semibold text-slate-700">링크 복사 → 붙여넣기</Text>
+          </View>
+          <View className="flex-row items-center gap-2">
+            <View className="w-[62px] items-center rounded-md bg-[#FF5A87]/20 px-1 py-0.5">
+              <Text className="text-[10px] font-black text-[#9F1239]">📸 인스타</Text>
+            </View>
+            <Text className="flex-1 text-[11px] font-semibold text-slate-700">화면 캡처 → 사진 올리기</Text>
+          </View>
         </View>
       </View>
     </FadeIn>

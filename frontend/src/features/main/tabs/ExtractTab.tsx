@@ -102,7 +102,7 @@ export default function ExtractTab() {
           onSubmitEditing={handleExtractSubmit}
           returnKeyType="search"
           autoCapitalize="none"
-          placeholder="유튜브·네이버 장소 링크 입력 (인스타그램은 캡처로)"
+          placeholder="유튜브·네이버 장소 링크 붙여넣기"
           placeholderTextColor="#94A3B8"
           className="flex-1 p-0 text-xs font-medium text-slate-800"
         />
@@ -121,6 +121,12 @@ export default function ExtractTab() {
         >
           <Text className="text-lg leading-none">🔍</Text>
         </Pressable>
+      </View>
+
+      {/* 인스타그램은 링크를 못 읽는다. 입력칸 바로 밑에서 📂 버튼을 가리켜 준다. */}
+      <View className="-mt-1 flex-row items-center justify-center gap-1.5">
+        <Text className="text-[11px] font-black text-[#9F1239]">📸 인스타그램은</Text>
+        <Text className="text-[11px] font-semibold text-slate-600">화면을 캡처해 📂 로 올려주세요</Text>
       </View>
 
       {extractImageNames.length > 0 && (

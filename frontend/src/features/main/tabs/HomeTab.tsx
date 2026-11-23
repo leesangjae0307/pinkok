@@ -108,7 +108,10 @@ export default function HomeTab() {
           <View className="flex-1">
             <Text className="font-pixel text-[9px] text-[#075953]">QUICK AI EXTRACT</Text>
             <Text className="mt-1 text-sm font-black text-slate-900">링크 한 번으로 여행 장소 찾기</Text>
-            <Text className="mt-1 text-[10px] font-semibold text-[#075953]">유튜브·인스타그램 링크를 바로 분석해요.</Text>
+            {/* 인스타그램은 링크로 읽지 못한다. 캡처를 올리는 길을 알려 준다. */}
+            <Text className="mt-1 text-[10px] font-semibold text-[#075953]">
+              유튜브는 링크로, 인스타그램은 캡처로 분석해요.
+            </Text>
           </View>
           <PixelExtractIcon size={48} active />
         </LinearGradient>
@@ -140,7 +143,7 @@ export default function HomeTab() {
         <View className="flex-1">
           <Text className="font-pixel text-[9px] text-[#075953]">PINKOK AI TIP</Text>
           <Text className="mt-1 text-xs leading-snug text-slate-700">
-            유튜브나 인스타그램 링크를 복사해 추출 탭에 붙여넣으면 AI가 여행 장소를 한눈에 찾아줘요!
+            유튜브는 링크를 복사해 추출 탭에 붙여넣고, 인스타그램은 게시물 화면을 캡처해 사진으로 올려주세요!
           </Text>
         </View>
       </View>

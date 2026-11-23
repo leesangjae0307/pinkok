@@ -102,7 +102,7 @@ export default function ExtractTab() {
           onSubmitEditing={handleExtractSubmit}
           returnKeyType="search"
           autoCapitalize="none"
-          placeholder="인스타그램/유튜브/네이버 장소 링크 입력..."
+          placeholder="유튜브·네이버 장소 링크 입력 (인스타그램은 캡처로)"
           placeholderTextColor="#94A3B8"
           className="flex-1 p-0 text-xs font-medium text-slate-800"
         />

@@ -201,7 +201,7 @@ export default function AddPlaceModal({
           <TextInput
             value={keyword}
             onChangeText={setKeyword}
-            placeholder="🔍 장소 이름으로 검색 (예: 협재해수욕장)"
+            placeholder="🔍 장소 이름 또는 주소로 검색 (예: 협재해수욕장)"
             placeholderTextColor="#94A3B8"
             autoFocus
             className="h-12 rounded-2xl border-2 border-pixel-navy bg-white px-3 py-0 text-sm font-bold text-slate-900"

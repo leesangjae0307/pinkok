@@ -3,11 +3,11 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -256,24 +256,6 @@ export default function PlaceDetailModal({
               </Text>
             </View>
 
-            {/* 팀원이 올린 기록이 늦게 보일 때 이것만 다시 받는다. */}
-            <Pressable
-              onPress={() => {
-                if (isReloading) {return;}
-                setIsReloading(true);
-                Promise.resolve(onReload()).finally(() => setIsReloading(false));
-              }}
-              disabled={isReloading}
-              accessibilityLabel="기록 새로고침"
-              className="mr-1.5 h-8 w-8 items-center justify-center rounded-lg border-2 border-pixel-navy bg-slate-100 active:translate-y-0.5 active:bg-slate-200"
-            >
-              {isReloading ? (
-                <ActivityIndicator size="small" color="#075953" />
-              ) : (
-                <Text className="text-[11px] font-black text-pixel-navy">↻</Text>
-              )}
-            </Pressable>
-
             <Pressable
               onPress={onOpenPinLogMaker}
               accessibilityLabel="팀원 영상으로 PinLog 합성"
@@ -284,7 +266,24 @@ export default function PlaceDetailModal({
           </View>
 
           {/* 본문 */}
-          <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
+          {/* 당겨서 새로고침. 팀원이 올린 기록이 늦게 보일 때 이것만 다시 받는다. */}
+          <ScrollView
+            className="flex-1"
+            contentContainerStyle={{ padding: 16, gap: 16 }}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={isReloading}
+                onRefresh={() => {
+                  if (isReloading) {return;}
+                  setIsReloading(true);
+                  Promise.resolve(onReload()).finally(() => setIsReloading(false));
+                }}
+                colors={['#075953']}
+                tintColor="#075953"
+              />
+            }
+          >
             {/* 장소 요약 */}
             {/* 썸네일은 빼고 장소 정보만 남긴다. */}
             <View className="rounded-2xl border-2 border-pixel-navy bg-white p-3 shadow-md">

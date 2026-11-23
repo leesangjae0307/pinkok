@@ -385,18 +385,32 @@ export default function PinLogSynthesisModal({
                     <Text className="font-pixel text-[8px] text-[#56EADD]">PINKOK VIDEO TAPE</Text>
                     <Text className="font-pixel text-[8px] text-[#FFC837]">1280 × 720</Text>
                   </View>
-                  <View className="aspect-video w-full overflow-hidden rounded-lg border-2 border-slate-600 bg-black">
-                    {result.videoUrl ? (
-                      <Video
-                        source={{ uri: result.videoUrl }}
-                        poster={result.clips[0] ? { source: { uri: result.clips[0].thumbnail }, resizeMode: 'cover' } : undefined}
-                        controls
-                        paused
+                  {/*
+                    눌러서 앱 공통 플레이어로 연다. 전에는 여기서만 Video 를 직접
+                    그리고 플레이어 기본 전체화면을 썼는데, 앱이 세로 고정이라
+                    눕혀도 돌아가지 않았다. 아래 장소별 클립과 같은 길로 보낸다.
+                  */}
+                  <Pressable
+                    onPress={() => result.videoUrl && setPlayingClip({ uri: result.videoUrl, title: result.title })}
+                    disabled={!result.videoUrl}
+                    accessibilityLabel="완성된 PinLog 재생"
+                    className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-slate-600 bg-black active:opacity-80"
+                  >
+                    {result.clips[0]?.thumbnail ? (
+                      <Image
+                        source={{ uri: result.clips[0].thumbnail }}
                         resizeMode="cover"
                         style={{ width: '100%', height: '100%' }}
                       />
                     ) : null}
-                  </View>
+                    {result.videoUrl ? (
+                      <View className="absolute inset-0 items-center justify-center">
+                        <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-white bg-black/55">
+                          <Text className="text-base text-white">▶</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                  </Pressable>
                   <View className="mt-2 flex-row items-center justify-between px-1">
                     <View className="flex-row gap-1">
                       <View className="h-2 w-2 rounded-sm bg-rose-500" />

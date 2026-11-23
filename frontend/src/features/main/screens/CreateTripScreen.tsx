@@ -338,8 +338,6 @@ export default function CreateTripScreen({
             </View>
           </View>
 
-          <TagsInput tags={tags} onChange={setTags} />
-
           <View>
             <Text className="text-xs font-black text-slate-700">대표 픽셀 이모지</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2" contentContainerClassName="gap-2 pb-1">
@@ -469,6 +467,15 @@ export default function CreateTripScreen({
                 </Pressable>
               );
             })}
+          </View>
+
+          {/*
+            직접 적는 해시태그도 여기 둔다. 위의 테마와 성격이 같고(둘 다 이 여행을
+            무엇으로 볼지 적는 꼬리표), AI 추천·동선에 함께 쓰인다. 전에는 여행지
+            아래에 따로 떨어져 있어 둘이 다른 것처럼 보였다.
+          */}
+          <View className="mt-4 border-t border-slate-100 pt-4">
+            <TagsInput tags={tags} onChange={setTags} />
           </View>
         </View>
       </ScrollView>

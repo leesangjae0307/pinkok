@@ -11,7 +11,7 @@ import {
 } from '../../../components/pixel/Primitives';
 import { TRAVEL_STYLES } from '../../../constants';
 import { isImageAvatar, toImageSource } from '../../../data/mockData';
-import { avatarSilverBucket, profileAvatarSource, useApp } from '../AppContext';
+import { profileAvatarSource, useApp } from '../AppContext';
 
 /** 목업 date 문자열('2026.10.12 - 10.15')에서 일수를 계산한다. 서버 연동 시 startDate/endDate 로 대체. */
 function tripDayCount(date: string): number {
@@ -271,10 +271,16 @@ export default function TripsListView() {
                       accessibilityLabel={`${trip.title} 팀원 관리`}
                       className="flex-row items-center gap-1.5 rounded-lg border border-[#075953] bg-[#56EADD] px-2 py-1 active:scale-95"
                     >
-                      <View className="flex-row items-center">
-                        <Image source={toImageSource(profileAvatarSource(selectedProfileAvatar))} className="h-4 w-4 rounded border border-white" />
-                        <Image source={avatarSilverBucket} className="-ml-1 h-4 w-4 rounded border border-white" />
-                      </View>
+                      {/*
+                        내 얼굴만 보여 준다. 전에는 옆에 은발 버킷햇 아바타를 박아
+                        두어, 그 사람이 팀원인 것처럼 모든 여행에 똑같이 나왔다.
+                        여행 목록 응답에는 팀원이 들어 있지 않아 실제 얼굴을 알 수
+                        없으므로, 모르는 것을 지어내는 대신 비운다.
+                      */}
+                      <Image
+                        source={toImageSource(profileAvatarSource(selectedProfileAvatar))}
+                        className="h-4 w-4 rounded border border-white"
+                      />
                       <Text className="text-[8px] font-black text-[#075953]">팀원 추가·수정</Text>
                     </Pressable>
                   </View>

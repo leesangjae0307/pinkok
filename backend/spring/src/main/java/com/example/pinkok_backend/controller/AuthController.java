@@ -1,5 +1,6 @@
 package com.example.pinkok_backend.controller;
 
+import com.example.pinkok_backend.dto.AvailabilityResponse;
 import com.example.pinkok_backend.dto.LoginRequest;
 import com.example.pinkok_backend.dto.PasswordResetConfirmRequest;
 import com.example.pinkok_backend.dto.PasswordResetRequest;
@@ -10,17 +11,23 @@ import com.example.pinkok_backend.dto.SignupRequest;
 import com.example.pinkok_backend.dto.SocialLoginRequest;
 import com.example.pinkok_backend.dto.TokenResponse;
 import com.example.pinkok_backend.dto.UserResponse;
+import com.example.pinkok_backend.security.ClientIp;
+import com.example.pinkok_backend.security.IpRateLimiter;
+import com.example.pinkok_backend.service.AccountAvailabilityService;
 import com.example.pinkok_backend.service.AuthService;
 import com.example.pinkok_backend.service.PasswordService;
 import com.example.pinkok_backend.service.SocialAuthService;
 import com.example.pinkok_backend.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -31,19 +38,43 @@ public class AuthController {
     private final AuthService authService;
     private final SocialAuthService socialAuthService;
     private final PasswordService passwordService;
+    private final AccountAvailabilityService accountAvailabilityService;
+    private final IpRateLimiter ipRateLimiter;
 
     public AuthController(UserService userService, AuthService authService, SocialAuthService socialAuthService,
-                          PasswordService passwordService) {
+                          PasswordService passwordService, AccountAvailabilityService accountAvailabilityService,
+                          IpRateLimiter ipRateLimiter) {
         this.userService = userService;
         this.authService = authService;
         this.socialAuthService = socialAuthService;
         this.passwordService = passwordService;
+        this.accountAvailabilityService = accountAvailabilityService;
+        this.ipRateLimiter = ipRateLimiter;
     }
 
     @PostMapping("/signup")
     public ResponseEntity<UserResponse> signup(@Valid @RequestBody SignupRequest request) {
         UserResponse body = UserResponse.from(userService.register(request));
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
+    }
+
+    /**
+     * 가입 화면의 이메일 중복 확인. 로그인 없이 쓴다.
+     * 형식이 틀리면 400, 같은 IP 에서 너무 자주 부르면 429. 최종 판단은 가입 API 가 하므로 이 결과는 안내용이다.
+     */
+    @GetMapping("/check-email")
+    public ResponseEntity<AvailabilityResponse> checkEmail(@RequestParam(required = false) String email,
+                                                           HttpServletRequest request) {
+        ipRateLimiter.requireAllowed(ClientIp.of(request));
+        return ResponseEntity.ok(new AvailabilityResponse(accountAvailabilityService.isEmailAvailable(email)));
+    }
+
+    /** 가입 화면의 아이디(@username) 중복 확인. 규칙은 {@link #checkEmail} 과 같다. */
+    @GetMapping("/check-username")
+    public ResponseEntity<AvailabilityResponse> checkUsername(@RequestParam(required = false) String username,
+                                                              HttpServletRequest request) {
+        ipRateLimiter.requireAllowed(ClientIp.of(request));
+        return ResponseEntity.ok(new AvailabilityResponse(accountAvailabilityService.isUsernameAvailable(username)));
     }
 
     @PostMapping("/login")

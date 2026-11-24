@@ -3,7 +3,9 @@ package com.example.pinkok_backend.service;
 import com.example.pinkok_backend.dto.SignupRequest;
 import com.example.pinkok_backend.entity.Avatar;
 import com.example.pinkok_backend.entity.User;
+import com.example.pinkok_backend.exception.DuplicateAccountException;
 import com.example.pinkok_backend.repository.UserRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -11,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.Objects;
 
 @Service
@@ -43,10 +46,10 @@ public class UserService {
     public User register(SignupRequest request) {
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
+            throw DuplicateAccountException.email();
         }
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
+            throw DuplicateAccountException.username();
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -65,7 +68,40 @@ public class UserService {
             user.setAvatar(avatar);
         }
 
-        return userRepository.save(user);
+        try {
+            // 바로 반영(flush)해서, 위의 확인과 저장 사이에 같은 이메일·아이디로 먼저 가입한 사람이 있으면 여기서 알아챈다
+            return userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            DuplicateAccountException duplicate = classifyDuplicate(
+                    e.getMostSpecificCause().getMessage(), request.getEmail(), request.getUsername());
+            if (duplicate == null) {
+                throw e;
+            }
+            throw duplicate;
+        }
+    }
+
+    /**
+     * 저장 중 유니크 제약에 걸린 오류 메시지에서 이메일 쪽인지 아이디 쪽인지 가린다.
+     * MySQL 은 "Duplicate entry '값' for key ..." 처럼 중복된 값을 메시지에 담아 주므로, 그 값이 이메일인지 아이디인지로 본다.
+     *
+     * @return 이메일·아이디 중복이면 해당 예외, 중복 오류가 아니거나 가릴 수 없으면 null
+     */
+    static DuplicateAccountException classifyDuplicate(String causeMessage, String email, String username) {
+        if (causeMessage == null) {
+            return null;
+        }
+        String message = causeMessage.toLowerCase(Locale.ROOT);
+        if (!message.contains("duplicate") && !message.contains("unique")) {
+            return null;
+        }
+        if (email != null && message.contains(email.toLowerCase(Locale.ROOT))) {
+            return DuplicateAccountException.email();
+        }
+        if (username != null && message.contains(username.toLowerCase(Locale.ROOT))) {
+            return DuplicateAccountException.username();
+        }
+        return null;
     }
 
     /**

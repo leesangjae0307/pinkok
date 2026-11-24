@@ -29,6 +29,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
+    /** 가입 중복: 409 + errorCode(EMAIL_DUPLICATED / USERNAME_DUPLICATED) + errors(필드별 메시지). */
+    @ExceptionHandler(DuplicateAccountException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateAccount(DuplicateAccountException e) {
+        Map<String, Object> body = body(HttpStatus.CONFLICT, e.getMessage());
+        body.put("errorCode", e.getErrorCode());
+        body.put("errors", Map.of(e.getField(), e.getMessage()));
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body(HttpStatus.CONFLICT, e.getMessage()));

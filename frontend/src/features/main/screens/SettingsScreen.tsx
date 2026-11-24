@@ -3,7 +3,7 @@ import { Linking, Pressable, Text, View } from 'react-native';
 
 import { PixelBackArrow, PixelToggleSwitch } from '../../../components/pixel/PixelIcons';
 import { FadeIn } from '../../../components/pixel/Primitives';
-import { APP_VERSION_NAME } from '../../../services/appVersion';
+import { APP_VERSION_CODE, APP_VERSION_NAME } from '../../../services/appVersion';
 import { useApp } from '../AppContext';
 
 /** 이용약관 및 개인정보 처리방침 */
@@ -195,6 +195,10 @@ export default function SettingsScreen() {
             버전은 빌드 설정에서 읽어 온다. 글자로 적어 두었더니 1.0.1 을 깔고도
             v1.0.0 이 떠 있었다. "(최신버전)" 은 뗐다. 스토어의 최신판이 무엇인지
             확인할 길이 없어, 늘 최신이라고 말하는 셈이었다.
+
+            괄호 안은 빌드 번호(versionCode)다. 플레이 스토어가 같은 번호를 두 번
+            받지 않으므로, 올릴 때마다 이 줄은 반드시 달라진다. 테스터가 받은 것이
+            새 것인지 물어볼 때 이 번호 하나로 가려진다.
           */}
           {APP_VERSION_NAME ? (
             <View className="flex-row items-center justify-between pt-0.5">
@@ -205,6 +209,7 @@ export default function SettingsScreen() {
               <View className="rounded-md bg-[#B4FAF0] px-2 py-0.5">
                 <Text className="font-pixel text-[10px] text-[#075953]">
                   v{APP_VERSION_NAME}
+                  {APP_VERSION_CODE > 0 ? ` (${APP_VERSION_CODE})` : ''}
                 </Text>
               </View>
             </View>

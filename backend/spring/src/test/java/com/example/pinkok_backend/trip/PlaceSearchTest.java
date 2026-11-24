@@ -127,7 +127,7 @@ class PlaceSearchTest {
     }
 
     @Test
-    @DisplayName("카카오맵 장소 결과가 있으면 type=PLACE 로 오고, 주소 검색은 하지 않는다")
+    @DisplayName("카카오맵 장소 결과는 type=PLACE 로 오고, 주소 검색 결과가 없으면 장소만 온다")
     void search_placeResult_hasTypePlace() throws Exception {
         String token = signupAndLogin();
         Mockito.when(kakaoLocalApiClient.searchByKeyword("강남역 카페", 1, 15))
@@ -137,7 +137,79 @@ class PlaceSearchTest {
                         .param("keyword", "강남역 카페")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.places.length()").value(1))
                 .andExpect(jsonPath("$.places[0].type").value("PLACE"));
+    }
+
+    @Test
+    @DisplayName("키워드 결과가 있어도 주소 검색 결과를 뒤에 붙인다 (키워드 결과가 위, 주소 결과가 아래)")
+    void search_keywordAndAddress_areMerged() throws Exception {
+        String token = signupAndLogin();
+        // "경복대로 425" 처럼 키워드로는 엉뚱한 장소만 걸리고, 주소로는 따로 찾아지는 경우
+        Mockito.when(kakaoLocalApiClient.searchByKeyword("경복대로 425", 1, 15))
+                .thenReturn(responseWith(true, sampleDocument()));
+        Mockito.when(kakaoLocalApiClient.searchByAddress("경복대로 425", 1, 15))
+                .thenReturn(addressResponse("경복대학교"));
+
+        mockMvc.perform(get("/places/search")
+                        .param("keyword", "경복대로 425")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.places.length()").value(2))
+                .andExpect(jsonPath("$.places[0].type").value("PLACE"))
+                .andExpect(jsonPath("$.places[1].type").value("ADDRESS"))
+                .andExpect(jsonPath("$.places[1].name").value("경복대학교"));
+    }
+
+    @Test
+    @DisplayName("주소 결과가 키워드 결과와 같은 주소면 중복으로 보고 붙이지 않는다")
+    void search_addressDuplicatingKeywordResult_isSkipped() throws Exception {
+        String token = signupAndLogin();
+        KakaoKeywordSearchResponse.Document place = sampleDocument();
+        place.setRoadAddressName("강원특별자치도  강릉시 임영로207번길 6-1"); // 공백이 달라도 같은 주소로 본다
+        Mockito.when(kakaoLocalApiClient.searchByKeyword("임영로207번길 6-1", 1, 15))
+                .thenReturn(responseWith(true, place));
+        Mockito.when(kakaoLocalApiClient.searchByAddress("임영로207번길 6-1", 1, 15))
+                .thenReturn(addressResponse(""));
+
+        mockMvc.perform(get("/places/search")
+                        .param("keyword", "임영로207번길 6-1")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.places.length()").value(1))
+                .andExpect(jsonPath("$.places[0].type").value("PLACE"));
+    }
+
+    @Test
+    @DisplayName("주소 검색이 실패해도 키워드 결과는 그대로 200 으로 돌려준다")
+    void search_addressFailureWithKeywordResult_keepsKeywordResult() throws Exception {
+        String token = signupAndLogin();
+        Mockito.when(kakaoLocalApiClient.searchByKeyword("강남역 카페", 1, 15))
+                .thenReturn(responseWith(true, sampleDocument()));
+        Mockito.when(kakaoLocalApiClient.searchByAddress(Mockito.anyString(), Mockito.anyInt(), Mockito.anyInt()))
+                .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_GATEWAY, "카카오 주소 검색 실패"));
+
+        mockMvc.perform(get("/places/search")
+                        .param("keyword", "강남역 카페")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.places.length()").value(1))
+                .andExpect(jsonPath("$.places[0].type").value("PLACE"));
+    }
+
+    @Test
+    @DisplayName("2페이지부터는 키워드 결과만 이어지고 주소 검색은 다시 하지 않는다")
+    void search_secondPage_doesNotRepeatAddressSearch() throws Exception {
+        String token = signupAndLogin();
+        Mockito.when(kakaoLocalApiClient.searchByKeyword("강남역 카페", 2, 15))
+                .thenReturn(responseWith(true, sampleDocument()));
+
+        mockMvc.perform(get("/places/search")
+                        .param("keyword", "강남역 카페")
+                        .param("page", "2")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.places.length()").value(1));
 
         Mockito.verify(kakaoLocalApiClient, Mockito.never())
                 .searchByAddress(Mockito.anyString(), Mockito.anyInt(), Mockito.anyInt());

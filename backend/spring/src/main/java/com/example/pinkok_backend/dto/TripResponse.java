@@ -25,8 +25,12 @@ public class TripResponse {
     private final LocalDateTime createdAt;
     /** 자유 해시태그 (# 없이, 보낸 순서대로). 앱이 # 을 붙여 보여준다 */
     private final java.util.List<String> tags;
+    /** 함께 가는 팀원 (나 포함, 먼저 참여한 순). 목록 카드에 얼굴을 여러 개 띄울 때 쓴다 */
+    private final java.util.List<TripMemberResponse> members;
+    /** 팀원 수 (나 포함) */
+    private final int memberCount;
 
-    private TripResponse(Trip trip, String myRole, int placesCount) {
+    private TripResponse(Trip trip, String myRole, int placesCount, java.util.List<TripMemberResponse> members) {
         this.id = trip.getId();
         this.title = trip.getTitle();
         this.region = trip.getRegion();
@@ -40,9 +44,11 @@ public class TripResponse {
         this.placesCount = placesCount;
         this.createdAt = trip.getCreatedAt();
         this.tags = java.util.List.copyOf(trip.getTags());
+        this.members = members;
+        this.memberCount = members.size();
     }
 
-    public static TripResponse of(Trip trip, String myRole, int placesCount) {
-        return new TripResponse(trip, myRole, placesCount);
+    public static TripResponse of(Trip trip, String myRole, int placesCount, java.util.List<TripMemberResponse> members) {
+        return new TripResponse(trip, myRole, placesCount, members);
     }
 }

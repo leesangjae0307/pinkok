@@ -19,6 +19,16 @@ public interface TripMemberRepository extends JpaRepository<TripMember, TripMemb
 
     List<TripMember> findAllByUser_IdOrderByJoinedAtDesc(Long userId);
 
+    /** 여러 여행의 팀원을 한 번에 읽는다 (여행 목록에서 여행마다 따로 읽는 N+1 방지). 사용자와 아바타까지 같이 가져온다. */
+    @Query("""
+            select m from TripMember m
+            join fetch m.user u
+            left join fetch u.avatar
+            where m.trip.id in :tripIds
+            order by m.joinedAt asc, u.id asc
+            """)
+    List<TripMember> findAllWithUserByTripIds(@Param("tripIds") java.util.Collection<Long> tripIds);
+
     /** 내가 참여 중인 여행(삭제된 여행 제외)을 최근 참여순으로. 여행까지 한 번에 읽는다. */
     @Query("""
             select t from TripMember m join m.trip t

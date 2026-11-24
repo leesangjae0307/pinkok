@@ -1,6 +1,7 @@
 package com.example.pinkok_backend.service;
 
 import com.example.pinkok_backend.dto.TripCreateRequest;
+import com.example.pinkok_backend.dto.TripMemberResponse;
 import com.example.pinkok_backend.dto.TripResponse;
 import com.example.pinkok_backend.dto.TripUpdateRequest;
 import com.example.pinkok_backend.entity.Trip;
@@ -85,7 +86,8 @@ public class TripService {
         // 같이 갈 사람을 적어 보냈으면 초대장을 보낸다. 수락해야 팀원이 되므로 지금은 아직 나 혼자다.
         tripInvitationService.inviteAll(trip, user, request.getInviteeUsernames());
 
-        return TripResponse.of(trip, OWNER, 0); // 방금 만든 여행이라 핀이 없다
+        // 방금 만든 여행이라 핀이 없고, 팀원은 만든 사람 혼자다
+        return TripResponse.of(trip, OWNER, 0, List.of(TripMemberResponse.of(owner, userId)));
     }
 
     /** 내가 팀원으로 속한 여행 목록 (만든 것 + 초대받아 들어간 것 전부). */
@@ -98,9 +100,22 @@ public class TripService {
         Map<Long, Integer> pinCounts = memberships.isEmpty() ? Map.of()
                 : itineraryItemRepository.countByTripIds(memberships.stream().map(m -> m.getTrip().getId()).toList()).stream()
                         .collect(Collectors.toMap(ItineraryItemRepository.TripPinCount::getTripId, c -> c.getCnt().intValue()));
+        // 팀원도 한 번에 읽어서 여행별로 나눈다
+        Map<Long, List<TripMemberResponse>> membersByTrip = memberships.isEmpty() ? Map.of()
+                : tripMemberRepository.findAllWithUserByTripIds(memberships.stream().map(m -> m.getTrip().getId()).toList()).stream()
+                        .collect(Collectors.groupingBy(m -> m.getTrip().getId(),
+                                Collectors.mapping(m -> TripMemberResponse.of(m, userId), Collectors.toList())));
         return memberships.stream()
                 .map(member -> TripResponse.of(member.getTrip(), member.getRole(),
-                        pinCounts.getOrDefault(member.getTrip().getId(), 0)))
+                        pinCounts.getOrDefault(member.getTrip().getId(), 0),
+                        membersByTrip.getOrDefault(member.getTrip().getId(), List.of())))
+                .toList();
+    }
+
+    /** 한 여행의 팀원 (여행 하나를 돌려주는 응답용). */
+    private List<TripMemberResponse> membersOf(Long tripId, Long requesterId) {
+        return tripMemberRepository.findAllWithUserByTripIds(List.of(tripId)).stream()
+                .map(member -> TripMemberResponse.of(member, requesterId))
                 .toList();
     }
 
@@ -111,7 +126,7 @@ public class TripService {
         String role = tripMemberRepository.findByTrip_IdAndUser_Id(tripId, userId)
                 .map(TripMember::getRole)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "이 여행에 접근할 권한이 없습니다."));
-        return TripResponse.of(trip, role, itineraryItemRepository.countByTrip_Id(tripId));
+        return TripResponse.of(trip, role, itineraryItemRepository.countByTrip_Id(tripId), membersOf(tripId, userId));
     }
 
     /** 여행 정보 수정은 OWNER 만 할 수 있다. */
@@ -131,7 +146,8 @@ public class TripService {
         if (request.getTags() != null) trip.replaceTags(TripTags.normalize(request.getTags()));
         trip.setUpdatedAt(LocalDateTime.now());
 
-        return TripResponse.of(tripRepository.save(trip), OWNER, itineraryItemRepository.countByTrip_Id(tripId));
+        return TripResponse.of(tripRepository.save(trip), OWNER, itineraryItemRepository.countByTrip_Id(tripId),
+                membersOf(tripId, userId));
     }
 
     /**
@@ -159,7 +175,7 @@ public class TripService {
         trip.setUpdatedAt(LocalDateTime.now());
         tripRepository.save(trip);
 
-        return TripResponse.of(trip, MEMBER, itineraryItemRepository.countByTrip_Id(tripId));
+        return TripResponse.of(trip, MEMBER, itineraryItemRepository.countByTrip_Id(tripId), membersOf(tripId, userId));
     }
 
     /** 주인 자리를 넘긴다. 주인이 둘이 되지 않도록 둘을 같이 바꾼다. */

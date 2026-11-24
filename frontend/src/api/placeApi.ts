@@ -30,7 +30,13 @@ export interface PlaceSearchPage {
   hasMore: boolean;
 }
 
-/** 로그인한 사용자면 누구나 쓸 수 있다. Gemini 가 아니라 카카오맵을 탄다. */
+/**
+ * 로그인한 사용자면 누구나 쓸 수 있다. Gemini 가 아니라 카카오맵을 탄다.
+ *
+ * 첫 페이지는 키워드 결과 뒤에 주소 결과(type: 'ADDRESS')가 붙어서 온다. 겹치는
+ * 주소는 서버가 걸러 주고, 2페이지부터는 키워드 결과만 온다. 그러니 앱에서 다시
+ * 합치거나 거를 것은 없다.
+ */
 export async function searchPlaces(keyword: string, page?: number, size?: number): Promise<PlaceSearchPage> {
   const { data } = await api.get<PlaceSearchPage>('/places/search', {
     params: { keyword, page, size },

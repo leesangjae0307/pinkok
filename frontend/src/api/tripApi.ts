@@ -2,7 +2,7 @@ import api from './axios';
 import { fileUrl } from './fileApi';
 import { DEFAULT_COVERS } from '../assets/images/covers';
 import { daysBetween, toYmd } from '../components/pixel/PixelCalendar';
-import { AvatarSource, TripFolder } from '../data/mockData';
+import { AvatarSource, TripFolder, TripMemberInfo } from '../data/mockData';
 
 /** 서버가 내려주는 여행. 날짜는 'YYYY-MM-DD', createdAt 은 ISO 문자열이다. */
 export interface Trip {
@@ -22,8 +22,18 @@ export interface Trip {
   placesCount: number;
   /** 해시태그. 서버는 # 없이 주므로 보여줄 때 앱이 붙인다. */
   tags: string[];
+  /**
+   * 함께 가는 사람들. 목록·상세·생성·수정 응답에 모두 들어 있다.
+   * 아직 내려주지 않는 서버를 대비해 선택 필드로 둔다.
+   */
+  members?: TripMember[];
+  /** 나를 포함한 전체 팀원 수 */
+  memberCount?: number;
   createdAt: string;
 }
+
+/** 여행 팀원. 필드 이름은 서버 응답 그대로다(avatar 가 아니라 avatarImageUrl). */
+export type TripMember = TripMemberInfo;
 
 export interface TripCreatePayload {
   title: string;
@@ -128,5 +138,8 @@ export function toTripFolder(
     tag: local?.tag ?? COMPANION_TAGS[trip.companionType ?? ''] ?? '여행',
     tags: trip.tags ?? [],
     isOwner: trip.myRole === 'OWNER',
+    members: trip.members ?? [],
+    // 팀원을 주지 않는 서버에서도 최소한 나는 있다. 0 명으로 보이지 않게 한다.
+    memberCount: trip.memberCount ?? trip.members?.length ?? 1,
   };
 }

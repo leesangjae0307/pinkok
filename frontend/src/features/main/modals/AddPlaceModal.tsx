@@ -5,7 +5,7 @@
  * POST /itinerary-items 에 넘긴다. 두 DTO 의 필드가 같아서 변환이 필요 없다.
  */
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ModalBackdrop } from '../../../components/pixel/Primitives';
@@ -58,6 +58,14 @@ export default function AddPlaceModal({
   }, []);
 
   const isAddress = (place: PlaceSearchResult) => place.type === 'ADDRESS';
+  /**
+   * 목록의 키이자 '추가 중' 잠금의 키.
+   *
+   * 주소로 찾은 위치는 kakaoPlaceId 가 비어 있어서 이름만으로는 겹칠 수 있다.
+   * 좌표까지 붙여 한 줄씩 구분한다.
+   */
+  const resultKey = (place: PlaceSearchResult) =>
+    place.kakaoPlaceId ?? `${place.name}:${place.latitude},${place.longitude}`;
   const startNaming = (place: PlaceSearchResult) => {
     setNamingPlace(place);
     setPlaceName(place.name);
@@ -96,9 +104,9 @@ export default function AddPlaceModal({
     };
   }, [keyword]);
 
-  /** 같은 장소를 두 번 누르지 않도록 카카오 id 로 잠근다. */
+  /** 같은 장소를 두 번 누르지 않도록 잠근다. */
   const handleAdd = async (place: PlaceSearchResult) => {
-    const key = place.kakaoPlaceId ?? place.name;
+    const key = resultKey(place);
     if (addingId) {return;}
     setAddingId(key);
     try {
@@ -208,7 +216,15 @@ export default function AddPlaceModal({
           />
         </View>
 
-        <View className="gap-2 px-4 pb-4">
+        {/*
+          서버는 키워드 결과 뒤에 주소 결과를 붙여 준다. 앞에서 여덟 개만 잘라
+          보여 주면 뒤에 붙은 주소 결과가 통째로 묻히므로, 전부 싣고 넘겨 본다.
+        */}
+        <ScrollView
+          style={{ maxHeight: 420 }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="gap-2 px-4 pb-4"
+        >
           {isSearching ? (
             <View className="items-center rounded-2xl border-2 border-dashed border-[#82F0DC] bg-white/60 p-8">
               <ActivityIndicator color="#075953" />
@@ -218,8 +234,8 @@ export default function AddPlaceModal({
               <Text className="text-center text-xs font-bold text-slate-500">{searchError}</Text>
             </View>
           ) : results.length > 0 ? (
-            results.slice(0, 8).map((place) => {
-              const key = place.kakaoPlaceId ?? `${place.name}:${place.latitude},${place.longitude}`;
+            results.map((place) => {
+              const key = resultKey(place);
               const busy = addingId === key;
               return (
                 <View
@@ -265,7 +281,7 @@ export default function AddPlaceModal({
               </Text>
             </View>
           )}
-        </View>
+        </ScrollView>
         </>
         )}
       </View>

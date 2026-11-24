@@ -85,7 +85,7 @@ import {
 } from '../../api/aiRequestApi';
 import {
   acceptRecommendation,
-  companionTypeOf,
+  COMPANION_TYPES,
   createRecommendation,
   fetchRecommendations,
   rejectRecommendation,
@@ -327,7 +327,8 @@ function useAppState(me: Me, onLogout: () => void) {
   /** 지도를 보고 있는 여행. 아직 아무것도 열지 않았으면 null 이다. */
   const [activeTrip, setActiveTrip] = useState<TripFolder | null>(null);
   const [tripSearchQuery, setTripSearchQuery] = useState('');
-  const [recommendationPeople, setRecommendationPeople] = useState('2');
+  /** 서버가 받는 동행 유형(SOLO/COUPLE/FRIEND/FAMILY). 사람 수를 보내던 자리를 대신한다. */
+  const [recommendationCompanion, setRecommendationCompanion] = useState<string>(COMPANION_TYPES[0].value);
   const [recommendationStyle, setRecommendationStyle] = useState<string>(TRAVEL_STYLES[0].code);
   /** 직접 입력하는 여행 지역. 고정 목록에 매이지 않는다. */
   const [recommendationRegion, setRecommendationRegion] = useState('');
@@ -1901,7 +1902,7 @@ function useAppState(me: Me, onLogout: () => void) {
       const request = await createRecommendation({
         tripId: trip.id,
         styleCodes: [recommendationStyle],
-        companionType: companionTypeOf(recommendationPeople),
+        companionType: recommendationCompanion,
         region,
       });
       const finished = await waitForAiRequest(request.id);
@@ -2046,7 +2047,7 @@ function useAppState(me: Me, onLogout: () => void) {
     isTripMapOpen, setIsTripMapOpen,
     activeTrip, setActiveTrip,
     tripSearchQuery, setTripSearchQuery,
-    recommendationPeople, setRecommendationPeople,
+    recommendationCompanion, setRecommendationCompanion,
     recommendationStyle, setRecommendationStyle,
     recommendationRegion, setRecommendationRegion,
     isRecommending,

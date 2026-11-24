@@ -137,9 +137,11 @@ export default function TripMapView() {
             </Pressable>
             <Pressable
               onPress={() => setInviteTrip(activeTrip)}
+              accessibilityLabel={`팀원 관리, 팀원 ${activeTrip?.memberCount ?? 1}명`}
               className="rounded-2xl border-2 border-pixel-navy bg-white px-2.5 py-2 shadow-md active:translate-y-0.5"
             >
-              <Text className="text-[10px] font-black text-[#075953]">팀원 +</Text>
+              {/* 목록 카드와 같은 수를 보여 준다. 서버가 주는 memberCount 는 나를 포함한다. */}
+              <Text className="text-[10px] font-black text-[#075953]">팀원 {activeTrip?.memberCount ?? 1}</Text>
             </Pressable>
             <Pressable
               onPress={() => {

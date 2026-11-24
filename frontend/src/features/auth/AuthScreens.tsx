@@ -8,6 +8,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {
   Alert,
   Animated,
+  BackHandler,
   Easing,
   Image,
   KeyboardAvoidingView,
@@ -1463,6 +1464,25 @@ function ResetPasswordScreen({
 
 export default function AuthScreens({onComplete}: AuthScreensProps) {
   const [screen, setScreen] = useState<AuthScreen>('splash');
+
+  /**
+   * 기기 뒤로가기.
+   *
+   * 로그인 화면들은 네비게이터가 아니라 screen 상태 하나로 갈아끼운다. 그래서
+   * 회원가입·비밀번호 찾기에서 뒤로가기를 누르면 돌아갈 화면이 스택에 없어
+   * 액티비티가 그대로 닫혔다(앱이 꺼졌다). 화면 안의 '뒤로' 버튼과 똑같이
+   * 로그인으로 돌려보낸다.
+   *
+   * 로그인·스플래시에서는 손대지 않는다. 거기서는 뒤로가기로 앱을 나가는 게 맞다.
+   */
+  useEffect(() => {
+    if (screen !== 'signup' && screen !== 'resetPassword') {return;}
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setScreen('login');
+      return true;
+    });
+    return () => sub.remove();
+  }, [screen]);
 
   return (
     <View className="flex-1 bg-auth-canvas">

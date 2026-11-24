@@ -9,9 +9,10 @@ import {
   PixelSelect,
   ShadowBox,
 } from '../../../components/pixel/Primitives';
+import { COMPANION_TYPES } from '../../../api/recommendationApi';
 import { TRAVEL_STYLES } from '../../../constants';
 import { isImageAvatar, toImageSource } from '../../../data/mockData';
-import { profileAvatarSource, useApp } from '../AppContext';
+import { otherUserAvatar, profileAvatarSource, useApp } from '../AppContext';
 
 /** 목업 date 문자열('2026.10.12 - 10.15')에서 일수를 계산한다. 서버 연동 시 startDate/endDate 로 대체. */
 function tripDayCount(date: string): number {
@@ -42,8 +43,8 @@ export default function TripsListView() {
     setInviteTrip,
     setIsCreateTripOpen,
     selectedProfileAvatar,
-    recommendationPeople,
-    setRecommendationPeople,
+    recommendationCompanion,
+    setRecommendationCompanion,
     recommendationStyle,
     setRecommendationStyle,
     recommendationRegion,
@@ -268,20 +269,37 @@ export default function TripsListView() {
                     )}
                     <Pressable
                       onPress={() => setInviteTrip(trip)}
-                      accessibilityLabel={`${trip.title} 팀원 관리`}
+                      accessibilityLabel={`${trip.title} 팀원 관리, 팀원 ${trip.memberCount}명`}
                       className="flex-row items-center gap-1.5 rounded-lg border border-[#075953] bg-[#56EADD] px-2 py-1 active:scale-95"
                     >
                       {/*
-                        내 얼굴만 보여 준다. 전에는 옆에 은발 버킷햇 아바타를 박아
-                        두어, 그 사람이 팀원인 것처럼 모든 여행에 똑같이 나왔다.
-                        여행 목록 응답에는 팀원이 들어 있지 않아 실제 얼굴을 알 수
-                        없으므로, 모르는 것을 지어내는 대신 비운다.
+                        서버가 members 를 주기 시작했으므로 실제 팀원 얼굴을 겹쳐
+                        보여 준다. 옛 응답이라 비어 있으면 내 얼굴만 둔다. 전에는
+                        은발 버킷햇 아바타를 박아 두어, 그 사람이 팀원인 것처럼
+                        모든 여행에 똑같이 나왔다.
                       */}
-                      <Image
-                        source={toImageSource(profileAvatarSource(selectedProfileAvatar))}
-                        className="h-4 w-4 rounded border border-white"
-                      />
-                      <Text className="text-[8px] font-black text-[#075953]">팀원 추가·수정</Text>
+                      <View className="flex-row items-center">
+                        {(trip.members.length > 0
+                          ? trip.members.slice(0, 3).map((m) => ({
+                              key: String(m.userId),
+                              src: otherUserAvatar(m.avatarImageUrl, m.profileImageUrl),
+                            }))
+                          : [{ key: 'me', src: profileAvatarSource(selectedProfileAvatar) }]
+                        ).map((m, i) => (
+                          <View
+                            key={m.key}
+                            style={{ marginLeft: i === 0 ? 0 : -5 }}
+                            className="h-4 w-4 items-center justify-center overflow-hidden rounded border border-white bg-white"
+                          >
+                            {isImageAvatar(m.src) ? (
+                              <Image source={toImageSource(m.src)} resizeMode="cover" className="h-full w-full" />
+                            ) : (
+                              <Text className="text-[9px]">{m.src}</Text>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                      <Text className="text-[8px] font-black text-[#075953]">팀원 {trip.memberCount}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -322,20 +340,19 @@ export default function TripsListView() {
             <PixelExtractIcon size={42} active />
           </View>
           <Text className="mt-1 text-[10px] font-semibold text-[#075953]">
-            인원과 취향을 고르면 어울리는 장소를 한 번에 찾아드려요.
+            누구와 가는지와 취향을 고르면 어울리는 장소를 한 번에 찾아드려요.
           </Text>
           <View className="mt-3 flex-row gap-2">
+            {/*
+              서버는 사람 수가 아니라 동행 유형을 받는다. 전에는 1~4명+ 를 골라
+              유형으로 옮기느라 가족 여행을 아예 고를 수 없었다.
+            */}
             <PixelSelect
               className="flex-1"
-              accessibilityLabel="여행 인원"
-              value={recommendationPeople}
-              onChange={setRecommendationPeople}
-              options={[
-                { value: '1', label: '1명' },
-                { value: '2', label: '2명' },
-                { value: '3', label: '3명' },
-                { value: '4', label: '4명+' },
-              ]}
+              accessibilityLabel="누구와 가는 여행인지"
+              value={recommendationCompanion}
+              onChange={setRecommendationCompanion}
+              options={COMPANION_TYPES.map((c) => ({ value: c.value, label: c.label }))}
             />
             <PixelSelect
               className="flex-1"

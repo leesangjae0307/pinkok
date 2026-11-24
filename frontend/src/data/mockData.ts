@@ -16,6 +16,23 @@ export const toImageSource = (src: AvatarSource) =>
 
 export type TabType = 'home' | 'extract' | 'trips' | 'pinlog' | 'profile';
 
+/**
+ * 여행에 함께하는 사람 한 명. 서버가 여행 응답에 실어 주는 값 그대로다.
+ *
+ * 아바타와 사진 중 하나만 채워져 오므로, 그릴 때 otherUserAvatar() 로 고른다.
+ * 이메일 같은 개인정보는 서버도 주지 않고 화면에도 쓰지 않는다.
+ */
+export interface TripMemberInfo {
+  userId: number;
+  nickname: string;
+  avatarImageUrl: string | null;
+  profileImageUrl: string | null;
+  /** OWNER / MEMBER */
+  role: string;
+  /** 나 자신인지 */
+  me: boolean;
+}
+
 export interface TripFolder {
   id: number;
   title: string;
@@ -30,6 +47,10 @@ export interface TripFolder {
   tags: string[];
   /** 내가 이 여행의 주인인지. 삭제처럼 OWNER 만 되는 동작을 가릴 때 쓴다. */
   isOwner?: boolean;
+  /** 함께 가는 사람들. 서버가 주지 않던 옛 응답에서는 빈 배열이다. */
+  members: TripMemberInfo[];
+  /** 나를 포함한 전체 팀원 수. */
+  memberCount: number;
 }
 
 export interface PlaceItem {

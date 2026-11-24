@@ -36,18 +36,18 @@ export interface RecommendationCreatePayload {
 }
 
 /**
- * 화면의 인원 수를 서버의 동행 유형으로 옮긴다.
+ * 서버가 받는 동행 유형. 화면의 선택지와 1:1 로 맞춘다.
  *
- * 서버에는 사람 수를 받는 자리가 없고 동행 유형(SOLO/COUPLE/FAMILY/FRIEND)만
- * 있다. 그래서 1명은 혼자, 2명은 커플, 그보다 많으면 우정여행으로 본다.
- * 가족 여행은 이 화면에서 고를 수 없다.
+ * 전에는 화면에서 사람 수(1~4명+)를 고르게 하고 1명→SOLO, 2명→COUPLE,
+ * 그 이상→FRIEND 로 옮겼다. 서버에는 사람 수를 받는 자리가 없는데다
+ * 그렇게 옮기면 FAMILY 를 영영 고를 수 없어서, 유형을 그대로 고르게 한다.
  */
-export function companionTypeOf(people: string): string {
-  const n = Number(people);
-  if (n <= 1) {return 'SOLO';}
-  if (n === 2) {return 'COUPLE';}
-  return 'FRIEND';
-}
+export const COMPANION_TYPES = [
+  { value: 'SOLO', label: '혼자' },
+  { value: 'COUPLE', label: '커플' },
+  { value: 'FRIEND', label: '친구' },
+  { value: 'FAMILY', label: '가족' },
+] as const;
 
 /**
  * 추천 요청. 바로 202 로 끝나고 실제 추천은 뒤에서 만들어진다.

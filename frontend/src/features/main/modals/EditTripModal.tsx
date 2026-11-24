@@ -92,7 +92,14 @@ export default function EditTripModal({
       onSaved(payload);
       onClose();
     } catch (e) {
-      setSaveError(errorMessage(e, '여행을 수정하지 못했어요.'));
+      // 해시태그를 비롯한 여행 수정은 OWNER 만 된다. 팀원에게는 수정 버튼 자체를
+      // 내주지 않지만, 그 사이 권한이 바뀌었을 수도 있으니 403 은 따로 말해 준다.
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      setSaveError(
+        status === 403
+          ? '여행을 만든 사람만 수정할 수 있어요.'
+          : errorMessage(e, '여행을 수정하지 못했어요.'),
+      );
     } finally {
       setIsSaving(false);
     }

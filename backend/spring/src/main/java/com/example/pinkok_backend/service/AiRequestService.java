@@ -74,6 +74,7 @@ public class AiRequestService {
     private final NotificationService notificationService;
     private final TaskExecutor aiTaskExecutor;
     private final ObjectMapper objectMapper;
+    private final RecommendationService recommendationService;
 
     public AiRequestService(AiRequestRepository aiRequestRepository,
                             AiRequestImageRepository aiRequestImageRepository,
@@ -84,7 +85,8 @@ public class AiRequestService {
                             PlaceCandidateService placeCandidateService,
                             NotificationService notificationService,
                             TaskExecutor aiTaskExecutor,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            RecommendationService recommendationService) {
         this.aiRequestRepository = aiRequestRepository;
         this.aiRequestImageRepository = aiRequestImageRepository;
         this.tripRepository = tripRepository;
@@ -95,6 +97,7 @@ public class AiRequestService {
         this.notificationService = notificationService;
         this.aiTaskExecutor = aiTaskExecutor;
         this.objectMapper = objectMapper;
+        this.recommendationService = recommendationService;
     }
 
     /** 요청을 접수만 하고 바로 응답한다 (PENDING). 실제 Gemini 호출은 별도 스레드에서 비동기로 진행된다. */
@@ -158,20 +161,25 @@ public class AiRequestService {
     }
 
     /**
-     * 실패한 장소 추출을 같은 입력(링크·글·스크린샷)으로 다시 돌린다. 앱의 "다시 시도" 버튼용.
+     * 실패한 AI 요청을 같은 입력으로 다시 돌린다. 앱의 "다시 시도" 버튼용.
      *
-     * <p>새 요청을 만들지 않고 같은 요청을 되살리는 이유는, 스크린샷을 다시 올리지 않아도 되기 때문이다
+     * <p>장소 추출: 새 요청을 만들지 않고 같은 요청을 되살린다. 스크린샷을 다시 올리지 않아도 되기 때문이다
      * (올린 이미지는 ai_request_images 에 남아 있다).
-     * 맞춤 추천은 요청 조건이 따로 저장되지 않아 다시 돌릴 수 없으므로, 추천은 새로 요청하면 된다.
+     * <p>맞춤 추천: 요청할 때 남긴 조건(request_options)으로 다시 돌린다 - {@link RecommendationService#retry}.
      */
     public AiRequestResponse retry(Long id, Long userId) {
         AiRequest aiRequest = getOwnedOrThrow(id, userId);
-        if (!REQUEST_TYPE_PLACE_EXTRACT.equals(aiRequest.getRequestType())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장소 추출 요청만 다시 시도할 수 있습니다.");
+        boolean extract = REQUEST_TYPE_PLACE_EXTRACT.equals(aiRequest.getRequestType());
+        boolean recommend = RecommendationService.REQUEST_TYPE_RECOMMEND.equals(aiRequest.getRequestType());
+        if (!extract && !recommend) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장소 추출과 맞춤 추천만 다시 시도할 수 있습니다.");
         }
         if (!GeminiJobRunner.STATUS_FAILED.equals(aiRequest.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "실패한 요청만 다시 시도할 수 있습니다. (status=" + aiRequest.getStatus() + ")");
+        }
+        if (recommend) {
+            return recommendationService.retry(aiRequest, userId);
         }
 
         aiRequest.setStatus(STATUS_PENDING);

@@ -38,6 +38,7 @@ public class ItineraryItemService {
     private final TripAccessGuard tripAccessGuard;
     private final DiaryRepository diaryRepository;
     private final DiaryMediaRepository diaryMediaRepository;
+    private final DiaryService diaryService;
 
     public ItineraryItemService(ItineraryItemRepository itineraryItemRepository,
                                 ItineraryDayRepository itineraryDayRepository,
@@ -45,7 +46,8 @@ public class ItineraryItemService {
                                 PlaceService placeService,
                                 TripAccessGuard tripAccessGuard,
                                 DiaryRepository diaryRepository,
-                                DiaryMediaRepository diaryMediaRepository) {
+                                DiaryMediaRepository diaryMediaRepository,
+                                DiaryService diaryService) {
         this.itineraryItemRepository = itineraryItemRepository;
         this.itineraryDayRepository = itineraryDayRepository;
         this.tripRepository = tripRepository;
@@ -53,6 +55,7 @@ public class ItineraryItemService {
         this.tripAccessGuard = tripAccessGuard;
         this.diaryRepository = diaryRepository;
         this.diaryMediaRepository = diaryMediaRepository;
+        this.diaryService = diaryService;
     }
 
     @Transactional
@@ -139,11 +142,16 @@ public class ItineraryItemService {
         return ItineraryItemResponse.from(saved, statsOf(saved.getTrip().getId()).get(saved.getId()));
     }
 
+    /**
+     * 핀을 지운다. 팀원 누구나 지울 수 있고, 그 핀에 달린 팀원 모두의 기록(사진·영상 포함)도 함께 지워진다
+     * - 앱 확인창이 "팀 기록도 함께 사라집니다" 로 안내한다. 전에는 기록이 핀을 외래키로 물고 있어 삭제가 500 으로 실패했다.
+     */
     @Transactional
     public void delete(Long itemId, Long userId) {
         ItineraryItem item = getItemOrThrow(itemId);
         tripAccessGuard.requireMember(item.getTrip().getId(), userId);
         Long dayId = dayIdOf(item);
+        diaryService.deleteAllOfItem(itemId);
         itineraryItemRepository.delete(item);
         itineraryItemRepository.flush();
         compactDay(dayId);

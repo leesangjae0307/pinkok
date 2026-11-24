@@ -75,19 +75,44 @@ api.interceptors.response.use(
   },
 );
 
+/** 요청이 서버에 닿지 못했는지(비행기 모드, 와이파이 끊김, 서버가 꺼져 있음). */
+export function isNetworkError(e: unknown): boolean {
+  const err = e as AxiosError;
+  return !!err?.isAxiosError && !err.response && !isTimeoutError(e);
+}
+
+/** 서버가 제한 시간(15초) 안에 답하지 않았는지. */
+export function isTimeoutError(e: unknown): boolean {
+  const err = e as AxiosError;
+  if (!err?.isAxiosError || err.response) {return false;}
+  return err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || /timeout/i.test(err.message ?? '');
+}
+
 /**
  * 서버가 준 한국어 메시지를 꺼낸다. 토스트·Alert 에 그대로 쓸 수 있다.
  *
  * 검증 실패(400)면 `message` 는 "입력값이 올바르지 않습니다." 라는 총평이고
  * 어느 항목이 문제인지는 `errors` 맵에만 있다. 그것까지 붙여야 사용자가
  * 무엇을 고쳐야 할지 알 수 있다.
+ *
+ * 서버에 닿지도 못한 오류에는 fallback 을 쓰지 않는다. 호출하는 쪽의 fallback 은
+ * "이메일 또는 비밀번호를 확인해 주세요" 처럼 그 요청이 거절당했다는 뜻이라,
+ * 인터넷이 끊겼을 때 그대로 보여 주면 사용자가 제 계정을 의심하게 된다.
  */
 export function errorMessage(
   e: unknown,
   fallback = '잠시 후 다시 시도해 주세요.',
 ): string {
-  const data = (e as AxiosError<{message?: string; errors?: Record<string, string>}>)
-    ?.response?.data;
+  if (isTimeoutError(e)) {return '서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.';}
+  if (isNetworkError(e)) {return '인터넷 연결을 확인해 주세요.';}
+
+  const err = e as AxiosError<{message?: string; errors?: Record<string, string>}>;
+  // 5xx 는 서버가 주는 문구가 "Internal Server Error" 라 사용자에게 도움이 안 된다.
+  if ((err?.response?.status ?? 0) >= 500) {
+    return '일시적인 서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+  }
+
+  const data = err?.response?.data;
   const fields = Object.values(data?.errors ?? {}).filter(Boolean);
   if (fields.length > 0) {return fields.join('\n');}
   return data?.message ?? fallback;

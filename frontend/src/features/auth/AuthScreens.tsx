@@ -411,9 +411,17 @@ function LoginScreen({
       // 값이라 토큰과 사용자가 어긋날 수 없다.
       onComplete(await login(email.trim(), password));
     } catch (e) {
+      // 401 일 때만 계정을 의심하게 한다. 인터넷 끊김·시간 초과·서버 오류는
+      // errorMessage 가 제 문구로 바꿔 주므로 여기 fallback 까지 오지 않는다.
+      const status = (e as {response?: {status?: number}})?.response?.status;
       Alert.alert(
         'PINKOK',
-        errorMessage(e, '이메일 또는 비밀번호를 확인해 주세요.'),
+        errorMessage(
+          e,
+          status === 401
+            ? '이메일 또는 비밀번호를 확인해 주세요.'
+            : '로그인에 실패했습니다. 다시 시도해 주세요.',
+        ),
       );
     } finally {
       setIsSubmitting(false);
@@ -1019,10 +1027,40 @@ function SignUpScreen({
       // 한 번 더 해야 하므로, 화면에 쓸 사용자도 로그인 응답 쪽을 쓴다.
       onComplete(await login(email.trim(), password));
     } catch (e) {
-      Alert.alert(
-        'PINKOK',
-        errorMessage(e, '가입에 실패했어요. 입력 내용을 확인해 주세요.'),
-      );
+      const message = errorMessage(e, '가입에 실패했어요. 입력 내용을 확인해 주세요.');
+      /*
+        중복은 가입을 눌러야 드러난다(가입 전에 물어볼 API 가 아직 없다).
+        그래서 어느 칸이 문제인지라도 그 칸 밑에 적어 준다. 팝업 하나만 띄우면
+        긴 양식 어디를 고쳐야 할지 알 수 없다.
+      */
+      const data = (
+        e as {
+          response?: {
+            data?: { message?: string; errorCode?: string; errors?: Record<string, string> };
+          };
+        }
+      )?.response?.data;
+      if (data) {
+        const emailFieldMessage = data.errors?.email;
+        const usernameFieldMessage = data.errors?.username;
+        const whole = [
+          data.errorCode,
+          data.message,
+          ...Object.entries(data.errors ?? {}).flat(),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (emailFieldMessage || whole.includes('email') || whole.includes('이메일')) {
+          setIsEmailChecked(false);
+          setEmailCheckMessage(`⚠️ ${emailFieldMessage ?? message}`);
+        }
+        if (usernameFieldMessage || whole.includes('username') || whole.includes('아이디')) {
+          setIsUsernameChecked(false);
+          setUsernameCheckMessage(`⚠️ ${usernameFieldMessage ?? message}`);
+        }
+      }
+      Alert.alert('PINKOK', message);
     } finally {
       setIsSubmitting(false);
     }

@@ -32,12 +32,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -56,7 +58,7 @@ import java.util.stream.Stream;
 @Service
 public class RecommendationService {
 
-    private static final String REQUEST_TYPE_RECOMMEND = "RECOMMEND";
+    static final String REQUEST_TYPE_RECOMMEND = "RECOMMEND";
     private static final String INPUT_TYPE_TEXT = "TEXT";
 
     private static final String STATUS_SUGGESTED = "SUGGESTED";
@@ -158,6 +160,7 @@ public class RecommendationService {
                 + " | 지역=" + orDash(params.region())
                 + " | 스타일=" + (params.styleCodes().isEmpty() ? "-" : String.join(",", params.styleCodes()))
                 + " | 개수=" + params.count());
+        aiRequest.setRequestOptions(toJson(params));
         aiRequest.setStatus(GeminiJobRunner.STATUS_PENDING);
         aiRequest.setRetryCount(0);
         aiRequest.setRequestedAt(LocalDateTime.now());
@@ -169,6 +172,34 @@ public class RecommendationService {
         // 테스트처럼 동기 실행 환경이면 위 execute() 가 이미 끝나 있을 수 있어 최신 상태를 다시 읽는다.
         AiRequest latest = aiRequestRepository.findById(aiRequestId).orElse(aiRequest);
         return AiRequestResponse.of(latest, null);
+    }
+
+    /**
+     * 실패한 추천을 처음 요청과 같은 조건으로 다시 돌린다. {@code POST /ai-requests/{id}/retry} 가 추천일 때 부른다.
+     *
+     * <p>소유자·FAILED 확인은 부르는 쪽(AiRequestService.retry)에서 끝냈다. 여기서는 아직 그 여행의 팀원인지와
+     * 조건이 남아 있는지만 본다. 조건을 저장하기 전에 만든 옛 요청은 다시 돌릴 수 없어 새로 요청하라고 알린다.
+     */
+    public AiRequestResponse retry(AiRequest aiRequest, Long userId) {
+        tripAccessGuard.requireMember(aiRequest.getTrip().getId(), userId);
+        Params params = fromJson(aiRequest.getRequestOptions());
+        if (params == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "요청 조건이 남아 있지 않은 예전 추천이라 다시 시도할 수 없습니다. 추천을 새로 요청해 주세요.");
+        }
+
+        Long aiRequestId = aiRequest.getId();
+        aiRequest.setStatus(GeminiJobRunner.STATUS_PENDING);
+        aiRequest.setErrorCode(null);
+        aiRequest.setRetryCount(0);
+        aiRequest.setRawResponse(null);
+        aiRequest.setCompletedAt(null);
+        aiRequestRepository.save(aiRequest);
+
+        aiTaskExecutor.execute(() -> process(aiRequestId, params));
+
+        // 테스트처럼 동기 실행 환경이면 이미 끝나 있을 수 있어 최신 상태를 다시 읽는다.
+        return AiRequestResponse.of(aiRequestRepository.findById(aiRequestId).orElse(aiRequest), null);
     }
 
     @Transactional(readOnly = true)
@@ -431,6 +462,39 @@ public class RecommendationService {
         if (!STATUS_SUGGESTED.equals(recommendation.getStatus())) {
             throw new IllegalArgumentException("이미 처리된 추천입니다. (" + recommendation.getStatus() + ")");
         }
+    }
+
+    /** 다시 시도할 때 쓰려고 요청 조건을 JSON 으로 남긴다. */
+    private String toJson(Params params) {
+        Map<String, Object> options = new LinkedHashMap<>();
+        options.put("companionType", params.companionType());
+        options.put("region", params.region());
+        options.put("styleCodes", params.styleCodes());
+        options.put("count", params.count());
+        return objectMapper.writeValueAsString(options);
+    }
+
+    /** 남긴 조건을 되읽는다. 없거나 깨졌으면 null. */
+    private Params fromJson(String json) {
+        if (!StringUtils.hasText(json)) {
+            return null;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            List<String> styleCodes = new ArrayList<>();
+            node.path("styleCodes").forEach(code -> styleCodes.add(code.asString()));
+            return new Params(
+                    textOrNull(node.path("companionType")),
+                    textOrNull(node.path("region")),
+                    List.copyOf(styleCodes),
+                    node.path("count").asInt(DEFAULT_COUNT));
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static String textOrNull(JsonNode node) {
+        return node.isString() ? node.asString() : null;
     }
 
     // ------------------------------------------------------------------

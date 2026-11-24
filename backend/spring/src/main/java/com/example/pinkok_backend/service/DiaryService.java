@@ -11,6 +11,7 @@ import com.example.pinkok_backend.entity.User;
 import com.example.pinkok_backend.repository.DiaryMediaRepository;
 import com.example.pinkok_backend.repository.DiaryRepository;
 import com.example.pinkok_backend.repository.ItineraryItemRepository;
+import com.example.pinkok_backend.repository.PinlogClipRepository;
 import com.example.pinkok_backend.repository.UserRepository;
 import com.example.pinkok_backend.security.TripAccessGuard;
 import org.springframework.http.HttpStatus;
@@ -20,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,19 +50,22 @@ public class DiaryService {
     private final UserRepository userRepository;
     private final TripAccessGuard tripAccessGuard;
     private final FileService fileService;
+    private final PinlogClipRepository pinlogClipRepository;
 
     public DiaryService(DiaryRepository diaryRepository,
                         DiaryMediaRepository diaryMediaRepository,
                         ItineraryItemRepository itineraryItemRepository,
                         UserRepository userRepository,
                         TripAccessGuard tripAccessGuard,
-                        FileService fileService) {
+                        FileService fileService,
+                        PinlogClipRepository pinlogClipRepository) {
         this.diaryRepository = diaryRepository;
         this.diaryMediaRepository = diaryMediaRepository;
         this.itineraryItemRepository = itineraryItemRepository;
         this.userRepository = userRepository;
         this.tripAccessGuard = tripAccessGuard;
         this.fileService = fileService;
+        this.pinlogClipRepository = pinlogClipRepository;
     }
 
     @Transactional
@@ -158,12 +164,39 @@ public class DiaryService {
     public void delete(Long diaryId, Long userId) {
         Diary diary = getDiaryOrThrow(diaryId);
         requireAuthor(diary, userId);
+        deleteDiaries(List.of(diary));
+    }
 
-        List<DiaryMedia> media = diaryMediaRepository.findAllByDiary_IdOrderByDisplayOrderAsc(diaryId);
-        diaryMediaRepository.deleteAllByDiary_Id(diaryId);
-        diaryRepository.delete(diary);
+    /**
+     * 핀 하나에 달린 팀원 모두의 기록을 첨부·파일까지 지운다. 핀을 지우기 직전에 부른다
+     * (기록이 핀을 외래키로 물고 있어 남아 있으면 핀을 못 지운다). 권한 확인은 부르는 쪽에서 끝냈다.
+     */
+    @Transactional
+    public void deleteAllOfItem(Long itineraryItemId) {
+        deleteDiaries(diaryRepository.findAllByItineraryItemId(itineraryItemId));
+    }
 
+    /** 기록 → 첨부를 쓰던 PinLog 클립 행 → 첨부 → 기록 순으로 지우고, 파일은 커밋된 뒤에 지운다. */
+    private void deleteDiaries(List<Diary> diaries) {
+        if (diaries.isEmpty()) {
+            return;
+        }
+        List<Long> diaryIds = diaries.stream().map(Diary::getId).toList();
+        List<DiaryMedia> media = diaryMediaRepository.findAllByDiary_IdInOrderByDiary_IdAscDisplayOrderAsc(diaryIds);
+        deleteMediaRows(media);
+        diaryRepository.deleteAll(diaries);
+        diaryRepository.flush();
         media.forEach(m -> fileService.deleteAfterCommit(m.getFileUrl()));
+    }
+
+    /** 첨부 행을 지운다. PinLog 클립이 물고 있으면 클립 행을 먼저 지운다. */
+    private void deleteMediaRows(List<DiaryMedia> media) {
+        if (media.isEmpty()) {
+            return;
+        }
+        pinlogClipRepository.deleteAllByDiaryMediaIdIn(media.stream().map(DiaryMedia::getId).toList());
+        diaryMediaRepository.deleteAll(media);
+        diaryMediaRepository.flush();
     }
 
     /**
@@ -171,38 +204,45 @@ public class DiaryService {
      *
      * <p>사진 한 장만 지우는 API를 따로 두지 않고 "보낸 목록이 곧 최종 상태"로 정한 이유는,
      * 앱에서 편집 화면을 닫을 때 남아 있는 목록을 그대로 보내면 되기 때문이다.
-     * 목록에서 빠진 파일은 폴더에서도 지운다.
+     *
+     * <p>새 목록에 그대로 남은 파일은 행을 지우지 않고 순서만 고친다. 전에는 전부 지우고 다시 넣었는데,
+     * PinLog 에 쓰인 첨부는 클립이 외래키로 물고 있어서 기록을 고치기만 해도 실패했다.
+     * 목록에서 빠진 첨부만 지우고(그 첨부를 쓰던 클립 행도 함께), 파일도 폴더에서 지운다.
      */
     private List<DiaryMedia> replaceMedia(Diary diary, List<DiaryMediaRequest> requests, List<DiaryMedia> current) {
         List<DiaryMediaRequest> wanted = requests == null ? List.of() : requests;
         validate(wanted);
 
-        if (!current.isEmpty()) {
-            diaryMediaRepository.deleteAllByDiary_Id(diary.getId());
-            diaryMediaRepository.flush();
-        }
+        // 같은 파일 주소의 기존 행은 다시 쓴다 (validate 가 한 목록 안의 중복 주소를 막는다)
+        Map<String, Deque<DiaryMedia>> reusable = new LinkedHashMap<>();
+        current.forEach(m -> reusable.computeIfAbsent(m.getFileUrl(), url -> new ArrayDeque<>()).add(m));
 
         LocalDateTime now = LocalDateTime.now();
         List<DiaryMedia> saved = new ArrayList<>();
         for (int i = 0; i < wanted.size(); i++) {
             DiaryMediaRequest request = wanted.get(i);
-            String mediaType = fileService.resolveMediaType(request.getFileUrl());
-
-            DiaryMedia media = new DiaryMedia();
-            media.setDiary(diary);
-            media.setMediaType(mediaType);
-            media.setFileUrl(request.getFileUrl());
-            media.setThumbnailUrl(fileService.thumbnailUrlOf(request.getFileUrl()));
-            media.setDurationMs(FileService.MEDIA_TYPE_VIDEO.equals(mediaType) ? request.getDurationMs() : null);
+            Deque<DiaryMedia> same = reusable.get(request.getFileUrl());
+            DiaryMedia media = same == null ? null : same.poll();
+            if (media == null) {
+                String mediaType = fileService.resolveMediaType(request.getFileUrl());
+                media = new DiaryMedia();
+                media.setDiary(diary);
+                media.setMediaType(mediaType);
+                media.setFileUrl(request.getFileUrl());
+                media.setThumbnailUrl(fileService.thumbnailUrlOf(request.getFileUrl()));
+                media.setDurationMs(FileService.MEDIA_TYPE_VIDEO.equals(mediaType) ? request.getDurationMs() : null);
+                media.setCreatedAt(now);
+            }
             media.setDisplayOrder(i + 1);
-            media.setCreatedAt(now);
             saved.add(media);
         }
+
+        List<DiaryMedia> removed = reusable.values().stream().flatMap(Deque::stream).toList();
+        deleteMediaRows(removed);
         diaryMediaRepository.saveAll(saved);
 
-        // 새 목록에 없는 예전 파일만 폴더에서 지운다 (그대로 남은 파일은 건드리면 안 된다)
         Set<String> keptUrls = new HashSet<>(saved.stream().map(DiaryMedia::getFileUrl).toList());
-        current.stream()
+        removed.stream()
                 .map(DiaryMedia::getFileUrl)
                 .filter(url -> !keptUrls.contains(url))
                 .forEach(fileService::deleteAfterCommit);

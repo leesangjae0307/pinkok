@@ -407,6 +407,73 @@ class RecommendationTest {
                 .andExpect(jsonPath("$.places").doesNotExist());
     }
 
+    // ------------------------------------------------------------------ 다시 시도
+
+    @Test
+    @DisplayName("실패한 추천은 POST /ai-requests/{id}/retry 로 처음과 같은 조건(동행·지역·스타일·개수)으로 다시 돌린다")
+    void retry_failedRecommendation_rerunsWithSameOptions() throws Exception {
+        String token = signupAndLogin("retry@pinkok.com", "retryuser");
+        long tripId = createJejuTrip(token);
+        Mockito.when(geminiClient.generate(Mockito.any()))
+                .thenReturn(successResponse("죄송하지만 추천할 수 없습니다.", 10, 10))
+                .thenReturn(successResponse(TWO_PLACES_JSON, 10, 10));
+
+        MvcResult created = requestRecommendation(token, String.format(
+                "{\"tripId\":%d,\"companionType\":\"family\",\"region\":\"서귀포\",\"styleCodes\":[\"FOOD\"],\"count\":1}", tripId));
+        Number aiRequestId = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        assertEquals("FAILED", aiRequestRepository.findById(aiRequestId.longValue()).orElseThrow().getStatus());
+
+        mockMvc.perform(post("/ai-requests/" + aiRequestId + "/retry").header("Authorization", "Bearer " + token))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.id").value(aiRequestId))
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+        // 두 번째 호출의 프롬프트가 처음 요청 조건을 그대로 담는다
+        ArgumentCaptor<GeminiGenerateRequest> captor = ArgumentCaptor.forClass(GeminiGenerateRequest.class);
+        Mockito.verify(geminiClient, Mockito.times(2)).generate(captor.capture());
+        String retryPrompt = captor.getAllValues().get(1).getContents().get(0).getParts().get(0).getText();
+        assertTrue(retryPrompt.contains("가족"), "요청한 동행(FAMILY)이 다시 쓰여야 한다");
+        assertTrue(retryPrompt.contains("서귀포"), "요청한 지역이 다시 쓰여야 한다");
+        assertTrue(retryPrompt.contains("맛집 위주"), "요청한 스타일이 다시 쓰여야 한다");
+        assertTrue(retryPrompt.contains("최대 1개"), "요청한 개수가 다시 쓰여야 한다");
+
+        mockMvc.perform(get("/recommendations").param("tripId", String.valueOf(tripId))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("성산일출봉"));
+    }
+
+    @Test
+    @DisplayName("조건을 저장하기 전에 만든 옛 추천 요청은 다시 시도할 수 없다 (409)")
+    void retry_legacyRecommendationWithoutOptions_returns409() throws Exception {
+        String token = signupAndLogin("retry2@pinkok.com", "retryuser2");
+        long tripId = createJejuTrip(token);
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse("형식이 아닌 응답", 10, 10));
+
+        MvcResult created = requestRecommendation(token, String.format("{\"tripId\":%d}", tripId));
+        Number aiRequestId = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        var aiRequest = aiRequestRepository.findById(aiRequestId.longValue()).orElseThrow();
+        aiRequest.setRequestOptions(null); // 이번 변경 전에 만든 요청처럼
+        aiRequestRepository.save(aiRequest);
+
+        mockMvc.perform(post("/ai-requests/" + aiRequestId + "/retry").header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("성공한 추천은 다시 시도할 수 없다 (409)")
+    void retry_succeededRecommendation_returns409() throws Exception {
+        String token = signupAndLogin("retry3@pinkok.com", "retryuser3");
+        long tripId = createJejuTrip(token);
+        Mockito.when(geminiClient.generate(Mockito.any())).thenReturn(successResponse(TWO_PLACES_JSON, 10, 10));
+
+        MvcResult created = requestRecommendation(token, String.format("{\"tripId\":%d}", tripId));
+        Number aiRequestId = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+
+        mockMvc.perform(post("/ai-requests/" + aiRequestId + "/retry").header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
+    }
+
     // ------------------------------------------------------------------ 검증 · 권한
 
     @Test

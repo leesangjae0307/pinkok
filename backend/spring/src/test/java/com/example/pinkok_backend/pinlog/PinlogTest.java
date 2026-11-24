@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -419,7 +420,7 @@ class PinlogTest {
                         .header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString();
         assertThat((String) JsonPath.read(doneJson, "$.downloadFileName"))
-                .isEqualTo("PinKok_제주_3박4일_" + java.time.LocalDate.now()
+                .isEqualTo("PinKok_제주_3박4일_" + java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
                         .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")) + ".mp4");
 
         String disposition = download.getResponse().getHeader("Content-Disposition");
@@ -632,5 +633,113 @@ class PinlogTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"tripId\":1}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ---------- PinLog 에 쓰인 기록이 있어도 핀 삭제·기록 수정이 된다 ----------
+
+    @Test
+    @DisplayName("팀원 기록이 달린 핀을 지우면 기록·첨부·파일까지 함께 지워지고, 그 첨부로 만든 PinLog 는 남는다")
+    void deletePin_removesTeamDiariesEvenIfUsedInPinlog() throws Exception {
+        String owner = signupAndLogin("pindel1@pinkok.com", "pindel1");
+        String mate = signupAndLogin("pindel2@pinkok.com", "pindel2");
+        Long tripId = createTrip(owner);
+        joinTrip(tripId, "pindel2@pinkok.com");
+        Long dayId = createDay(owner, tripId, 1);
+        Long pinId = addPin(owner, tripId, dayId, "협재해수욕장");
+        Long otherPin = addPin(owner, tripId, dayId, "카멜리아힐");
+
+        String mateVideo = uploadVideo(mate);
+        Long mateMedia = writeDiaryWithMedia(mate, pinId, mateVideo);
+        writeDiaryWithMedia(owner, pinId, uploadPhoto(owner));
+        Long keptMedia = writeDiaryWithMedia(owner, otherPin, uploadVideo(owner));
+
+        MvcResult created = createPinlog(owner, String.format(
+                "{\"tripId\":%d,\"clips\":[{\"diaryMediaId\":%d},{\"diaryMediaId\":%d}]}", tripId, mateMedia, keptMedia));
+        Long pinlogId = ((Number) JsonPath.read(created.getResponse().getContentAsString(), "$.id")).longValue();
+        String doneJson = awaitFinalStatus(owner, pinlogId);
+        // 응답 시각에는 UTC 표시(Z)가 붙는다
+        assertThat((String) JsonPath.read(doneJson, "$.createdAt")).endsWith("Z");
+
+        // 팀원 누구나 핀을 지울 수 있고, 남의 기록도 함께 지워진다 (앱 확인창이 안내한다)
+        mockMvc.perform(delete("/itinerary-items/" + pinId).header("Authorization", "Bearer " + owner))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/diaries").param("itineraryItemId", String.valueOf(otherPin))
+                        .header("Authorization", "Bearer " + owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+        mockMvc.perform(get("/diaries").param("tripId", String.valueOf(tripId))
+                        .header("Authorization", "Bearer " + owner))
+                .andExpect(jsonPath("$.length()").value(1));
+        assertThat(storedFile(mateVideo)).doesNotExist();
+
+        // 이미 만든 PinLog 는 남고, 지워진 첨부의 클립만 빠진다
+        String afterJson = mockMvc.perform(get("/pinlogs/" + pinlogId).header("Authorization", "Bearer " + owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DONE"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((Integer) JsonPath.read(afterJson, "$.clips.length()")).isEqualTo(1);
+        assertThat((Integer) JsonPath.read(afterJson, "$.clips[0].diaryMediaId")).isEqualTo(keptMedia.intValue());
+        assertThat(storedFile(JsonPath.read(afterJson, "$.videoUrl"))).exists();
+    }
+
+    @Test
+    @DisplayName("PinLog 에 쓰인 첨부가 있는 기록도 고칠 수 있고, 그대로 둔 첨부는 같은 ID 로 남는다")
+    void updateDiary_keepsMediaUsedInPinlog() throws Exception {
+        String token = signupAndLogin("diaryedit@pinkok.com", "diaryedit");
+        Long tripId = createTrip(token);
+        Long dayId = createDay(token, tripId, 1);
+        Long pinId = addPin(token, tripId, dayId, "협재해수욕장");
+        String video = uploadVideo(token);
+
+        MvcResult diary = mockMvc.perform(post("/diaries")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"itineraryItemId\":%d,\"content\":\"메모\",\"media\":[{\"fileUrl\":\"%s\"}]}",
+                                pinId, video)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String diaryJson = diary.getResponse().getContentAsString();
+        Long diaryId = ((Number) JsonPath.read(diaryJson, "$.id")).longValue();
+        Long videoMedia = ((Number) JsonPath.read(diaryJson, "$.media[0].id")).longValue();
+
+        MvcResult created = createPinlog(token, String.format(
+                "{\"tripId\":%d,\"clips\":[{\"diaryMediaId\":%d}]}", tripId, videoMedia));
+        Long pinlogId = ((Number) JsonPath.read(created.getResponse().getContentAsString(), "$.id")).longValue();
+        awaitFinalStatus(token, pinlogId);
+
+        // 사진을 앞에 하나 더 붙이고 메모도 고친다
+        String photo = uploadPhoto(token);
+        String updated = mockMvc.perform(patch("/diaries/" + diaryId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"content\":\"고친 메모\",\"media\":[{\"fileUrl\":\"%s\"},{\"fileUrl\":\"%s\"}]}",
+                                photo, video)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat((String) JsonPath.read(updated, "$.content")).isEqualTo("고친 메모");
+        assertThat((Integer) JsonPath.read(updated, "$.media.length()")).isEqualTo(2);
+        assertThat((String) JsonPath.read(updated, "$.media[0].fileUrl")).isEqualTo(photo);
+        assertThat((Integer) JsonPath.read(updated, "$.media[1].id")).isEqualTo(videoMedia.intValue());
+        assertThat(storedFile(video)).exists();
+
+        mockMvc.perform(get("/pinlogs/" + pinlogId).header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.clips[0].diaryMediaId").value(videoMedia.intValue()));
+
+        // PinLog 에 쓰인 영상을 기록에서 빼면 클립 행도 함께 빠지고 파일도 지워진다
+        mockMvc.perform(patch("/diaries/" + diaryId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"media\":[{\"fileUrl\":\"%s\"}]}", photo)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.media.length()").value(1));
+        assertThat(storedFile(video)).doesNotExist();
+        mockMvc.perform(get("/pinlogs/" + pinlogId).header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.clips.length()").value(0));
+
+        // 기록 삭제도 된다
+        mockMvc.perform(delete("/diaries/" + diaryId).header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
     }
 }

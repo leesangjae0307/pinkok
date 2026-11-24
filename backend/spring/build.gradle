@@ -51,6 +51,8 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // 운영 서버와 같이 UTC 로 돌린다 (PinkokBackendApplication.main 이 UTC 로 고정하는데, 테스트는 main 을 거치지 않는다)
+    systemProperty 'user.timezone', 'UTC'
 }
 
 // 실행 가능한 jar(bootJar) 하나만 만든다. 일반 jar(-plain.jar)가 같이 생기면

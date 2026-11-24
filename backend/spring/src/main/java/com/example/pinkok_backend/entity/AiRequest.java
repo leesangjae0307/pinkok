@@ -71,6 +71,13 @@ public class AiRequest {
     @Column(name = "raw_response", columnDefinition = "json")
     private String rawResponse;
 
+    /**
+     * 요청 조건 (JSON). 지금은 맞춤 추천만 쓴다 - 동행·지역·스타일·개수를 남겨 두어야 실패했을 때 같은 조건으로 다시 돌릴 수 있다.
+     * 장소 추출은 입력이 source_url·source_text·ai_request_images 에 이미 남아 있어 비워 둔다.
+     */
+    @Column(name = "request_options", columnDefinition = "TEXT")
+    private String requestOptions;
+
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
 

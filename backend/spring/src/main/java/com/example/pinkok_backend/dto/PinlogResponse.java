@@ -5,6 +5,8 @@ import com.example.pinkok_backend.entity.PinlogClip;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -19,6 +21,8 @@ import java.util.List;
 public class PinlogResponse {
 
     private static final DateTimeFormatter FILE_NAME_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
+    /** 파일 이름의 날짜는 사용자가 보는 날짜여야 한다. 서버 시각(UTC)을 그대로 쓰면 한국 오전 9시 전엔 전날이 찍힌다. */
+    private static final ZoneId FILE_NAME_ZONE = ZoneId.of("Asia/Seoul");
 
     private final Long id;
     private final Long tripId;
@@ -83,6 +87,7 @@ public class PinlogResponse {
                 : pinlog.getTitle();
         String safe = base.replaceAll("[\\\\/:*?\"<>|]", "").replaceAll("\\s+", "_").trim();
         LocalDateTime when = pinlog.getCompletedAt() == null ? pinlog.getCreatedAt() : pinlog.getCompletedAt();
-        return "PinKok_" + safe + "_" + when.format(FILE_NAME_DATE) + ".mp4";
+        String date = when.atOffset(ZoneOffset.UTC).atZoneSameInstant(FILE_NAME_ZONE).format(FILE_NAME_DATE);
+        return "PinKok_" + safe + "_" + date + ".mp4";
     }
 }

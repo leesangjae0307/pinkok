@@ -213,6 +213,7 @@ CREATE TABLE ai_requests (
     output_tokens   INT           NULL COMMENT '출력 토큰 수',
     cost_usd        DECIMAL(10,6) NULL COMMENT '요청당 비용(USD)',
     raw_response    JSON          NULL COMMENT 'AI 원본 응답',
+    request_options TEXT          NULL COMMENT '요청 조건 JSON (맞춤 추천 다시 시도용: 동행·지역·스타일·개수)',
     requested_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at    DATETIME      NULL,
     PRIMARY KEY (id),

@@ -37,7 +37,10 @@ public class AiRequestController {
         return aiRequestService.get(id, userId);
     }
 
-    /** 실패한 장소 추출을 같은 입력으로 다시 돌린다. 202 로 바로 응답하고, 이후는 처음 요청과 똑같이 폴링한다. */
+    /**
+     * 실패한 장소 추출·맞춤 추천을 같은 입력(조건)으로 다시 돌린다. 202 로 바로 응답하고, 이후는 처음 요청과 똑같이 폴링한다.
+     * 맞춤 추천은 성공하면 GET /recommendations 로 결과를 읽는다.
+     */
     @PostMapping("/{id}/retry")
     public ResponseEntity<AiRequestResponse> retry(@CurrentUserId Long userId, @PathVariable Long id) {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(aiRequestService.retry(id, userId));

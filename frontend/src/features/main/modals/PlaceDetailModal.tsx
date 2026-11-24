@@ -237,7 +237,7 @@ export default function PlaceDetailModal({
     <Modal transparent visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View className="flex-1 items-center justify-center bg-black/60 p-3">
         <View
-          className="relative w-full max-w-md overflow-hidden rounded-3xl border-4 border-pixel-navy bg-[#bff2e1]"
+          className="relative w-full max-w-md overflow-hidden rounded-3xl border-4 border-pixel-navy bg-[#B4FAF0]"
           style={{ height: '92%', maxHeight: 800 }}
         >
           {/* 헤더 */}

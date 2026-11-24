@@ -40,7 +40,7 @@ module.exports = {
         'sky-primary': '#38BDF8',
         'sky-soft': '#A5F3FC',
         'sky-border': '#0E7490',
-        'auth-canvas': '#BFF2E1',
+        'auth-canvas': '#B4FAF0',
         cloud: '#FFFFFF',
         'cloud-shadow': '#CFFAFE',
         sun: '#FDE047',

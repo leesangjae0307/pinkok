@@ -2,7 +2,8 @@ import api from './axios';
 import { fileUrl } from './fileApi';
 import { DEFAULT_COVERS } from '../assets/images/covers';
 import { daysBetween, toYmd } from '../components/pixel/PixelCalendar';
-import { AvatarSource, TripFolder, TripMemberInfo } from '../data/mockData';
+import { AvatarSource, TripFolder } from '../data/mockData';
+import type { TripMember } from './invitationApi';
 
 /** 서버가 내려주는 여행. 날짜는 'YYYY-MM-DD', createdAt 은 ISO 문자열이다. */
 export interface Trip {
@@ -32,8 +33,6 @@ export interface Trip {
   createdAt: string;
 }
 
-/** 여행 팀원. 필드 이름은 서버 응답 그대로다(avatar 가 아니라 avatarImageUrl). */
-export type TripMember = TripMemberInfo;
 
 export interface TripCreatePayload {
   title: string;

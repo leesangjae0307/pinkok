@@ -43,7 +43,14 @@ import avatarHeadphoneWink from '../../assets/images/avatar-headphone-wink.png';
 
 import avatarSunglasses from '../../assets/images/avatar-sunglasses.png';
 
-import {Me, fetchAvatars, login, signup} from '../../api/authApi';
+import {
+  Me,
+  checkEmailAvailable,
+  checkUsernameAvailable,
+  fetchAvatars,
+  login,
+  signup,
+} from '../../api/authApi';
 
 import {errorMessage} from '../../api/axios';
 
@@ -901,6 +908,11 @@ function SignUpScreen({
 
   const [isUsernameChecked, setIsUsernameChecked] = useState(false);
 
+  /** 서버에 묻는 중. 같은 버튼을 연달아 눌러도 요청이 겹치지 않게 한다. */
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+
   const [usernameCheckMessage, setUsernameCheckMessage] = useState('');
 
   const [usernameFocused, setUsernameFocused] = useState(false);
@@ -952,6 +964,8 @@ function SignUpScreen({
 
   const blockReason = !emailValid
     ? '이메일 형식을 확인해주세요.'
+    : !isEmailChecked
+    ? '이메일 중복 확인을 해주세요.'
     : password.length < 8 || password.length > 64
     ? '비밀번호를 8~64자로 입력해주세요.'
     : confirmation.length === 0
@@ -964,35 +978,65 @@ function SignUpScreen({
     ? '닉네임을 50자 이하로 입력해주세요.'
     : usernameIssue
     ? `아이디: ${usernameIssue}`
+    : !isUsernameChecked
+    ? '아이디 중복 확인을 해주세요.'
     : !requiredTerms
     ? '필수 약관에 동의해주세요.'
     : null;
 
   const canSubmit = blockReason === null && !isSubmitting;
 
-  // 서버의 전용 중복 확인 API가 없으므로 이메일 형식만 검사한다.
+  /*
+    이메일·아이디가 비어 있는지 서버에 묻는다.
 
-  const handleCheckEmailDuplicate = () => {
+    형식이 맞을 때만 묻는다. 서버도 같은 규칙으로 한 번 더 보지만, 틀린 값을
+    보내 봐야 400 만 돌아오고 분당 한도만 깎는다.
+
+    오류가 나면 "사용 가능" 으로 넘기지 않는다. 확인하지 못한 것과 비어 있는 것은
+    다르고, 여기서 잘못 통과시키면 가입 단계에서 거절당한다.
+  */
+  const handleCheckEmailDuplicate = async () => {
+    if (isCheckingEmail) {return;}
     if (!emailValid) {
-      setEmailCheckMessage('올바른 이메일 형식을 입력해주세요.');
       setIsEmailChecked(false);
+      setEmailCheckMessage('올바른 이메일 형식을 입력해주세요.');
       return;
     }
-
-    setIsEmailChecked(true);
-    setEmailCheckMessage('형식은 올바릅니다. 중복 여부는 가입할 때 확인돼요.');
+    setIsCheckingEmail(true);
+    try {
+      const available = await checkEmailAvailable(email.trim());
+      setIsEmailChecked(available);
+      setEmailCheckMessage(
+        available ? '✓ 사용 가능한 이메일이에요.' : '이미 가입된 이메일이에요.',
+      );
+    } catch (e) {
+      setIsEmailChecked(false);
+      setEmailCheckMessage(errorMessage(e, '중복 확인에 실패했어요. 잠시 후 다시 시도해 주세요.'));
+    } finally {
+      setIsCheckingEmail(false);
+    }
   };
 
-  // 아이디도 서버에 중복 확인 API가 없어서 형식만 검사한다. 중복은 가입 요청에서 걸러진다.
-  const handleCheckUsername = () => {
+  const handleCheckUsername = async () => {
+    if (isCheckingUsername) {return;}
     if (usernameIssue) {
       setIsUsernameChecked(false);
       setUsernameCheckMessage(usernameIssue);
       return;
     }
-
-    setIsUsernameChecked(true);
-    setUsernameCheckMessage('✓ 형식은 올바릅니다. 중복 여부는 가입할 때 확인돼요.');
+    setIsCheckingUsername(true);
+    try {
+      const available = await checkUsernameAvailable(usernameNormalized);
+      setIsUsernameChecked(available);
+      setUsernameCheckMessage(
+        available ? '✓ 사용 가능한 아이디예요.' : '이미 사용 중인 아이디예요.',
+      );
+    } catch (e) {
+      setIsUsernameChecked(false);
+      setUsernameCheckMessage(errorMessage(e, '중복 확인에 실패했어요. 잠시 후 다시 시도해 주세요.'));
+    } finally {
+      setIsCheckingUsername(false);
+    }
   };
 
   const handleSignUp = async () => {
@@ -1029,9 +1073,13 @@ function SignUpScreen({
     } catch (e) {
       const message = errorMessage(e, '가입에 실패했어요. 입력 내용을 확인해 주세요.');
       /*
-        중복은 가입을 눌러야 드러난다(가입 전에 물어볼 API 가 아직 없다).
-        그래서 어느 칸이 문제인지라도 그 칸 밑에 적어 준다. 팝업 하나만 띄우면
+        가입 전에 중복을 확인하지만, 확인과 저장 사이에 다른 사람이 먼저 쓸 수
+        있다. 그때 서버는 409 와 errorCode(EMAIL_DUPLICATED/USERNAME_DUPLICATED)
+        를 준다. 어느 칸이 문제인지 그 칸 밑에 적어 준다. 팝업 하나만 띄우면
         긴 양식 어디를 고쳐야 할지 알 수 없다.
+
+        errorCode 가 없는 옛 서버나 검증 실패(400)도 받아내려고 errors 맵과
+        문구까지 함께 본다.
       */
       const data = (
         e as {
@@ -1051,11 +1099,20 @@ function SignUpScreen({
           .filter(Boolean)
           .join(' ')
           .toLowerCase();
-        if (emailFieldMessage || whole.includes('email') || whole.includes('이메일')) {
+        const code = data.errorCode;
+        const emailProblem =
+          code === 'EMAIL_DUPLICATED' ||
+          !!emailFieldMessage ||
+          (!code && (whole.includes('email') || whole.includes('이메일')));
+        const usernameProblemFromServer =
+          code === 'USERNAME_DUPLICATED' ||
+          !!usernameFieldMessage ||
+          (!code && (whole.includes('username') || whole.includes('아이디')));
+        if (emailProblem) {
           setIsEmailChecked(false);
           setEmailCheckMessage(`⚠️ ${emailFieldMessage ?? message}`);
         }
-        if (usernameFieldMessage || whole.includes('username') || whole.includes('아이디')) {
+        if (usernameProblemFromServer) {
           setIsUsernameChecked(false);
           setUsernameCheckMessage(`⚠️ ${usernameFieldMessage ?? message}`);
         }
@@ -1112,6 +1169,8 @@ function SignUpScreen({
 
               <Pressable
                 onPress={handleCheckEmailDuplicate}
+                disabled={isCheckingEmail}
+                style={{opacity: isCheckingEmail ? 0.6 : 1}}
                 className={`items-center justify-center rounded-lg border-2 border-pixel-navy px-3 active:translate-y-1 ${
                   isEmailChecked ? 'bg-teal-500' : 'bg-mint-primary'
                 }`}>
@@ -1119,7 +1178,11 @@ function SignUpScreen({
                   className={`text-xs font-black ${
                     isEmailChecked ? 'text-white' : 'text-pixel-navy'
                   }`}>
-                  {isEmailChecked ? '확인완료 ✓' : '중복확인'}
+                  {isCheckingEmail
+                    ? '확인 중…'
+                    : isEmailChecked
+                    ? '확인완료 ✓'
+                    : '중복확인'}
                 </Text>
               </Pressable>
             </View>
@@ -1169,6 +1232,8 @@ function SignUpScreen({
 
               <Pressable
                 onPress={handleCheckUsername}
+                disabled={isCheckingUsername}
+                style={{opacity: isCheckingUsername ? 0.6 : 1}}
                 className={`items-center justify-center rounded-lg border-2 border-pixel-navy px-3 active:translate-y-1 ${
                   isUsernameChecked ? 'bg-teal-500' : 'bg-mint-primary'
                 }`}>
@@ -1176,7 +1241,11 @@ function SignUpScreen({
                   className={`font-pixel text-[9px] ${
                     isUsernameChecked ? 'text-white' : 'text-pixel-navy'
                   }`}>
-                  {isUsernameChecked ? '확인완료' : '중복 확인'}
+                  {isCheckingUsername
+                    ? '확인 중…'
+                    : isUsernameChecked
+                    ? '확인완료'
+                    : '중복 확인'}
                 </Text>
               </Pressable>
             </View>

@@ -29,6 +29,30 @@ export async function login(email: string, password: string): Promise<Me> {
 }
 
 /**
+ * 가입 전에 이메일이 비어 있는지 묻는다. 로그인 없이 부를 수 있다.
+ *
+ * 형식이 틀리면 400 이고, 분당 60회(IP 기준)를 넘기면 429 다. 둘 다 예외로 올라오니
+ * 호출하는 쪽에서 "사용 가능" 으로 넘기지 않도록 주의한다.
+ *
+ * 여기서 비어 있다고 나와도 가입까지의 사이에 다른 사람이 먼저 쓸 수 있다.
+ * 최종 판단은 POST /auth/signup 이 한다.
+ */
+export async function checkEmailAvailable(email: string): Promise<boolean> {
+  const { data } = await api.get<{ available: boolean }>('/auth/check-email', {
+    params: { email },
+  });
+  return data.available;
+}
+
+/** 아이디(@username)도 같은 방식이다. */
+export async function checkUsernameAvailable(username: string): Promise<boolean> {
+  const { data } = await api.get<{ available: boolean }>('/auth/check-username', {
+    params: { username },
+  });
+  return data.available;
+}
+
+/**
  * 201 과 함께 생성된 사용자를 돌려주지만 토큰은 주지 않는다.
  * 그래서 가입 직후에도 login() 을 한 번 더 호출해야 세션이 선다.
  */

@@ -372,6 +372,8 @@ function useAppState(me: Me, onLogout: () => void) {
   const [extractError, setExtractError] = useState<string | null>(null);
   /** 마지막으로 보낸 추출 요청. 실패했을 때 이것만 있으면 다시 돌릴 수 있다. */
   const [lastAiRequestId, setLastAiRequestId] = useState<number | null>(null);
+  /** 마지막 추천 요청. 같은 조건으로 다시 돌릴 때 쓴다. */
+  const [lastRecommendationRequestId, setLastRecommendationRequestId] = useState<number | null>(null);
   /** 맞춤 추천 결과. 아직 수락·거절하지 않은 것만 담는다. */
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [selectedExtractedPlaceIds, setSelectedExtractedPlaceIds] = useState<number[]>(
@@ -1882,6 +1884,25 @@ function useAppState(me: Me, onLogout: () => void) {
    * 받는 자리가 없고 동행 유형만 있어서, 1명은 혼자, 2명은 커플, 그보다 많으면
    * 우정여행으로 본다.
    */
+  /**
+   * 추천 요청 하나를 끝까지 기다렸다가 결과를 담는다.
+   * 새로 만들 때와 다시 돌릴 때가 똑같아서 한곳에 모아 둔다.
+   */
+  const consumeRecommendationRequest = async (requestId: number, tripId: number) => {
+    setLastRecommendationRequestId(requestId);
+    const finished = await waitForAiRequest(requestId);
+    if (finished.status !== 'SUCCESS') {
+      setRecommendationError(
+        finished.status === 'FAILED'
+          ? `${aiErrorMessage(finished.errorCode)} 다시 시도해 주세요.`
+          : '추천이 너무 오래 걸려 멈췄어요. 다시 시도해 주세요.',
+      );
+      return;
+    }
+    const list = await fetchRecommendations(tripId);
+    setRecommendations(list.filter((r) => r.status === 'SUGGESTED'));
+  };
+
   const handleAiTripRecommendation = async () => {
     if (isRecommending) {return;}
     const region = recommendationRegion.trim();
@@ -1905,23 +1926,47 @@ function useAppState(me: Me, onLogout: () => void) {
         companionType: recommendationCompanion,
         region,
       });
-      const finished = await waitForAiRequest(request.id);
-      if (finished.status !== 'SUCCESS') {
-        // 추천에는 다시 시도 API 가 없다. 실패하면 처음부터 새로 요청해야 한다.
-        setRecommendationError(
-          finished.status === 'FAILED'
-            ? `${aiErrorMessage(finished.errorCode)} 다시 요청해 주세요.`
-            : '추천이 너무 오래 걸려 멈췄어요. 다시 요청해 주세요.',
-        );
-        return;
-      }
-      const list = await fetchRecommendations(trip.id);
-      setRecommendations(list.filter((r) => r.status === 'SUGGESTED'));
+      await consumeRecommendationRequest(request.id, trip.id);
     } catch (e) {
       setRecommendationError(errorMessage(e, '추천을 받지 못했어요.'));
     } finally {
       setIsRecommending(false);
     }
+  };
+
+  /**
+   * 같은 조건으로 추천을 다시 돌린다.
+   *
+   * 서버가 요청 조건(동행·지역·스타일)을 들고 있어, 지역을 다시 적지 않아도 된다.
+   * 조건을 저장하지 않던 옛 요청이나 이미 성공한 요청은 409 로 돌아오므로,
+   * 그때만 처음부터 새로 요청한다.
+   */
+  const handleRetryRecommendation = async () => {
+    if (isRecommending) {return;}
+    const trip = activeTrip ?? trips[0];
+    const requestId = lastRecommendationRequestId;
+    if (requestId === null || !trip) {
+      await handleAiTripRecommendation();
+      return;
+    }
+    setIsRecommending(true);
+    setRecommendationError(null);
+    setRecommendations([]);
+    let needsFreshRequest = false;
+    try {
+      const again = await retryAiRequest(requestId);
+      await consumeRecommendationRequest(again.id, trip.id);
+    } catch (e) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        needsFreshRequest = true;
+      } else {
+        setRecommendationError(errorMessage(e, '다시 시도하지 못했어요.'));
+      }
+    } finally {
+      setIsRecommending(false);
+    }
+    if (needsFreshRequest) {await handleAiTripRecommendation();}
   };
 
   /** 추천 수락 — 서버가 좌표를 찾아 일정에 핀으로 넣는다. 못 찾으면 422 다. */
@@ -2152,6 +2197,7 @@ function useAppState(me: Me, onLogout: () => void) {
     handleRejectInvitation,
     handleOptimizeRoute,
     handleAiTripRecommendation,
+    handleRetryRecommendation,
     handleLogout,
     isDeleteAccountOpen, setIsDeleteAccountOpen,
     handleDeleteAccount,

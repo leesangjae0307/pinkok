@@ -53,6 +53,7 @@ export default function TripsListView() {
     recommendationError,
     hasRequestedRecommendation,
     handleAiTripRecommendation,
+    handleRetryRecommendation,
     recommendations,
     handleAcceptRecommendation,
     handleRejectRecommendation,
@@ -398,12 +399,12 @@ export default function TripsListView() {
             </View>
           ) : null}
 
-          {/* 실패. 다시 누르면 그대로 재시도된다. */}
+          {/* 실패. 같은 조건으로 그대로 다시 돌린다(지역을 다시 적지 않아도 된다). */}
           {!isRecommending && recommendationError ? (
             <View className="mt-3 gap-2 rounded-2xl border-2 border-rose-300 bg-white p-4">
               <Text className="text-[11px] font-bold leading-4 text-rose-700">{recommendationError}</Text>
               <Pressable
-                onPress={handleAiTripRecommendation}
+                onPress={handleRetryRecommendation}
                 className="self-start rounded-lg border-2 border-[#075953] bg-[#56EADD] px-3 py-1.5 active:scale-95"
               >
                 <Text className="text-[10px] font-black text-[#075953]">다시 시도</Text>

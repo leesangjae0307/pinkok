@@ -1,6 +1,6 @@
 import api from './axios';
 import { fileUrl } from './fileApi';
-import { DEFAULT_COVERS } from '../assets/images/covers';
+import { DEFAULT_COVERS, defaultCoverSource } from '../assets/images/covers';
 import { daysBetween, toYmd } from '../components/pixel/PixelCalendar';
 import { AvatarSource, TripFolder } from '../data/mockData';
 import type { TripMember } from './invitationApi';
@@ -131,8 +131,13 @@ export function toTripFolder(
     title: trip.title,
     date: tripDateLabel(trip.startDate, trip.endDate),
     dDay: tripDDayLabel(trip.startDate),
-    // 서버 주소는 `/files/...` 상대 경로라 그대로 주면 Image 가 못 불러온다.
-    image: fileUrl(trip.coverImageUrl) ?? local?.image ?? DEFAULT_COVERS[0].src,
+    // 기본 표지는 'default:tokyo' 처럼 적혀 오므로 앱 안의 그림으로 바꾼다.
+    // 올린 사진이면 서버 주소가 `/files/...` 상대 경로라 BASE_URL 을 붙여야 한다.
+    image:
+      defaultCoverSource(trip.coverImageUrl) ??
+      fileUrl(trip.coverImageUrl) ??
+      local?.image ??
+      DEFAULT_COVERS[0].src,
     placesCount: trip.placesCount,
     tag: local?.tag ?? COMPANION_TAGS[trip.companionType ?? ''] ?? '여행',
     tags: trip.tags ?? [],

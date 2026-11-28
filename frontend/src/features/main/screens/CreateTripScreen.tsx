@@ -16,7 +16,7 @@ import { fetchTravelStyles } from '../../../api/travelStyleApi';
 import { TRAVEL_STYLES } from '../../../constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DEFAULT_COVERS } from '../../../assets/images/covers';
+import { DEFAULT_COVERS, defaultCoverMarker } from '../../../assets/images/covers';
 import PixelCalendar, { addDays, nightsLabel, toYmd } from '../../../components/pixel/PixelCalendar';
 import { PixelBackArrow } from '../../../components/pixel/PixelIcons';
 import { LinearGradient, PixelPressable, ShadowBox } from '../../../components/pixel/Primitives';
@@ -172,7 +172,12 @@ export default function CreateTripScreen({
       startDate,
       endDate,
       coverImage,
-      coverImageUrl: coverTab === 'upload' ? coverImageUrl : undefined,
+      // 기본 표지도 어느 그림인지 서버에 적어 둔다. 적지 않으면 목록을 다시
+      // 받아올 때 첫 번째 그림으로 되돌아간다.
+      coverImageUrl:
+        coverTab === 'upload'
+          ? coverImageUrl
+          : defaultCoverMarker(coverImage) ?? undefined,
       styleCodes: selectedStyleCodes,
       tags,
     });

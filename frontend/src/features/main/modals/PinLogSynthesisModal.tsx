@@ -84,7 +84,21 @@ export default function PinLogSynthesisModal({
   onClose,
   onSynthesizeComplete,
 }: PinLogSynthesisModalProps) {
-  const orderedPlaces = useMemo(() => [...places].sort((a, b) => a.order - b.order), [places]);
+  /*
+    1일차 → 2일차 순으로, 같은 날 안에서는 동선 순서대로 세운다.
+
+    order 는 서버의 visitOrder 라 일차마다 1 부터 다시 센다. 그것만으로 줄을
+    세우면 1일차 1번 · 2일차 1번 · 1일차 2번 처럼 날짜가 섞인다. 아래 목록이
+    그대로 clipOrder 가 되므로, 영상의 장면 순서까지 같이 어긋났다.
+
+    일차를 안 정한 핀(day 0)은 맨 뒤로 보낸다.
+  */
+  const orderedPlaces = useMemo(() => {
+    const dayKey = (day: number) => (day > 0 ? day : Number.MAX_SAFE_INTEGER);
+    return [...places].sort(
+      (a, b) => dayKey(a.day) - dayKey(b.day) || a.order - b.order,
+    );
+  }, [places]);
 
   const clipOptions = useMemo<ClipOption[]>(
     () =>

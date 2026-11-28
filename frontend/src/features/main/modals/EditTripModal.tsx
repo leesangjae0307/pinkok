@@ -15,6 +15,7 @@ import { ModalBackdrop, PixelPressable } from '../../../components/pixel/Primiti
 import { errorMessage } from '../../../api/axios';
 import { fetchTrip, updateTrip, type TripUpdatePayload } from '../../../api/tripApi';
 import TagsInput from '../components/TagsInput';
+import { defaultCoverSource } from '../../../assets/images/covers';
 import { fileUrl, uploadFile } from '../../../api/fileApi';
 import { TripFolder, toImageSource } from '../../../data/mockData';
 
@@ -123,7 +124,11 @@ export default function EditTripModal({
   };
 
   // 새로 고른 사진이 있으면 그걸, 없으면 지금 카드에 쓰는 이미지를 보여준다.
-  const coverSource = coverImageUrl
+  // 기본 표지는 'default:tokyo' 처럼 적혀 있어 주소로 읽으면 안 된다.
+  const defaultCover = defaultCoverSource(coverImageUrl);
+  const coverSource = defaultCover
+    ? defaultCover
+    : coverImageUrl
     ? { uri: fileUrl(coverImageUrl) ?? coverImageUrl }
     : toImageSource(trip.image);
 

@@ -1905,11 +1905,8 @@ function useAppState(me: Me, onLogout: () => void) {
 
   const handleAiTripRecommendation = async () => {
     if (isRecommending) {return;}
+    // 비워 두면 보내지 않는다. 그러면 서버가 여행에 저장된 지역을 쓴다.
     const region = recommendationRegion.trim();
-    if (!region) {
-      setRecommendationError('여행할 지역을 입력해 주세요.');
-      return;
-    }
     const trip = activeTrip ?? trips[0];
     if (!trip) {
       setRecommendationError('먼저 여행을 만들어 주세요.');
@@ -1924,7 +1921,7 @@ function useAppState(me: Me, onLogout: () => void) {
         tripId: trip.id,
         styleCodes: [recommendationStyle],
         companionType: recommendationCompanion,
-        region,
+        ...(region ? { region } : {}),
       });
       await consumeRecommendationRequest(request.id, trip.id);
     } catch (e) {
@@ -1959,7 +1956,10 @@ function useAppState(me: Me, onLogout: () => void) {
     } catch (e) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       if (status === 409) {
+        // 조건을 저장하지 않던 옛 요청이거나 이미 성공한 요청이다. 그대로 멈추면
+        // 버튼이 먹통처럼 보이므로, 까닭을 알리고 새로 요청해 준다.
         needsFreshRequest = true;
+        showToast('이전 요청은 다시 돌릴 수 없어 새로 요청할게요.');
       } else {
         setRecommendationError(errorMessage(e, '다시 시도하지 못했어요.'));
       }

@@ -368,7 +368,7 @@ export default function TripsListView() {
           <TextInput
             value={recommendationRegion}
             onChangeText={setRecommendationRegion}
-            placeholder="여행할 지역을 입력해 주세요"
+            placeholder="여행할 지역 (비우면 여행 지역 사용)"
             placeholderTextColor="#5D9C96"
             returnKeyType="done"
             onSubmitEditing={handleAiTripRecommendation}
